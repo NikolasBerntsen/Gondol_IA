@@ -2,7 +2,6 @@ package com.gondolia.insights;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.gondolia.ai.dto.AnalyzeRequest;
 import com.gondolia.ai.dto.AnalyzeResponse;
 import com.gondolia.ai.dto.AnalyzeSettings;
@@ -31,7 +30,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -388,14 +386,6 @@ public class InsightsStore {
             log.debug("JSON ilegible: {}", e.getMessage());
             return null;
         }
-    }
-
-    ObjectNode newObject() {
-        return objectMapper.createObjectNode();
-    }
-
-    Map<Long, String> emptyNames() {
-        return new HashMap<>();
     }
 
     private static Integer intOrNull(JsonNode node, String field) {

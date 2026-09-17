@@ -25,7 +25,6 @@ import com.gondolia.insights.dto.ProductInsightDetail;
 import com.gondolia.insights.dto.ProductInsightDetail.HistoryPoint;
 import com.gondolia.insights.dto.ProductInsightDetail.LotRow;
 import com.gondolia.insights.dto.ProductInsightRow;
-import com.gondolia.insights.dto.RecommendationDto;
 import com.gondolia.stock.StockService;
 import java.math.BigDecimal;
 import java.sql.Date;
@@ -438,11 +437,5 @@ public class InsightsService {
         jdbc.query(sql, params, (rs, rowNum) -> Map.entry(rs.getString("key"), rs.getLong("row_count")))
                 .forEach(entry -> result.put(entry.getKey(), entry.getValue()));
         return result;
-    }
-
-    /** Recomendaciones PENDING del alcance, para el Inicio. */
-    @Transactional(readOnly = true)
-    public List<RecommendationDto> pendingForDashboard(Long tenantId, Scope scope, int limit) {
-        return recommendationService.pending(tenantId, scope, limit);
     }
 }
