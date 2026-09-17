@@ -1,0 +1,27 @@
+# Generados / locales
+.env
+certs/
+data/
+.worktrees/
+*.log
+
+# Backend
+backend/target/
+backend/data/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# AI service
+ai-service/.venv/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+
+# IDEs / SO
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
