@@ -3,6 +3,7 @@ package com.gondolia.insights;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.gondolia.analytics.AnalyticsSql;
 import com.gondolia.analytics.BranchScopeService.Scope;
 import com.gondolia.common.PageResponse;
 import com.gondolia.common.error.BadRequestException;
@@ -425,7 +426,7 @@ public class RecommendationService {
                 rs.getString("explanation"), (Integer) rs.getObject("suggested_quantity"),
                 rs.getBigDecimal("suggested_discount_pct"), rs.getObject("suggested_date", LocalDate.class),
                 rs.getInt("priority"), rs.getBigDecimal("confidence"), rs.getBigDecimal("expected_impact"),
-                rs.getObject("created_at", Instant.class), rs.getObject("decided_at", Instant.class),
+                AnalyticsSql.instant(rs, "created_at"), AnalyticsSql.instant(rs, "decided_at"),
                 rs.getString("decided_by_name"), rs.getString("decision_note"), readJson(rs.getString("outcome")));
     }
 

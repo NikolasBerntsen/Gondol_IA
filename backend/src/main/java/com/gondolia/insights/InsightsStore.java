@@ -3,6 +3,7 @@ package com.gondolia.insights;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gondolia.ai.dto.AnalyzeRequest;
+import com.gondolia.analytics.AnalyticsSql;
 import com.gondolia.ai.dto.AnalyzeResponse;
 import com.gondolia.ai.dto.AnalyzeSettings;
 import com.gondolia.ai.dto.DailySale;
@@ -29,6 +30,8 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -131,8 +134,8 @@ public class InsightsStore {
                 update ai_runs set status = 'ERROR', finished_at = :now,
                        error_message = 'El análisis quedó interrumpido'
                 where status = 'RUNNING' and started_at < :limit
-                """, new MapSqlParameterSource("now", clock.instant())
-                .addValue("limit", clock.instant().minusSeconds(3600)));
+                """, new MapSqlParameterSource("now", utc(clock.instant()))
+                .addValue("limit", utc(clock.instant().minusSeconds(3600))));
     }
 
     // ------------------------------------------------------------------ entrada
@@ -148,8 +151,9 @@ public class InsightsStore {
                 .addValue("branchId", branchId)
                 .addValue("today", java.sql.Date.valueOf(today))
                 .addValue("zone", clock.getZone().getId())
-                .addValue("from", today.minusDays(SALES_HISTORY_DAYS - 1L).atStartOfDay(clock.getZone()).toInstant())
-                .addValue("feedbackSince", today.minusDays(FEEDBACK_DAYS).atStartOfDay(clock.getZone()).toInstant());
+                .addValue("from", utc(today.minusDays(SALES_HISTORY_DAYS - 1L).atStartOfDay(clock.getZone()).toInstant()))
+                .addValue("feedbackSince",
+                        utc(today.minusDays(FEEDBACK_DAYS).atStartOfDay(clock.getZone()).toInstant()));
 
         Map<Long, List<DailySale>> salesByProduct = dailySales(params);
         Map<Long, List<LotInput>> lotsByProduct = new LinkedHashMap<>();
@@ -163,7 +167,7 @@ public class InsightsStore {
                 order by l.product_id, l.received_at, l.id
                 """, params, (rs, rowNum) -> Map.entry(rs.getLong("product_id"), new LotInput(rs.getLong("id"),
                         rs.getString("lot_number"), rs.getObject("expiry_date", LocalDate.class),
-                        rs.getObject("received_at", Instant.class), rs.getInt("quantity"),
+                        AnalyticsSql.instant(rs, "received_at"), rs.getInt("quantity"),
                         rs.getBigDecimal("discount_pct"), LotStatus.valueOf(rs.getString("status")))))
                 .forEach(entry -> {
                     lotsByProduct.computeIfAbsent(entry.getKey(), key -> new ArrayList<>()).add(entry.getValue());
@@ -203,7 +207,7 @@ public class InsightsStore {
                             rs.getBigDecimal("sale_price"), rs.getBigDecimal("cost_price"), rs.getInt("min_stock"),
                             rs.getInt("sellable"), rs.getBoolean("perishable"),
                             leadTime == null ? settings.getDefaultLeadTimeDays() : leadTime.intValue(),
-                            rs.getObject("created_at", Instant.class).atZone(clock.getZone()).toLocalDate(),
+                            AnalyticsSql.instant(rs, "created_at").atZone(clock.getZone()).toLocalDate(),
                             salesByProduct.getOrDefault(productId, List.of()),
                             lotsByProduct.getOrDefault(productId, List.of()));
                 });
@@ -252,7 +256,8 @@ public class InsightsStore {
                 where r.tenant_id = :tenantId and r.branch_id = :branchId and r.type = 'DISCOUNT'
                   and r.status in ('ACCEPTED', 'DISCARDED') and r.decided_at >= :feedbackSince
                 order by r.decided_at desc
-                limit """ + MAX_FEEDBACK_ROWS, params, (rs, rowNum) -> {
+                limit
+                """ + MAX_FEEDBACK_ROWS, params, (rs, rowNum) -> {
                     JsonNode outcome = readJson(rs.getString("outcome"));
                     BigDecimal discount = rs.getBigDecimal("suggested_discount_pct");
                     if (outcome != null && outcome.hasNonNull(APPLIED_DISCOUNT_FIELD)) {
@@ -386,6 +391,11 @@ public class InsightsStore {
             log.debug("JSON ilegible: {}", e.getMessage());
             return null;
         }
+    }
+
+    /** Postgres necesita el instante tipado: {@code Instant} suelto no permite inferir el tipo del parámetro. */
+    private static OffsetDateTime utc(Instant instant) {
+        return OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
     }
 
     private static Integer intOrNull(JsonNode node, String field) {

@@ -27,6 +27,7 @@ import java.sql.Date;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -419,10 +420,11 @@ public class StatisticsService {
                 """.formatted(AnalyticsSql.NET_SALE_UNITS, AnalyticsSql.NET_SALE_AMOUNT, UNIT_COST, SALE_FROM),
                 params);
 
-        Instant lastRun = jdbc.queryForObject("""
+        OffsetDateTime lastRunAt = jdbc.queryForObject("""
                 select max(coalesce(finished_at, started_at)) from ai_runs
                 where tenant_id = :tenantId and branch_id in (:branchIds) and status = 'OK'
-                """, params, Instant.class);
+                """, params, OffsetDateTime.class);
+        Instant lastRun = lastRunAt == null ? null : lastRunAt.toInstant();
         Long insights = jdbc.queryForObject("""
                 select count(*) from product_insights
                 where tenant_id = :tenantId and branch_id in (:branchIds)

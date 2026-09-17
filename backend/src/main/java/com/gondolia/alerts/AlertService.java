@@ -2,6 +2,7 @@ package com.gondolia.alerts;
 
 import com.gondolia.alerts.dto.AlertCountsDto;
 import com.gondolia.alerts.dto.AlertDto;
+import com.gondolia.analytics.AnalyticsSql;
 import com.gondolia.analytics.BranchScopeService.Scope;
 import com.gondolia.common.PageResponse;
 import com.gondolia.common.error.NotFoundException;
@@ -163,8 +164,8 @@ public class AlertService {
                 AlertStatus.valueOf(rs.getString("status")), (Long) rs.getObject("product_id"),
                 rs.getString("product_name"), (Long) rs.getObject("lot_id"), rs.getString("lot_number"),
                 (Long) rs.getObject("announcement_id"), rs.getString("title"), rs.getString("message"),
-                rs.getObject("created_at", Instant.class), rs.getObject("updated_at", Instant.class),
-                rs.getString("handled_by_name"), rs.getObject("resolved_at", Instant.class));
+                AnalyticsSql.instant(rs, "created_at"), AnalyticsSql.instant(rs, "updated_at"),
+                rs.getString("handled_by_name"), AnalyticsSql.instant(rs, "resolved_at"));
     }
 
     private MapSqlParameterSource filterParams(Long tenantId, Scope scope, AlertQuery query) {

@@ -17,6 +17,8 @@ import com.gondolia.notification.NotificationService;
 import java.sql.Date;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -325,7 +327,9 @@ public class AlertEvaluator {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("tenantId", tenantId)
                 .addValue("branchId", branchId)
-                .addValue("since", today.minusDays(DISMISS_QUIET_DAYS).atStartOfDay(clock.getZone()).toInstant());
+                .addValue("since", OffsetDateTime.ofInstant(
+                        today.minusDays(DISMISS_QUIET_DAYS).atStartOfDay(clock.getZone()).toInstant(),
+                        ZoneOffset.UTC));
         return new HashSet<>(jdbc.query("""
                 select dedupe_key from alerts
                 where tenant_id = :tenantId and branch_id = :branchId and status = 'DISMISSED'

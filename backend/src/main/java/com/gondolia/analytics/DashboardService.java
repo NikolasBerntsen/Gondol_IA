@@ -13,6 +13,7 @@ import java.sql.Date;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -116,10 +117,11 @@ public class DashboardService {
                 select count(*) from recall_matches
                 where tenant_id = :tenantId and branch_id in (:branchIds) and status = 'OPEN'
                 """, params);
-        Instant lastRun = jdbc.queryForObject("""
+        OffsetDateTime lastRunAt = jdbc.queryForObject("""
                 select max(coalesce(finished_at, started_at)) from ai_runs
                 where tenant_id = :tenantId and branch_id in (:branchIds) and status = 'OK'
-                """, params, Instant.class);
+                """, params, OffsetDateTime.class);
+        Instant lastRun = lastRunAt == null ? null : lastRunAt.toInstant();
 
         return new DashboardSummary(
                 scope.label(), scope.branchIds().size(), products,

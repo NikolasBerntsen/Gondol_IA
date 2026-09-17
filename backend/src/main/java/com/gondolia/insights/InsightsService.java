@@ -3,6 +3,7 @@ package com.gondolia.insights;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gondolia.ai.AiClient;
+import com.gondolia.analytics.AnalyticsSql;
 import com.gondolia.analytics.BranchScopeService.Scope;
 import com.gondolia.common.PageResponse;
 import com.gondolia.common.error.BadRequestException;
@@ -31,6 +32,8 @@ import java.sql.Date;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -156,7 +159,8 @@ public class InsightsService {
                   and jsonb_typeof(i.lot_risks) = 'array' and l.quantity > 0
                   and coalesce((r->>'unitsAtRisk')::numeric, 0) > 0
                 order by value_at_risk desc, l.expiry_date asc
-                limit """ + TOP_RISKS, params, (rs, rowNum) -> {
+                limit
+                """ + TOP_RISKS, params, (rs, rowNum) -> {
                     long branchId = rs.getLong("branch_id");
                     LocalDate expiry = rs.getObject("expiry_date", LocalDate.class);
                     Number discount = (Number) rs.getObject("discount_pct");
@@ -243,7 +247,9 @@ public class InsightsService {
                 .addValue("productId", productId)
                 .addValue("today", Date.valueOf(today))
                 .addValue("zone", clock.getZone().getId())
-                .addValue("from", today.minusDays(HISTORY_DAYS - 1L).atStartOfDay(clock.getZone()).toInstant());
+                .addValue("from", OffsetDateTime.ofInstant(
+                        today.minusDays(HISTORY_DAYS - 1L).atStartOfDay(clock.getZone()).toInstant(),
+                        ZoneOffset.UTC));
 
         List<Object[]> base = jdbc.query(selectInsightRow()
                 + " where i.tenant_id = :tenantId and i.branch_id = :branchId and i.product_id = :productId",
@@ -311,7 +317,7 @@ public class InsightsService {
                             AiRunTrigger.valueOf(rs.getString("trigger_type")), rs.getString("model_version"),
                             (Integer) rs.getObject("products_analyzed"),
                             (Integer) rs.getObject("recommendations_created"),
-                            rs.getObject("started_at", Instant.class), rs.getObject("finished_at", Instant.class),
+                            AnalyticsSql.instant(rs, "started_at"), AnalyticsSql.instant(rs, "finished_at"),
                             rs.getString("error_message"));
                 });
     }
@@ -396,7 +402,7 @@ public class InsightsService {
                 rs.getObject("predicted_stockout_date", LocalDate.class), (Integer) rs.getObject("reorder_point"),
                 (Integer) rs.getObject("safety_stock"), (Integer) rs.getObject("suggested_order_qty"),
                 rs.getInt("sellable"), rs.getInt("min_stock"), rs.getInt("anomalies_count"),
-                rs.getInt("lots_at_risk"), rs.getInt("units_at_risk"), rs.getObject("updated_at", Instant.class));
+                rs.getInt("lots_at_risk"), rs.getInt("units_at_risk"), AnalyticsSql.instant(rs, "updated_at"));
     }
 
     private JsonNode readJson(String json) {

@@ -8,6 +8,8 @@ import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 
 /**
@@ -16,7 +18,7 @@ import java.time.temporal.ChronoUnit;
  * Reglas de SPEC §4.2 traducidas a SQL: stock vendible, stock físico, ventas netas de anulaciones y buckets de
  * vencimiento.
  */
-final class AnalyticsSql {
+public final class AnalyticsSql {
 
     /** Movimientos que componen las ventas netas: {@code SALE} suma y {@code SALE_VOID} resta. */
     static final String NET_SALE_UNITS = "sum(case when m.type = 'SALE' then m.quantity else -m.quantity end)";
@@ -67,8 +69,21 @@ final class AnalyticsSql {
     }
 
     /** Comienzo del día de negocio (00:00 en la zona del comercio) como instante. */
-    static Instant startOfDay(LocalDate date, Clock clock) {
-        return date.atStartOfDay(clock.getZone()).toInstant();
+    /**
+     * Comienzo del día en la zona del comercio, tipado como {@code OffsetDateTime}: un {@code Instant} suelto no le
+     * permite a Postgres inferir el tipo del parámetro.
+     */
+    public static OffsetDateTime startOfDay(LocalDate date, Clock clock) {
+        return OffsetDateTime.ofInstant(date.atStartOfDay(clock.getZone()).toInstant(), ZoneOffset.UTC);
+    }
+
+    /**
+     * Lee un {@code timestamptz}. El driver de Postgres no convierte directo a {@code Instant}: hay que pasar por
+     * {@code OffsetDateTime}.
+     */
+    public static Instant instant(ResultSet rs, String column) throws SQLException {
+        OffsetDateTime value = rs.getObject(column, OffsetDateTime.class);
+        return value == null ? null : value.toInstant();
     }
 
     static BigDecimal money(ResultSet rs, String column) throws SQLException {
