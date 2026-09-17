@@ -73,6 +73,8 @@ export default function PosTerminalPage() {
   const [query, setQuery] = useState('');
   const [categoryId, setCategoryId] = useState<number | null>(null);
   const [notice, setNotice] = useState<PosNoticeData | null>(null);
+  /** Producto del aviso de sin stock: "vender igual" lo agrega sin volver a buscarlo. */
+  const [pendingProduct, setPendingProduct] = useState<PosProduct | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [payOpen, setPayOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -189,6 +191,7 @@ export default function PosTerminalPage() {
     (product: PosProduct, options?: { force?: boolean }) => {
       setQuery('');
       if (product.hasRecalledStock) {
+        setPendingProduct(null);
         setNotice({ kind: 'recall', productName: product.name });
         return;
       }
@@ -197,10 +200,12 @@ export default function PosTerminalPage() {
 
       if (!options?.force) {
         if (product.outOfStock) {
+          setPendingProduct(product);
           setNotice({ kind: 'out', productName: product.name, branchName: product.branchName });
           return;
         }
         if (next > product.sellableStock) {
+          setPendingProduct(product);
           setNotice({ kind: 'limit', productName: product.name, available: product.sellableStock });
           return;
         }
@@ -208,6 +213,7 @@ export default function PosTerminalPage() {
         setAllowShortage(true);
       }
 
+      setPendingProduct(null);
       setNotice(null);
       setSelected(product.productId);
       setCart((prev) => {
@@ -233,6 +239,7 @@ export default function PosTerminalPage() {
     setCart([]);
     setSelected(null);
     setNotice(null);
+    setPendingProduct(null);
     setAllowShortage(false);
     setQuery('');
   }, []);
@@ -243,7 +250,10 @@ export default function PosTerminalPage() {
     meta: { errorToast: false },
     onSuccess: (product) => addProduct(product),
     onError: (error, code) => {
-      if (isApiError(error, 'NOT_FOUND')) setNotice({ kind: 'notfound', query: code });
+      if (isApiError(error, 'NOT_FOUND')) {
+        setPendingProduct(null);
+        setNotice({ kind: 'notfound', query: code });
+      }
       else toast.error(getErrorMessage(error));
     },
   });
@@ -271,8 +281,10 @@ export default function PosTerminalPage() {
     onError: (error) => {
       const details = shortageDetails(error);
       if (details.length) {
+        // El carrito ya tiene la línea: "vender igual" solo habilita el faltante, no agrega otra unidad.
         const first = details[0];
         setPayOpen(false);
+        setPendingProduct(null);
         setNotice({ kind: 'limit', productName: first.productName, available: first.available });
         return;
       }
@@ -512,14 +524,18 @@ export default function PosTerminalPage() {
             {notice ? (
               <PosNotice
                 notice={notice}
-                onClose={() => setNotice(null)}
+                onClose={() => {
+                  setNotice(null);
+                  setPendingProduct(null);
+                }}
                 onSellAnyway={
                   notice.kind === 'out' || notice.kind === 'limit'
                     ? () => {
-                        const target = results.find((item) => item.name === notice.productName);
-                        if (target) addProduct(target, { force: true });
+                        if (pendingProduct) addProduct(pendingProduct, { force: true });
                         else setAllowShortage(true);
                         setNotice(null);
+                        setPendingProduct(null);
+                        requestAnimationFrame(() => searchRef.current?.focus());
                       }
                     : undefined
                 }
