@@ -107,7 +107,13 @@ export default function MovementsPage() {
       id: 'type',
       header: 'Movimiento',
       mobile: 'field',
-      cell: (row) => <Badge tone={typeTone(row.type)}>{row.typeLabel}</Badge>,
+      // El origen va debajo del tipo: con columna propia la tabla no entra en 1360 px.
+      cell: (row) => (
+        <span className="flex flex-col items-start gap-0.5">
+          <Badge tone={typeTone(row.type)}>{row.typeLabel}</Badge>
+          <span className="text-xs text-muted-foreground">{row.sourceLabel}</span>
+        </span>
+      ),
     },
     {
       id: 'quantity',
@@ -139,13 +145,6 @@ export default function MovementsPage() {
           ) : null}
         </span>
       ),
-    },
-    {
-      id: 'source',
-      header: 'Origen',
-      hideBelow: 'xl',
-      mobile: 'field',
-      cell: (row) => <span className="text-muted-foreground">{row.sourceLabel}</span>,
     },
     {
       id: 'batchRef',

@@ -23,7 +23,7 @@ import {
   pageInfo,
   type TableColumn,
 } from '@/components/ui';
-import { formatDate, formatMoney, formatNumber } from '@/lib/format';
+import { formatMoney, formatNumber } from '@/lib/format';
 import { useDebounce } from '@/lib/useDebounce';
 import { expirationsApi, movementKeys } from '../api';
 import {
@@ -167,7 +167,8 @@ export default function ExpirationsPage() {
       id: 'expiry',
       header: 'Vencimiento',
       mobile: 'aside',
-      cell: (row) => <ExpiryChip expiry={row.expiryDate} lot={row.lotNumber} bucket={row.bucket} showDays />,
+      // Sin `showDays`: los días los dice la columna "Estado" y así la tabla entra en 1360 px.
+      cell: (row) => <ExpiryChip expiry={row.expiryDate} lot={row.lotNumber} bucket={row.bucket} />,
     },
     {
       id: 'rank',
@@ -192,23 +193,15 @@ export default function ExpirationsPage() {
       header: 'Unidades',
       align: 'right',
       mobile: 'field',
-      cell: (row) => <span className="font-semibold tabular-nums">{formatNumber(row.quantity)}</span>,
-    },
-    {
-      id: 'value',
-      header: 'Valor a costo',
-      align: 'right',
-      hideBelow: 'lg',
-      mobile: 'field',
-      cell: (row) => <span className="tabular-nums text-muted-foreground">{formatMoney(row.costValue)}</span>,
-    },
-    {
-      id: 'received',
-      header: 'Ingresó',
-      align: 'right',
-      hideBelow: 'xl',
-      mobile: 'field',
-      cell: (row) => <span className="tabular-nums text-muted-foreground">{formatDate(row.receivedAt)}</span>,
+      // Unidades y valor a costo van juntos: con columnas separadas la tabla no entra en 1360 px.
+      cell: (row) => (
+        <span className="flex flex-col items-end gap-0.5">
+          <span className="font-semibold tabular-nums">{formatNumber(row.quantity)}</span>
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {formatMoney(row.costValue)} a costo
+          </span>
+        </span>
+      ),
     },
     {
       id: 'actions',
@@ -219,6 +212,7 @@ export default function ExpirationsPage() {
         <Button
           variant="outline"
           size="sm"
+          className="whitespace-nowrap"
           leftIcon={<Trash2 className="h-3.5 w-3.5" />}
           onClick={() => {
             setDiscarding(row);

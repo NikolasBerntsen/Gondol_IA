@@ -217,11 +217,11 @@ function NewTransferTab() {
         <Card padding="none" className="overflow-hidden">
           <CardHeader title="Resumen" description={`${formatNumber(units)} u. en ${entries.length} lotes`} />
           {entries.length === 0 ? (
-            <p className="px-4 pb-4 text-sm text-muted-foreground">
+            <p className="border-t border-border px-4 py-3 text-sm text-muted-foreground">
               Elegí los lotes y las unidades que querés mover.
             </p>
           ) : (
-            <ul className="max-h-72 divide-y divide-border overflow-y-auto gd-scroll">
+            <ul className="max-h-72 divide-y divide-border overflow-y-auto border-t border-border gd-scroll">
               {entries.map((entry) => (
                 <li key={entry.lot.lotId} className="flex items-center justify-between gap-2 px-4 py-2">
                   <span className="min-w-0 truncate text-sm text-foreground">{entry.lot.productName}</span>
