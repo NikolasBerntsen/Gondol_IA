@@ -26,6 +26,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.time.format.ResolverStyle;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -58,9 +59,15 @@ public class SalesCsvService {
     static final int MAX_ROWS = 5_000;
     private static final int MAX_ERRORS = 100;
 
-    private static final DateTimeFormatter ISO = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-    private static final DateTimeFormatter DMY = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-    private static final DateTimeFormatter DMY_DASH = DateTimeFormatter.ofPattern("dd-MM-yyyy");
+    // ResolverStyle.STRICT (con "uuuu", no "yyyy"): una fecha que no existe se informa como error de la
+    // línea en vez de ajustarse sola (con el resolutor SMART "31/02/2026" pasaría a ser el 28/02).
+    private static final DateTimeFormatter ISO = strict("uuuu-MM-dd");
+    private static final DateTimeFormatter DMY = strict("dd/MM/uuuu");
+    private static final DateTimeFormatter DMY_DASH = strict("dd-MM-uuuu");
+
+    private static DateTimeFormatter strict(String pattern) {
+        return DateTimeFormatter.ofPattern(pattern).withResolverStyle(ResolverStyle.STRICT);
+    }
 
     /** Plantilla que se descarga desde la pantalla de integración. */
     public static final String TEMPLATE = """
@@ -370,6 +377,9 @@ public class SalesCsvService {
 
     /** Acepta "1234.50", "1.234,50", "$ 1.234,50" y "1234". */
     static BigDecimal parseAmount(String raw) {
+        if (raw == null) {
+            return null;
+        }
         String value = raw.strip().replace("$", "").replace(" ", "").replace(" ", "");
         if (value.isEmpty()) {
             return null;
