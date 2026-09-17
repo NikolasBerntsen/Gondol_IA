@@ -1,0 +1,299 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =====================================================================
+   Góndola UI · tokens
+   Formato shadcn: "h s% l%" (sin hsl()), para usar hsl(var(--x) / alpha).
+   1) :root = tema CLARO completo
+   2) prefers-color-scheme: dark, salvo que el usuario haya elegido claro
+   3) data-theme="dark" explícito
+   ===================================================================== */
+:root {
+  color-scheme: light;
+
+  --background: 90 16.7% 95.3%; /* #F3F5F1 */
+  --foreground: 141.4 25% 11%; /* #15231A tinta */
+  --card: 0 0% 100%; /* #FFFFFF */
+  --muted: 102.9 17.1% 92%; /* #E9EEE7 */
+  --muted-foreground: 138.8 8.2% 38.4%; /* #5A6A5F */
+  --border: 103.6 15.5% 86.1%; /* #D9E1D6 */
+  --input: 105 12.1% 74.1%; /* #B9C5B5 borde de controles */
+  --ring: 148.4 55.9% 26.7%; /* = primary */
+  --scrim: 144 40.5% 7.3%; /* #0B1A11 velo de diálogos */
+
+  --primary: 148.4 55.9% 26.7%; /* #1E6A42 verde góndola */
+  --primary-foreground: 140 37.5% 96.9%; /* #F4FAF6 */
+
+  --rail: 150.7 58.9% 14.3%; /* #0F3A25 */
+  --rail-foreground: 142.5 26.7% 88.2%; /* #D9E9DF */
+  --rail-active: 148.4 55.9% 26.7%; /* #1E6A42 */
+  --rail-hover: 150.6 54.6% 19%; /* #164B31 */
+  --rail-muted: 145 19.1% 63.1%; /* #8FB39E */
+  --rail-strong: 0 0% 100%; /* texto y separadores sobre el riel (verde profundo en ambos temas) */
+
+  --accent: 44.2 89% 60.8%; /* #F4C542 amarillo etiqueta de precio */
+  --accent-foreground: 43.6 89.2% 7.3%; /* #231A02 */
+
+  --ok: 145.1 49.2% 36.3%; /* #2F8A55 */
+  --ok-soft: 140 34.9% 91.6%; /* #E2F1E7 */
+  --ok-ink: 144 50% 27.5%; /* #23693F */
+  --warn: 28.9 83.6% 42.9%; /* #C96A12 */
+  --warn-soft: 30 80% 92.2%; /* #FBEBDB */
+  --warn-ink: 28.6 85.7% 30.2%; /* #8F4A0B */
+  --crit: 6.1 63.2% 45.9%; /* #BF3A2B */
+  --crit-soft: 7.2 67.6% 92.7%; /* #F9E3E0 */
+  --crit-ink: 5.9 64.2% 37.3%; /* #9C2E22 */
+  --info: 204.3 55.8% 39%; /* #2C6E9B */
+  --info-soft: 204 50% 92.2%; /* #E1EDF5 */
+  --info-ink: 204.3 58% 31.8%; /* #225A80 */
+  --on-solid: 0 0% 100%; /* texto sobre relleno semántico sólido */
+
+  --paper: 48 100% 99%; /* #FFFEFA papel térmico */
+  --paper-ink: 120 5.1% 11.6%; /* #1C1F1C */
+
+  --r-control: 8px;
+  --r-panel: 12px;
+  --r-dialog: 16px;
+  --r-tag: 4px;
+  --radius: 8px;
+
+  --shadow-color: 150 40% 12%;
+  --shadow-pop: 0 1px 2px hsl(var(--shadow-color) / 0.08), 0 14px 36px -10px hsl(var(--shadow-color) / 0.28);
+  --shadow-sheet: 0 -2px 6px hsl(var(--shadow-color) / 0.06), 0 -18px 48px -12px hsl(var(--shadow-color) / 0.3);
+
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --font-sans: Figtree, "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, "SFMono-Regular", Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --background: 145.7 21.2% 6.5%; /* #0D1410 */
+    --foreground: 138 22.7% 91.4%; /* #E4EEE7 */
+    --card: 144 20% 9.8%; /* #141E18 */
+    --muted: 143.1 19.4% 13.1%; /* #1B2820 */
+    --muted-foreground: 142.1 9.6% 61.4%; /* #93A69A */
+    --border: 144 16.5% 17.8%; /* #26352C */
+    --input: 140 14.8% 23.9%; /* #34463A */
+    --ring: 148.8 41.8% 52.2%;
+    --scrim: 0 0% 0%;
+    --primary: 148.8 41.8% 52.2%; /* #52B883 */
+    --primary-foreground: 145.7 53.8% 5.1%; /* #06140C */
+    --rail: 145.7 28% 4.9%; /* #09100C */
+    --rail-foreground: 141 22.7% 82.7%; /* #C9DDD0 */
+    --rail-active: 148.4 55.9% 26.7%; /* #1E6A42 */
+    --rail-hover: 147.7 25.5% 10%; /* #132019 */
+    --rail-muted: 144.4 10.8% 48.8%; /* #6F8A7A */
+    --rail-strong: 0 0% 100%;
+    --accent: 44.7 87.1% 60.4%; /* #F2C542 */
+    --accent-foreground: 43.6 89.2% 7.3%;
+    --ok: 146.7 50.5% 57.3%; /* #5BC98C */
+    --ok-soft: 140.8 37.1% 13.7%;
+    --ok-ink: 146.5 53.8% 66.1%;
+    --warn: 31.5 84.5% 62%; /* #F0A24C */
+    --warn-soft: 33.2 55.9% 13.3%;
+    --warn-ink: 32.1 86.8% 70.4%;
+    --crit: 7 82.9% 65.7%; /* #F0705F */
+    --crit-soft: 6.7 45% 15.7%;
+    --crit-ink: 7.2 85.4% 73.1%;
+    --info: 203.2 59.4% 63.3%; /* #6AAED9 */
+    --info-soft: 205.9 49.3% 14.7%;
+    --info-ink: 203.9 63.8% 72.9%;
+    --on-solid: 145.7 21.2% 6.5%;
+    --paper: 85.7 17.9% 92.4%; /* #ECEFE8 */
+    --paper-ink: 120 5.1% 11.6%;
+    --shadow-color: 0 0% 0%;
+    --shadow-pop: 0 1px 2px hsl(0 0% 0% / 0.4), 0 16px 40px -8px hsl(0 0% 0% / 0.65);
+    --shadow-sheet: 0 -18px 48px -12px hsl(0 0% 0% / 0.7);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: 145.7 21.2% 6.5%;
+  --foreground: 138 22.7% 91.4%;
+  --card: 144 20% 9.8%;
+  --muted: 143.1 19.4% 13.1%;
+  --muted-foreground: 142.1 9.6% 61.4%;
+  --border: 144 16.5% 17.8%;
+  --input: 140 14.8% 23.9%;
+  --ring: 148.8 41.8% 52.2%;
+  --scrim: 0 0% 0%;
+  --primary: 148.8 41.8% 52.2%;
+  --primary-foreground: 145.7 53.8% 5.1%;
+  --rail: 145.7 28% 4.9%;
+  --rail-foreground: 141 22.7% 82.7%;
+  --rail-active: 148.4 55.9% 26.7%;
+  --rail-hover: 147.7 25.5% 10%;
+  --rail-muted: 144.4 10.8% 48.8%;
+  --rail-strong: 0 0% 100%;
+  --accent: 44.7 87.1% 60.4%;
+  --accent-foreground: 43.6 89.2% 7.3%;
+  --ok: 146.7 50.5% 57.3%;
+  --ok-soft: 140.8 37.1% 13.7%;
+  --ok-ink: 146.5 53.8% 66.1%;
+  --warn: 31.5 84.5% 62%;
+  --warn-soft: 33.2 55.9% 13.3%;
+  --warn-ink: 32.1 86.8% 70.4%;
+  --crit: 7 82.9% 65.7%;
+  --crit-soft: 6.7 45% 15.7%;
+  --crit-ink: 7.2 85.4% 73.1%;
+  --info: 203.2 59.4% 63.3%;
+  --info-soft: 205.9 49.3% 14.7%;
+  --info-ink: 203.9 63.8% 72.9%;
+  --on-solid: 145.7 21.2% 6.5%;
+  --paper: 85.7 17.9% 92.4%;
+  --paper-ink: 120 5.1% 11.6%;
+  --shadow-color: 0 0% 0%;
+  --shadow-pop: 0 1px 2px hsl(0 0% 0% / 0.4), 0 16px 40px -8px hsl(0 0% 0% / 0.65);
+  --shadow-sheet: 0 -18px 48px -12px hsl(0 0% 0% / 0.7);
+}
+
+/* ===================================================================== */
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 20px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    text-wrap: balance;
+  }
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: hsl(var(--accent) / 0.6);
+    color: hsl(var(--accent-foreground));
+  }
+  kbd {
+    font-family: var(--font-mono);
+  }
+}
+
+@layer components {
+  /* Riel: el foco usa el amarillo para leerse sobre verde profundo */
+  .gd-rail :focus-visible {
+    outline-color: hsl(var(--accent));
+  }
+  .gd-kbd {
+    @apply inline-flex h-5 min-w-5 items-center justify-center rounded-[4px] border border-border bg-card px-1 font-mono text-[11px] font-medium leading-none text-muted-foreground;
+    box-shadow: inset 0 -1px 0 hsl(var(--border));
+  }
+  .gd-eyebrow {
+    @apply text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground;
+  }
+  .gd-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--input)) transparent;
+  }
+
+  /* Franja de severidad: SOLO filas de tabla e ítems de lista (esquinas rectas) */
+  .gd-stripe-crit {
+    box-shadow: inset 4px 0 0 hsl(var(--crit));
+  }
+  .gd-stripe-warn {
+    box-shadow: inset 4px 0 0 hsl(var(--warn));
+  }
+  .gd-stripe-info {
+    box-shadow: inset 4px 0 0 hsl(var(--info));
+  }
+  .gd-stripe-ok {
+    box-shadow: inset 4px 0 0 hsl(var(--ok));
+  }
+  .gd-stripe-none {
+    box-shadow: inset 4px 0 0 transparent;
+  }
+
+  /* Etiqueta de góndola: agujero perforado a la izquierda */
+  .gd-pricetag {
+    -webkit-mask: radial-gradient(circle at var(--hole-x, 11px) 50%, transparent var(--hole-r, 3.5px), #000 calc(var(--hole-r, 3.5px) + 0.5px));
+    mask: radial-gradient(circle at var(--hole-x, 11px) 50%, transparent var(--hole-r, 3.5px), #000 calc(var(--hole-r, 3.5px) + 0.5px));
+  }
+
+  /* Ticket térmico 80 mm: bordes dentados arriba y abajo */
+  .gd-ticket {
+    --z: 7px;
+    -webkit-mask:
+      conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / calc(2 * var(--z)) 51% repeat-x,
+      conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / calc(2 * var(--z)) 51% repeat-x;
+    mask:
+      conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / calc(2 * var(--z)) 51% repeat-x,
+      conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / calc(2 * var(--z)) 51% repeat-x;
+  }
+  .gd-ticket-rule {
+    border-top: 1px dashed hsl(var(--paper-ink) / 0.45);
+  }
+
+  /* Skeleton con brillo */
+  .gd-skeleton {
+    position: relative;
+    overflow: hidden;
+  }
+  .gd-skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, hsl(var(--card) / 0.55), transparent);
+    animation: gd-shimmer 1.4s ease-in-out infinite;
+  }
+
+  /* Visor de cámara */
+  .gd-viewfinder-corner {
+    position: absolute;
+    width: 26px;
+    height: 26px;
+    border-color: hsl(var(--accent));
+    border-style: solid;
+    border-width: 0;
+  }
+}
+
+@keyframes gd-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .gd-skeleton::after {
+    display: none;
+  }
+}
+
+/* Tokens de dispositivo (mockups de teléfono y visor de cámara): iguales en ambos temas */
+:root {
+  --device: 150 12% 7%;
+  --camera: 150 20% 5%;
+  --camera-foreground: 0 0% 100%;
+}
