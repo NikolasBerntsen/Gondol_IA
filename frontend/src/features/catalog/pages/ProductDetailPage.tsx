@@ -325,46 +325,45 @@ export default function ProductDetailPage() {
           />
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-3">
-          <Card padding="none" className="xl:col-span-2">
-            <CardHeader
-              title="Lotes en orden de salida"
-              description={
-                rotation === 'FIFO'
-                  ? 'FIFO: primero sale lo que entró antes. Los lotes en liquidación salen antes que el resto.'
-                  : 'FEFO: primero sale lo que vence antes. Los lotes en liquidación salen antes que el resto.'
-              }
-              icon={Layers}
-              className="px-4 pt-4"
-            />
-            <Table
-              columns={lotColumns}
-              data={product.lots}
-              rowKey={(lot) => lot.id}
-              rowSeverity={(lot) =>
-                lot.status === 'RECALLED'
+        <Card padding="none">
+          <CardHeader
+            title="Lotes en orden de salida"
+            description={
+              rotation === 'FIFO'
+                ? 'FIFO: primero sale lo que entró antes. Los lotes en liquidación salen antes que el resto.'
+                : 'FEFO: primero sale lo que vence antes. Los lotes en liquidación salen antes que el resto.'
+            }
+            icon={Layers}
+            className="px-4 pt-4"
+          />
+          <Table
+            columns={lotColumns}
+            data={product.lots}
+            rowKey={(lot) => lot.id}
+            rowSeverity={(lot) =>
+              lot.status === 'RECALLED'
+                ? 'crit'
+                : lot.expiryBucket === 'EXPIRED'
                   ? 'crit'
-                  : lot.expiryBucket === 'EXPIRED'
-                    ? 'crit'
-                    : lot.expiryBucket === 'CRITICAL' || lot.expiryBucket === 'WARNING'
-                      ? 'warn'
-                      : 'none'
-              }
-              empty={{
-                icon: Layers,
-                title: 'Este producto no tiene lotes cargados',
-                description: 'Registrá el primer ingreso para empezar a controlar vencimientos.',
-                action: (
-                  <ButtonLink to={`/app/intake?productId=${product.id}`} leftIcon={<ScanBarcode className="h-4 w-4" />}>
-                    Cargar mercadería
-                  </ButtonLink>
-                ),
-              }}
-            />
-          </Card>
+                  : lot.expiryBucket === 'CRITICAL' || lot.expiryBucket === 'WARNING'
+                    ? 'warn'
+                    : 'none'
+            }
+            empty={{
+              icon: Layers,
+              title: 'Este producto no tiene lotes cargados',
+              description: 'Registrá el primer ingreso para empezar a controlar vencimientos.',
+              action: (
+                <ButtonLink to={`/app/intake?productId=${product.id}`} leftIcon={<ScanBarcode className="h-4 w-4" />}>
+                  Cargar mercadería
+                </ButtonLink>
+              ),
+            }}
+          />
+        </Card>
 
-          <div className="flex flex-col gap-4">
-            <Card padding="lg">
+        <div className={`grid gap-4 md:grid-cols-2${hasInsight ? ' xl:grid-cols-3' : ''}`}>
+          <Card padding="lg">
               <CardHeader title="Datos del producto" />
               <dl className="flex flex-col gap-3 text-base">
                 {product.barcode ? (
@@ -462,7 +461,6 @@ export default function ProductDetailPage() {
                 </div>
               </Card>
             )}
-          </div>
         </div>
 
         <Card padding="none">

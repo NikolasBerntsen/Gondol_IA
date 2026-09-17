@@ -155,7 +155,7 @@ export default function InventoryPage() {
       hideBelow: 'lg',
       mobile: 'field',
       mobileLabel: 'Precio',
-      cell: (row) => <span className="tabular-nums">{formatMoney(row.salePrice)}</span>,
+      cell: (row) => <span className="whitespace-nowrap tabular-nums">{formatMoney(row.salePrice)}</span>,
     },
     {
       id: 'actions',
