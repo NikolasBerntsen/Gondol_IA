@@ -42,6 +42,7 @@ import {
   type TenantAction,
   type TenantActionTarget,
 } from '../components/TenantStatusDialog';
+import { TENANT_MODULE_SHORT } from '../moduleMath';
 import type { TenantSummary } from '../types';
 
 const PAGE_SIZE = 20;
@@ -97,10 +98,10 @@ export default function TenantsPage() {
       id: 'name',
       header: 'Cliente',
       mobile: 'title',
-      className: 'min-w-[200px]',
+      className: 'min-w-[180px]',
       cell: (row) => (
         <div className="min-w-0">
-          <Link to={`/app/owner/tenants/${row.id}`} className="font-semibold text-foreground hover:underline">
+          <Link to={`/owner/tenants/${row.id}`} className="font-semibold text-foreground hover:underline">
             {row.name}
           </Link>
           <div className="text-xs text-muted-foreground">
@@ -133,8 +134,8 @@ export default function TenantsPage() {
         row.modules.length ? (
           <div className="flex flex-wrap gap-1">
             {row.modules.map((value) => (
-              <Badge key={value} tone="primary" size="sm">
-                {TENANT_MODULE_LABELS[value]}
+              <Badge key={value} tone="primary" size="sm" title={TENANT_MODULE_LABELS[value]}>
+                {TENANT_MODULE_SHORT[value]}
               </Badge>
             ))}
           </div>
@@ -144,10 +145,10 @@ export default function TenantsPage() {
     },
     {
       id: 'branches',
-      header: 'Sucursales',
+      header: 'Suc.',
       align: 'right',
-      headerClassName: 'w-[110px]',
-      className: 'text-right tabular-nums',
+      headerClassName: 'w-[76px] px-2',
+      className: 'px-2 text-right tabular-nums',
       mobile: 'field',
       mobileLabel: 'Sucursales activas',
       cell: (row) => (
@@ -159,19 +160,20 @@ export default function TenantsPage() {
     },
     {
       id: 'users',
-      header: 'Usuarios',
+      header: 'Usu.',
       align: 'right',
-      headerClassName: 'w-[92px]',
-      className: 'text-right tabular-nums',
-      hideBelow: 'lg',
+      headerClassName: 'w-[64px] px-2',
+      className: 'px-2 text-right tabular-nums',
+      hideBelow: 'xl',
       mobile: 'field',
       mobileLabel: 'Usuarios',
       cell: (row) => formatNumber(row.userCount),
     },
     {
       id: 'activity',
-      header: 'Última actividad',
+      header: 'Actividad',
       hideBelow: 'xl',
+      className: 'whitespace-nowrap',
       mobile: 'field',
       mobileLabel: 'Última actividad',
       cell: (row) =>
@@ -183,7 +185,7 @@ export default function TenantsPage() {
     },
     {
       id: 'fee',
-      header: 'Cuota mensual',
+      header: 'Cuota',
       align: 'right',
       className: 'whitespace-nowrap text-right tabular-nums',
       mobile: 'field',
@@ -213,7 +215,7 @@ export default function TenantsPage() {
         icon={Store}
         description="Los comercios que usan GondolIA: alta, plan, módulos y estado de la cuenta."
         actions={
-          <ButtonLink to="/app/owner/tenants/new" leftIcon={<Plus />}>
+          <ButtonLink to="/owner/tenants/new" leftIcon={<Plus />}>
             Dar de alta un cliente
           </ButtonLink>
         }
@@ -298,7 +300,7 @@ export default function TenantsPage() {
                 ? `${pluralize(tenants.data.totalElements, 'cliente', 'clientes')} ${hasFilters ? 'con estos filtros' : 'en total'}`
                 : 'Cargando clientes…'}
             </span>
-            <ButtonLink to="/app/owner/modules" variant="ghost" size="sm" leftIcon={<Blocks />}>
+            <ButtonLink to="/owner/modules" variant="ghost" size="sm" leftIcon={<Blocks />}>
               Ver la matriz de módulos
             </ButtonLink>
           </div>
@@ -312,7 +314,7 @@ export default function TenantsPage() {
             onRetry={() => void tenants.refetch()}
             rowSeverity={(row) => tenantRowSeverity(row.status)}
             caption="Clientes de GondolIA"
-            className="border-t border-border"
+            className="min-w-0 border-t border-border"
             empty={{
               icon: Store,
               title: hasFilters ? 'Ningún cliente coincide con los filtros' : 'Todavía no hay clientes',
@@ -320,7 +322,7 @@ export default function TenantsPage() {
                 ? 'Probá con otro texto, plan, rubro, módulo o estado.'
                 : 'Dá de alta el primer comercio para empezar.',
               action: hasFilters ? undefined : (
-                <ButtonLink to="/app/owner/tenants/new" leftIcon={<Plus />}>
+                <ButtonLink to="/owner/tenants/new" leftIcon={<Plus />}>
                   Dar de alta un cliente
                 </ButtonLink>
               ),
@@ -374,10 +376,10 @@ function TenantRowMenu({ tenant, onAction }: { tenant: TenantSummary; onAction: 
       </Button>
       {dropdown.open && (
         <DropdownPanel {...dropdown.panelProps} align="end" aria-label={`Acciones de ${tenant.name}`} className="w-60">
-          <DropdownItem icon={<Store />} onClick={() => go(`/app/owner/tenants/${tenant.id}`)}>
+          <DropdownItem icon={<Store />} onClick={() => go(`/owner/tenants/${tenant.id}`)}>
             Ver el detalle
           </DropdownItem>
-          <DropdownItem icon={<Pencil />} onClick={() => go(`/app/owner/tenants/${tenant.id}/edit`)}>
+          <DropdownItem icon={<Pencil />} onClick={() => go(`/owner/tenants/${tenant.id}/edit`)}>
             Editar los datos
           </DropdownItem>
           <DropdownSeparator />

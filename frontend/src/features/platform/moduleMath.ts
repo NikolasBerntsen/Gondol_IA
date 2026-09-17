@@ -28,6 +28,13 @@ export function estimatedMonthlyFee(input: {
   return Math.max(0, input.activeBranchCount) * (PLAN_MONTHLY_PRICE_PER_BRANCH[input.plan] + extras);
 }
 
+/** Etiqueta corta de cada módulo para encabezados de tabla y chips (la larga vive en `TENANT_MODULE_LABELS`). */
+export const TENANT_MODULE_SHORT: Record<TenantModule, string> = {
+  POS_GONDOLIA: 'POS GondolIA',
+  POS_INTEGRATION: 'POS propio',
+  MULTI_BRANCH: 'Multi-sucursal',
+};
+
 /**
  * Módulos que se habilitan por defecto según el plan al dar de alta un cliente (SPEC §14.1).
  * Espejo de `ModuleCatalog.PRESETS`: el backend aplica el mismo preset si el alta no manda `modules`.

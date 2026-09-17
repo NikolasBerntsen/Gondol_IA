@@ -200,7 +200,7 @@ export default function TenantFormPage() {
       void queryClient.invalidateQueries({ queryKey: platformKeys.tenants });
       void queryClient.invalidateQueries({ queryKey: platformKeys.metrics });
       void queryClient.invalidateQueries({ queryKey: ['platform', 'modules'] });
-      navigate(`/app/owner/tenants/${tenant.id}`);
+      navigate(`/owner/tenants/${tenant.id}`);
     },
     onError: (error) => {
       const fieldErrors = getFieldErrors(error);
@@ -513,7 +513,7 @@ export default function TenantFormPage() {
         <div className="flex flex-col-reverse gap-2 pb-2 sm:flex-row sm:justify-end">
           <Button
             variant="outline"
-            onClick={() => navigate(isEdit ? `/app/owner/tenants/${tenantId}` : '/app/owner/tenants')}
+            onClick={() => navigate(isEdit ? `/owner/tenants/${tenantId}` : '/owner/tenants')}
             disabled={save.isPending}
           >
             Cancelar
@@ -547,8 +547,8 @@ function PageHeaderSection({
       }
       back={
         isEdit && tenantId !== undefined
-          ? { to: `/app/owner/tenants/${tenantId}`, label: 'Volver al cliente' }
-          : { to: '/app/owner/tenants', label: 'Volver a clientes' }
+          ? { to: `/owner/tenants/${tenantId}`, label: 'Volver al cliente' }
+          : { to: '/owner/tenants', label: 'Volver a clientes' }
       }
     />
   );

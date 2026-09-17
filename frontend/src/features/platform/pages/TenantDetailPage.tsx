@@ -190,7 +190,7 @@ export default function TenantDetailPage() {
         eyebrow="Consola de dueños"
         title={tenant.name}
         icon={Store}
-        back={{ to: '/app/owner/tenants', label: 'Volver a clientes' }}
+        back={{ to: '/owner/tenants', label: 'Volver a clientes' }}
         description={
           <span className="flex flex-wrap items-center gap-2">
             <TenantStatusPill status={tenant.status} />
@@ -204,7 +204,7 @@ export default function TenantDetailPage() {
         }
         actions={
           <div className="flex flex-wrap gap-2">
-            <ButtonLink to={`/app/owner/tenants/${tenant.id}/edit`} variant="outline" leftIcon={<Pencil />}>
+            <ButtonLink to={`/owner/tenants/${tenant.id}/edit`} variant="outline" leftIcon={<Pencil />}>
               Editar
             </ButtonLink>
             {tenant.status === 'ACTIVE' ? (
@@ -374,7 +374,7 @@ export default function TenantDetailPage() {
             rowKey={(row) => row.id}
             rowSeverity={(row) => (row.active ? 'none' : undefined)}
             caption={`Sucursales de ${tenant.name}`}
-            className="border-t border-border"
+            className="min-w-0 border-t border-border"
             empty={{ icon: Building2, title: 'Sin sucursales cargadas' }}
           />
         </Card>
@@ -398,7 +398,7 @@ export default function TenantDetailPage() {
             rowKey={(row) => row.id}
             rowSeverity={(row) => (row.active ? 'none' : 'warn')}
             caption={`Usuarios de ${tenant.name}`}
-            className="border-t border-border"
+            className="min-w-0 border-t border-border"
             empty={{ icon: Users, title: 'Sin usuarios cargados' }}
           />
         </Card>
@@ -432,7 +432,7 @@ export default function TenantDetailPage() {
         action={action}
         tenant={{ id: tenant.id, name: tenant.name }}
         onClose={() => setAction(null)}
-        redirectAfterDelete="/app/owner/tenants"
+        redirectAfterDelete="/owner/tenants"
       />
 
       <ModuleDisableDialog

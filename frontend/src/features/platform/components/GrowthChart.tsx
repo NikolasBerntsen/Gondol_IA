@@ -57,7 +57,7 @@ export function GrowthChart({ data }: { data: GrowthPoint[] }) {
     <>
       <div className="h-[260px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={points} margin={{ top: 8, right: 8, bottom: 0, left: -18 }}>
+          <ComposedChart data={points} margin={{ top: 8, right: 16, bottom: 0, left: -18 }}>
             <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
             <XAxis
               dataKey="month"
@@ -86,6 +86,8 @@ export function GrowthChart({ data }: { data: GrowthPoint[] }) {
               fill="hsl(var(--primary))"
               fillOpacity={0.14}
               strokeWidth={2}
+              dot={{ r: 2.5, strokeWidth: 0, fill: 'hsl(var(--primary))' }}
+              activeDot={{ r: 4 }}
             />
             <Bar dataKey="altas" name="Altas" fill="hsl(var(--info))" radius={[3, 3, 0, 0]} barSize={10} />
             <Bar dataKey="bajas" name="Bajas" fill="hsl(var(--crit))" radius={[3, 3, 0, 0]} barSize={10} />

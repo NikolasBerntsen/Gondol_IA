@@ -34,15 +34,8 @@ import { ModuleDisableDialog } from '../components/ModuleDisableDialog';
 import { PlanBadge, TenantStatusPill, tenantRowSeverity } from '../components/PlanBadge';
 import { PrivacyNote } from '../components/PrivacyNote';
 import { useModuleToggle } from '../hooks/useModuleToggle';
-import { estimatedMonthlyFee } from '../moduleMath';
+import { estimatedMonthlyFee, TENANT_MODULE_SHORT } from '../moduleMath';
 import type { TenantModulesRow } from '../types';
-
-/** Etiqueta corta para el encabezado de cada columna de módulo. */
-const SHORT_LABELS: Record<TenantModule, string> = {
-  POS_GONDOLIA: 'POS GondolIA',
-  POS_INTEGRATION: 'POS propio',
-  MULTI_BRANCH: 'Multi-sucursal',
-};
 
 const PAGE_SIZE = 20;
 
@@ -105,7 +98,7 @@ export default function ModulesMatrixPage() {
 
   const moduleColumn = (module: TenantModule): TableColumn<TenantModulesRow> => ({
     id: module,
-    header: SHORT_LABELS[module],
+    header: TENANT_MODULE_SHORT[module],
     align: 'center',
     headerClassName: 'w-[112px] whitespace-normal px-2 text-center leading-4',
     className: 'px-2 text-center',
@@ -146,7 +139,7 @@ export default function ModulesMatrixPage() {
       cell: (row) => (
         <div className="min-w-0">
           <Link
-            to={`/app/owner/tenants/${row.tenantId}`}
+            to={`/owner/tenants/${row.tenantId}`}
             className={cn(
               'font-semibold hover:underline',
               row.status === 'ACTIVE' ? 'text-foreground' : 'text-muted-foreground',
@@ -282,7 +275,7 @@ export default function ModulesMatrixPage() {
             rowSeverity={(row) => tenantRowSeverity(row.status)}
             rowClassName={(row) => (row.status === 'CANCELLED' ? 'text-muted-foreground' : undefined)}
             caption="Clientes y módulos habilitados"
-            className="border-t border-border"
+            className="min-w-0 border-t border-border"
             empty={{
               title: hasFilters ? 'Ningún cliente coincide con los filtros' : 'Todavía no hay clientes',
               description: hasFilters

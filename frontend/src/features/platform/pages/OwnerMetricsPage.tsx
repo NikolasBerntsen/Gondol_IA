@@ -52,10 +52,10 @@ export default function OwnerMetricsPage() {
         description="Cómo viene el negocio: clientes, sucursales, ingresos, uso, soporte y recalls."
         actions={
           <div className="flex flex-wrap gap-2">
-            <ButtonLink to="/app/owner/tenants" variant="outline" leftIcon={<Store />}>
+            <ButtonLink to="/owner/tenants" variant="outline" leftIcon={<Store />}>
               Ver clientes
             </ButtonLink>
-            <ButtonLink to="/app/owner/modules" leftIcon={<Activity />}>
+            <ButtonLink to="/owner/modules" leftIcon={<Activity />}>
               Módulos por cliente
             </ButtonLink>
           </div>
@@ -81,7 +81,7 @@ export default function OwnerMetricsPage() {
                     ? `${formatNumber(data.tenants.total)} en total · ${formatNumber(data.tenants.newLast30d)} altas en 30 días`
                     : undefined
                 }
-                to="/app/owner/tenants?status=ACTIVE"
+                to="/owner/tenants?status=ACTIVE"
               />
               <StatCard
                 label="MRR estimado"
