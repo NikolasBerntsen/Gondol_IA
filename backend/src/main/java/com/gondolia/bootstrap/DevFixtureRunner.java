@@ -10,6 +10,8 @@ import com.gondolia.domain.inventory.ProductRepository;
 import com.gondolia.domain.inventory.ProductUnit;
 import com.gondolia.domain.inventory.Supplier;
 import com.gondolia.domain.inventory.SupplierRepository;
+import com.gondolia.domain.pos.PosRegister;
+import com.gondolia.domain.pos.PosRegisterRepository;
 import com.gondolia.domain.tenant.Branch;
 import com.gondolia.domain.tenant.BranchRepository;
 import com.gondolia.domain.tenant.BusinessType;
@@ -18,6 +20,7 @@ import com.gondolia.domain.tenant.Tenant;
 import com.gondolia.domain.tenant.TenantEvent;
 import com.gondolia.domain.tenant.TenantEventRepository;
 import com.gondolia.domain.tenant.TenantEventType;
+import com.gondolia.domain.tenant.TenantModule;
 import com.gondolia.domain.tenant.TenantPlan;
 import com.gondolia.domain.tenant.TenantRepository;
 import com.gondolia.domain.tenant.TenantSettings;
@@ -27,6 +30,7 @@ import com.gondolia.domain.user.User;
 import com.gondolia.domain.user.UserBranch;
 import com.gondolia.domain.user.UserBranchRepository;
 import com.gondolia.domain.user.UserRepository;
+import com.gondolia.modules.ModuleService;
 import com.gondolia.stock.StockService;
 import com.gondolia.stock.StockService.ReceiveLotCommand;
 import java.math.BigDecimal;
@@ -35,8 +39,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
@@ -52,9 +58,11 @@ import org.springframework.transaction.annotation.Transactional;
  * existe.
  * <ul>
  *   <li>"Comercio de Prueba" (ALMACEN, BASICO, FIFO) con "Sucursal Centro" y "Sucursal Norte";
- *       {@code jefe@prueba.com}, {@code admin@prueba.com} y {@code empleado@prueba.com} (solo Centro).</li>
+ *       {@code jefe@prueba.com}, {@code admin@prueba.com}, {@code empleado@prueba.com} y {@code cajero@prueba.com}
+ *       (estos dos últimos solo en Centro). Tiene los tres módulos habilitados y una caja "Caja 1" en Centro.</li>
  *   <li>{@code soporte@gondolia.app} (SUPPORT_AGENT).</li>
- *   <li>"Otro Comercio" (KIOSCO, FREEMIUM) con {@code admin@otro.com}, para probar aislamiento.</li>
+ *   <li>"Otro Comercio" (KIOSCO, FREEMIUM) con {@code admin@otro.com}, para probar aislamiento; solo con el módulo
+ *       {@code POS_INTEGRATION}.</li>
  *   <li>3 productos con 2 lotes (distintas fechas) en Centro y 1 lote en Norte. El yogur tiene en Centro un lote más
  *       nuevo que vence antes que el más viejo (aviso de FIFO).</li>
  * </ul>
@@ -72,6 +80,7 @@ public class DevFixtureRunner implements ApplicationRunner {
     static final String OTHER_TENANT_NAME = "Otro Comercio";
     static final String CENTRO = "Sucursal Centro";
     static final String NORTE = "Sucursal Norte";
+    static final String REGISTER_NAME = "Caja 1";
 
     private record LotSpec(String branch, String lotNumber, int expiresInDays, int receivedDaysAgo, int quantity) {
     }
@@ -104,7 +113,9 @@ public class DevFixtureRunner implements ApplicationRunner {
     private final SupplierRepository supplierRepository;
     private final ProductRepository productRepository;
     private final LotRepository lotRepository;
+    private final PosRegisterRepository posRegisterRepository;
     private final StockService stockService;
+    private final ModuleService moduleService;
     private final PasswordEncoder passwordEncoder;
     private final Clock clock;
 
@@ -121,16 +132,20 @@ public class DevFixtureRunner implements ApplicationRunner {
         ensureUser("jefe@prueba.com", "Julián Pérez", Role.TENANT_BOSS, tenant.getId());
         User admin = ensureUser("admin@prueba.com", "Ana Rodríguez", Role.TENANT_ADMIN, tenant.getId());
         User employee = ensureUser("empleado@prueba.com", "Emiliano Gómez", Role.TENANT_EMPLOYEE, tenant.getId());
-        if (employee != null && !userBranchRepository.existsByUserIdAndBranchId(employee.getId(), centro.getId())) {
-            userBranchRepository.save(new UserBranch(employee.getId(), centro.getId()));
-        }
+        assignBranch(employee, centro);
+        User cashier = ensureUser("cajero@prueba.com", "Carla Giménez", Role.TENANT_CASHIER, tenant.getId());
+        assignBranch(cashier, centro);
         ensureUser("soporte@gondolia.app", "Sofía Martínez", Role.SUPPORT_AGENT, null);
+        ensureModules(tenant.getId(), TenantModule.POS_GONDOLIA, TenantModule.POS_INTEGRATION,
+                TenantModule.MULTI_BRANCH);
+        ensureRegister(tenant.getId(), centro, REGISTER_NAME);
 
         Tenant other = ensureTenant(OTHER_TENANT_NAME, BusinessType.KIOSCO, TenantPlan.FREEMIUM, "Oscar Otero",
                 "admin@otro.com", "Rosario", "Santa Fe");
         ensureSettings(other.getId());
         ensureBranch(other.getId(), Branch.DEFAULT_NAME, "PRI", "Bv. Oroño 850", "Rosario", "Santa Fe");
         ensureUser("admin@otro.com", "Oscar Otero", Role.TENANT_ADMIN, other.getId());
+        ensureModules(other.getId(), TenantModule.POS_INTEGRATION);
 
         ensureCatalog(tenant.getId(), centro, norte, admin != null ? admin.getId() : null);
         log.info("Fixture de desarrollo listo: {} (Centro y Norte) y {}", TENANT_NAME, OTHER_TENANT_NAME);
@@ -202,6 +217,34 @@ public class DevFixtureRunner implements ApplicationRunner {
         user.setTenantId(tenantId);
         user.setPasswordHash(passwordHash());
         return userRepository.save(user);
+    }
+
+    /** Asigna la sucursal al usuario si todavía no la tiene (empleados y cajeros). */
+    private void assignBranch(User user, Branch branch) {
+        if (user != null && !userBranchRepository.existsByUserIdAndBranchId(user.getId(), branch.getId())) {
+            userBranchRepository.save(new UserBranch(user.getId(), branch.getId()));
+        }
+    }
+
+    /** Deja habilitados exactamente los módulos indicados (idempotente: {@code setEnabled} no repite eventos). */
+    private void ensureModules(Long tenantId, TenantModule... enabled) {
+        Set<TenantModule> wanted = enabled.length == 0 ? EnumSet.noneOf(TenantModule.class)
+                : EnumSet.copyOf(List.of(enabled));
+        for (TenantModule module : TenantModule.values()) {
+            moduleService.setEnabled(tenantId, module, wanted.contains(module), null);
+        }
+    }
+
+    /** Caja del POS GondolIA en una sucursal (idempotente por nombre). */
+    private void ensureRegister(Long tenantId, Branch branch, String name) {
+        if (posRegisterRepository.existsByBranchIdAndNameIgnoreCase(branch.getId(), name)) {
+            return;
+        }
+        PosRegister register = new PosRegister();
+        register.setTenantId(tenantId);
+        register.setBranchId(branch.getId());
+        register.setName(name);
+        posRegisterRepository.save(register);
     }
 
     private void ensureCatalog(Long tenantId, Branch centro, Branch norte, Long adminId) {

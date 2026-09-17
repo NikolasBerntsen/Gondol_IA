@@ -8,7 +8,8 @@ public enum Role {
     SUPPORT_AGENT(Scope.PLATFORM),
     TENANT_BOSS(Scope.TENANT),
     TENANT_ADMIN(Scope.TENANT),
-    TENANT_EMPLOYEE(Scope.TENANT);
+    TENANT_EMPLOYEE(Scope.TENANT),
+    TENANT_CASHIER(Scope.TENANT);
 
     private enum Scope { PLATFORM, TENANT }
 
@@ -29,11 +30,19 @@ public enum Role {
     }
 
     /**
-     * {@code true} si accede a todas las sucursales activas del tenant (jefe y administrador); el empleado solo a
-     * las asignadas en {@code user_branches}.
+     * {@code true} si accede a todas las sucursales activas del tenant (jefe y administrador); el empleado y el
+     * cajero solo a las asignadas en {@code user_branches}.
      */
     public boolean accessesAllBranches() {
         return this == TENANT_ADMIN || this == TENANT_BOSS;
+    }
+
+    /**
+     * {@code true} si el rol trabaja en las sucursales que tiene asignadas ({@code TENANT_EMPLOYEE} y
+     * {@code TENANT_CASHIER}): necesita al menos una sucursal para operar.
+     */
+    public boolean worksInAssignedBranches() {
+        return this == TENANT_EMPLOYEE || this == TENANT_CASHIER;
     }
 
     /** Authority de Spring Security ({@code ROLE_<nombre>}). */
@@ -42,7 +51,7 @@ public enum Role {
     }
 
     public static Set<Role> tenantRoles() {
-        return EnumSet.of(TENANT_BOSS, TENANT_ADMIN, TENANT_EMPLOYEE);
+        return EnumSet.of(TENANT_BOSS, TENANT_ADMIN, TENANT_EMPLOYEE, TENANT_CASHIER);
     }
 
     public static Set<Role> platformRoles() {

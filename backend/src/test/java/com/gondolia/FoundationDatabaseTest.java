@@ -9,6 +9,7 @@ import com.gondolia.common.error.ApiException;
 import com.gondolia.domain.inventory.Lot;
 import com.gondolia.domain.inventory.LotRepository;
 import com.gondolia.domain.tenant.StockRotation;
+import com.gondolia.domain.tenant.TenantModule;
 import com.gondolia.domain.tenant.TenantPlan;
 import com.gondolia.domain.user.Role;
 import com.gondolia.domain.user.UserRepository;
@@ -82,6 +83,7 @@ class FoundationDatabaseTest {
     private AuthUser admin;
     private AuthUser boss;
     private AuthUser employee;
+    private AuthUser cashier;
 
     @BeforeEach
     void setUp() {
@@ -95,9 +97,11 @@ class FoundationDatabaseTest {
         admin = insertUser(tenantA, "admin", Role.TENANT_ADMIN);
         boss = insertUser(tenantA, "jefe", Role.TENANT_BOSS);
         employee = insertUser(tenantA, "empleado", Role.TENANT_EMPLOYEE);
+        cashier = insertUser(tenantA, "cajero", Role.TENANT_CASHIER);
         insertUser(tenantB, "admin", Role.TENANT_ADMIN);
         jdbc.update("insert into user_branches (user_id, branch_id) values (?, ?)", employee.id(), centro);
         jdbc.update("insert into user_branches (user_id, branch_id) values (?, ?)", employee.id(), vieja);
+        jdbc.update("insert into user_branches (user_id, branch_id) values (?, ?)", cashier.id(), centro);
     }
 
     @AfterEach
@@ -114,6 +118,23 @@ class FoundationDatabaseTest {
                 .containsExactly("Sucursal Centro", "Sucursal Norte");
         assertThat(branchAccessService.accessibleBranches(employee)).containsExactly(
                 new BranchAccessService.BranchRef(centro, "Sucursal Centro", "CEN"));
+        assertThat(branchAccessService.accessibleBranches(cashier))
+                .as("el cajero ve solo sus sucursales asignadas, igual que el empleado")
+                .containsExactly(new BranchAccessService.BranchRef(centro, "Sucursal Centro", "CEN"));
+    }
+
+    @Test
+    void cashierScopeIsLimitedToAssignedBranches() {
+        as(cashier, "all");
+        assertThat(branchAccessService.scopeBranchIds()).containsExactly(centro);
+        assertThat(branchAccessService.requireSingleBranch(null)).isEqualTo(centro);
+
+        as(cashier, String.valueOf(norte));
+        assertApiError(() -> branchAccessService.scopeBranchIds(), 403, "BRANCH_FORBIDDEN");
+        assertApiError(() -> branchAccessService.assertAccess(norte), 403, "BRANCH_FORBIDDEN");
+
+        assertThat(branchAccessService.canAccess(cashier.id(), centro)).isTrue();
+        assertThat(branchAccessService.canAccess(cashier.id(), norte)).isFalse();
     }
 
     @Test
@@ -144,7 +165,8 @@ class FoundationDatabaseTest {
     @Test
     void userIndependentQueries() {
         assertThat(branchAccessService.userIdsWithAccess(tenantA, centro))
-                .containsExactlyInAnyOrder(admin.id(), boss.id(), employee.id());
+                .as("el cajero asignado también recibe las notificaciones de su sucursal")
+                .containsExactlyInAnyOrder(admin.id(), boss.id(), employee.id(), cashier.id());
         assertThat(branchAccessService.userIdsWithAccess(tenantA, norte)).containsExactlyInAnyOrder(admin.id(), boss.id());
         assertThat(branchAccessService.userIdsWithAccess(tenantA, ajena)).isEmpty();
         assertThat(branchAccessService.canAccess(employee.id(), centro)).isTrue();
@@ -154,14 +176,25 @@ class FoundationDatabaseTest {
     }
 
     @Test
-    void meIncludesTenantBlockAndAccessibleBranches() {
+    void meIncludesTenantBlockModulesAndAccessibleBranches() {
         MeDto me = authService.toMe(userRepository.findById(employee.id()).orElseThrow());
 
         assertThat(me.tenant().plan()).isEqualTo(TenantPlan.PROFESIONAL);
         assertThat(me.tenant().stockRotation()).isEqualTo(StockRotation.FEFO);
-        assertThat(me.tenant().maxBranches()).isEqualTo(10);
         assertThat(me.tenant().currency()).isEqualTo("ARS");
+        assertThat(me.tenant().modules()).as("sin módulos habilitados").isEmpty();
+        assertThat(me.tenant().maxBranches()).as("sin MULTI_BRANCH el máximo efectivo es 1").isEqualTo(1);
         assertThat(me.branches()).extracting(BranchAccessService.BranchRef::id).containsExactly(centro);
+
+        enableModule(tenantA, TenantModule.POS_GONDOLIA);
+        enableModule(tenantA, TenantModule.MULTI_BRANCH);
+        MeDto withModules = authService.toMe(userRepository.findById(cashier.id()).orElseThrow());
+
+        assertThat(withModules.role()).isEqualTo(Role.TENANT_CASHIER);
+        assertThat(withModules.tenant().modules())
+                .containsExactly(TenantModule.POS_GONDOLIA, TenantModule.MULTI_BRANCH);
+        assertThat(withModules.tenant().maxBranches()).as("con MULTI_BRANCH manda el plan").isEqualTo(10);
+        assertThat(withModules.branches()).extracting(BranchAccessService.BranchRef::id).containsExactly(centro);
     }
 
     @Test
@@ -212,6 +245,11 @@ class FoundationDatabaseTest {
         return jdbc.queryForObject(
                 "insert into tenants (name, business_type, plan) values (?, 'ALMACEN', ?) returning id",
                 Long.class, name, plan);
+    }
+
+    private void enableModule(long tenantId, TenantModule module) {
+        jdbc.update("insert into tenant_modules (tenant_id, module, enabled) values (?, ?, true)", tenantId,
+                module.name());
     }
 
     private long insertBranch(long tenantId, String name, String code, boolean active) {

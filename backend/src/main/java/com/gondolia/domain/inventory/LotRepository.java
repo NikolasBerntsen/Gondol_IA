@@ -16,6 +16,10 @@ import org.springframework.data.repository.query.Param;
 /**
  * Lotes. "Vendible" = {@code ACTIVE}, {@code quantity > 0} y ({@code expiryDate} NULL o {@code >= today}); "hoy" se
  * calcula siempre con el {@code Clock} de la aplicación.
+ * <p>
+ * Orden de rotación (SPEC §4.2): primero los lotes en liquidación (con {@code discount_pct} activo, es decir no nulo y
+ * mayor a cero) y dentro de cada grupo FIFO ({@code received_at, id}) o FEFO
+ * ({@code expiry_date NULLS LAST, received_at, id}).
  */
 public interface LotRepository extends JpaRepository<Lot, Long>, JpaSpecificationExecutor<Lot> {
 
@@ -62,7 +66,7 @@ public interface LotRepository extends JpaRepository<Lot, Long>, JpaSpecificatio
                 EnumSet.of(LotStatus.ACTIVE, LotStatus.RECALLED));
     }
 
-    /** Lotes vendibles de un producto en una sucursal, en orden FIFO. */
+    /** Lotes vendibles de un producto en una sucursal, en orden de rotación FIFO (los descuentos primero). */
     @Query("""
             select l from Lot l
             where l.tenantId = :tenantId
@@ -71,12 +75,13 @@ public interface LotRepository extends JpaRepository<Lot, Long>, JpaSpecificatio
               and l.status = com.gondolia.domain.inventory.LotStatus.ACTIVE
               and l.quantity > 0
               and (l.expiryDate is null or l.expiryDate >= :today)
-            order by l.receivedAt asc, l.id asc
+            order by case when l.discountPct is null or l.discountPct <= 0 then 1 else 0 end asc,
+                     l.receivedAt asc, l.id asc
             """)
     List<Lot> findSellableFifo(@Param("tenantId") Long tenantId, @Param("branchId") Long branchId,
                                @Param("productId") Long productId, @Param("today") LocalDate today);
 
-    /** Lotes vendibles de un producto en una sucursal, en orden FEFO. */
+    /** Lotes vendibles de un producto en una sucursal, en orden de rotación FEFO (los descuentos primero). */
     @Query("""
             select l from Lot l
             where l.tenantId = :tenantId
@@ -85,7 +90,8 @@ public interface LotRepository extends JpaRepository<Lot, Long>, JpaSpecificatio
               and l.status = com.gondolia.domain.inventory.LotStatus.ACTIVE
               and l.quantity > 0
               and (l.expiryDate is null or l.expiryDate >= :today)
-            order by l.expiryDate asc nulls last, l.receivedAt asc, l.id asc
+            order by case when l.discountPct is null or l.discountPct <= 0 then 1 else 0 end asc,
+                     l.expiryDate asc nulls last, l.receivedAt asc, l.id asc
             """)
     List<Lot> findSellableFefo(@Param("tenantId") Long tenantId, @Param("branchId") Long branchId,
                                @Param("productId") Long productId, @Param("today") LocalDate today);
@@ -151,6 +157,9 @@ public interface LotRepository extends JpaRepository<Lot, Long>, JpaSpecificatio
     /**
      * Lotes vendibles del mismo producto y sucursal que ingresaron antes que {@code lotId} (orden FIFO) y vencen
      * después de {@code expiryDate} o no tienen vencimiento: con FIFO se venden antes que ese lote.
+     * <p>
+     * Los lotes en liquidación también cuentan: con el descuento salen todavía antes, así que el lote nuevo —que vence
+     * antes— igual se va a vender después (SPEC §4.2, aviso {@code rotationWarning}).
      */
     @Query("""
             select count(l) from Lot l
@@ -169,6 +178,22 @@ public interface LotRepository extends JpaRepository<Lot, Long>, JpaSpecificatio
                                          @Param("receivedAt") Instant receivedAt,
                                          @Param("expiryDate") LocalDate expiryDate,
                                          @Param("today") LocalDate today);
+
+    /**
+     * Lotes con remanente ({@code ACTIVE} o {@code RECALLED}) de un comercio cuyo producto tiene código de barras:
+     * candidatos a chequear contra todos los recalls publicados (p. ej. cuando el comercio vuelve a estar ACTIVE).
+     */
+    @Query("""
+            select l from Lot l, Product p
+            where l.productId = p.id
+              and l.tenantId = :tenantId
+              and p.barcode is not null
+              and l.quantity > 0
+              and l.status in (com.gondolia.domain.inventory.LotStatus.ACTIVE,
+                               com.gondolia.domain.inventory.LotStatus.RECALLED)
+            order by l.branchId, l.id
+            """)
+    List<Lot> findStockedLotsWithBarcodeByTenant(@Param("tenantId") Long tenantId);
 
     /**
      * Lotes con remanente (ACTIVE o RECALLED) de un código de barras en tenants ACTIVE: candidatos de un recall.

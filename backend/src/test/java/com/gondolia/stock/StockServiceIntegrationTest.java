@@ -27,6 +27,7 @@ import com.gondolia.stock.StockService.SaleResult;
 import com.gondolia.stock.StockService.TransferCommand;
 import com.gondolia.stock.StockService.TransferItem;
 import com.gondolia.stock.StockService.TransferResult;
+import com.gondolia.stock.StockService.VoidSaleCommand;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import java.math.BigDecimal;
@@ -144,6 +145,46 @@ class StockServiceIntegrationTest extends PostgresIntegrationTest {
                 .as("otra sucursal sin stock previo").isNull();
         assertThat(receive(centro, product, "D", today.plusDays(8), 5, daysAgo(0)).rotationWarning())
                 .as("vence antes que A y B, que ingresaron antes").isEqualTo(StockService.ROTATION_WARNING);
+    }
+
+    @Test
+    void discountedLotsSellFirstUnderFifoAndFefo() {
+        ReceiveLotResult oldest = receive(centro, product, "VIEJO", today.plusDays(30), 3, daysAgo(20));
+        ReceiveLotResult discounted = receive(centro, product, "LIQUIDACION", today.plusDays(25), 4, daysAgo(2));
+        ReceiveLotResult soonest = receive(centro, product, "PRONTO", today.plusDays(5), 5, daysAgo(1));
+        discount(discounted.lot().getId(), 20);
+
+        assertThat(stockService.lotsInRotationOrder(tenant, centro, product)).extracting(Lot::getId)
+                .as("FIFO: liquidacion primero y despues lo que entro antes")
+                .containsExactly(discounted.lot().getId(), oldest.lot().getId(), soonest.lot().getId());
+
+        data.rotation(tenant, "FEFO");
+        entityManager.clear();
+
+        assertThat(stockService.lotsInRotationOrder(tenant, centro, product)).extracting(Lot::getId)
+                .as("FEFO: liquidacion primero y despues lo que vence antes")
+                .containsExactly(discounted.lot().getId(), soonest.lot().getId(), oldest.lot().getId());
+
+        SaleResult sale = sell(centro, product, 5, null);
+
+        assertThat(sale.movements()).extracting(StockMovement::getLotId, StockMovement::getQuantity,
+                        StockMovement::getUnitPrice)
+                .containsExactly(tuple(discounted.lot().getId(), 4, new BigDecimal("160.00")),
+                        tuple(soonest.lot().getId(), 1, new BigDecimal("200.00")));
+        assertThat(lot(discounted.lot().getId()).getStatus()).isEqualTo(LotStatus.DEPLETED);
+    }
+
+    @Test
+    void rotationWarningAlsoCountsLotsInLiquidation() {
+        ReceiveLotResult older = receive(centro, product, "VIEJO", today.plusDays(30), 5, daysAgo(10));
+        discount(older.lot().getId(), 30);
+
+        assertThat(receive(centro, product, "NUEVO", today.plusDays(4), 5, daysAgo(1)).rotationWarning())
+                .as("el lote viejo en liquidacion sale todavia antes: el nuevo vence antes y se vendera despues")
+                .isEqualTo(StockService.ROTATION_WARNING);
+
+        assertThat(receive(centro, product, "REGULAR", today.plusDays(30), 5, daysAgo(9)).rotationWarning())
+                .as("no vence antes que ningun lote anterior").isNull();
     }
 
     @Test
@@ -290,6 +331,70 @@ class StockServiceIntegrationTest extends PostgresIntegrationTest {
         });
     }
 
+    // ------------------------------------------------------------------ anulaciones
+
+    @Test
+    void voidSaleRestoresTheExactLotsAndIsIdempotent() {
+        ReceiveLotResult first = receive(centro, product, "L1", today.plusDays(10), 2, daysAgo(5));
+        ReceiveLotResult second = receive(centro, product, "L2", today.plusDays(20), 5, daysAgo(1));
+        SaleResult sale = stockService.registerSale(new SaleCommand(tenant, centro, product, 4, null, null,
+                MovementSource.POS_GONDOLIA, admin.id(), "P-TICKET-1"));
+        assertThat(lot(first.lot().getId())).extracting(Lot::getQuantity, Lot::getStatus)
+                .containsExactly(0, LotStatus.DEPLETED);
+
+        List<StockMovement> voids = stockService.voidSale(new VoidSaleCommand(tenant, "P-TICKET-1", admin.id(),
+                "Se arrepintio el cliente"));
+
+        assertThat(voids).extracting(StockMovement::getType, StockMovement::getLotId, StockMovement::getQuantity,
+                        StockMovement::getUnitPrice, StockMovement::getSource, StockMovement::getBatchRef)
+                .containsExactly(
+                        tuple(MovementType.SALE_VOID, first.lot().getId(), 2, new BigDecimal("200.00"),
+                                MovementSource.POS_GONDOLIA, "P-TICKET-1"),
+                        tuple(MovementType.SALE_VOID, second.lot().getId(), 2, new BigDecimal("200.00"),
+                                MovementSource.POS_GONDOLIA, "P-TICKET-1"));
+        assertThat(voids).extracting(StockMovement::getReason).containsOnly("Se arrepintio el cliente");
+        assertThat(voids).extracting(StockMovement::getTotalAmount).containsExactly(new BigDecimal("400.00"),
+                new BigDecimal("400.00"));
+        assertThat(lot(first.lot().getId())).extracting(Lot::getQuantity, Lot::getStatus)
+                .as("el lote agotado vuelve a estar activo").containsExactly(2, LotStatus.ACTIVE);
+        assertThat(lot(second.lot().getId())).extracting(Lot::getQuantity, Lot::getStatus)
+                .containsExactly(5, LotStatus.ACTIVE);
+        assertThat(stockService.sellableStock(tenant, centro, product)).isEqualTo(7);
+        assertThat(sale.movements()).hasSize(2);
+        assertThat(events.stream(StockChangedEvent.class)).contains(new StockChangedEvent(tenant, centro, product));
+
+        assertApiError(() -> stockService.voidSale(new VoidSaleCommand(tenant, "P-TICKET-1", admin.id(), null)),
+                409, "ALREADY_VOIDED");
+        assertApiError(() -> stockService.voidSale(new VoidSaleCommand(tenant, "P-NO-EXISTE", admin.id(), null)),
+                404, "NOT_FOUND");
+        assertApiError(() -> stockService.voidSale(new VoidSaleCommand(tenant, "  ", admin.id(), null)),
+                400, "VALIDATION_ERROR");
+        assertThat(stockService.sellableStock(tenant, centro, product)).as("nada cambio tras los rechazos")
+                .isEqualTo(7);
+    }
+
+    @Test
+    void voidSaleKeepsQuarantinedLotsAndDoesNotRestoreShortages() {
+        ReceiveLotResult lot = receive(centro, product, "L1", today.plusDays(10), 3, daysAgo(5));
+        stockService.registerSale(new SaleCommand(tenant, centro, product, 5, null, null, MovementSource.POS_GONDOLIA,
+                admin.id(), "P-TICKET-2"));
+        entityManager.flush();
+        jdbc.update("update lots set status = 'RECALLED' where id = ?", lot.lot().getId());
+        entityManager.clear();
+
+        List<StockMovement> voids = stockService.voidSale(new VoidSaleCommand(tenant, "P-TICKET-2", admin.id(),
+                "Anulacion con faltante"));
+
+        assertThat(voids).extracting(StockMovement::getLotId, StockMovement::getQuantity)
+                .as("el faltante se anula pero no devuelve stock")
+                .containsExactly(tuple(lot.lot().getId(), 3), tuple(null, 2));
+        assertThat(lot(lot.lot().getId())).extracting(Lot::getQuantity, Lot::getStatus)
+                .as("el lote en cuarentena recupera las unidades pero sigue RECALLED")
+                .containsExactly(3, LotStatus.RECALLED);
+        assertThat(stockService.sellableStock(tenant, centro, product))
+                .as("un lote RECALLED no es vendible").isZero();
+    }
+
     // ------------------------------------------------------------------ ajustes y estados
 
     @Test
@@ -424,6 +529,13 @@ class StockServiceIntegrationTest extends PostgresIntegrationTest {
     private TransferResult transfer(long from, long to, long lotId, int quantity) {
         return stockService.transfer(new TransferCommand(tenant, from, to, List.of(new TransferItem(lotId, quantity)),
                 null, admin.id()));
+    }
+
+    /** Pone un descuento activo en el lote (recomendacion DISCOUNT aceptada) y limpia el contexto de persistencia. */
+    private void discount(long lotId, int pct) {
+        entityManager.flush();
+        jdbc.update("update lots set discount_pct = ?, discount_started_at = now() where id = ?", pct, lotId);
+        entityManager.clear();
     }
 
     private Lot lot(long id) {

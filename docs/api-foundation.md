@@ -2,7 +2,9 @@
 
 Documentación de los endpoints y contratos transversales que implementa la fundación del backend
 (`com.gondolia.auth`, `security`, `common`, `realtime`, `notification`, `stock`, `recall`, `storage`, `ai`,
-`bootstrap`). Complementa SPEC.md §4.2, §5, §6.1, §6.2 y §7. La sección 12 es la guía de uso del núcleo para los módulos.
+`bootstrap`, `modules`). Complementa SPEC.md §4.2, §5, §6.1, §6.2, §7, §14, §15.1 y §16. La sección 12 es la guía de uso
+del núcleo para los módulos (incluye **módulos por comercio**, **anulación de ventas** y las **entidades del POS y de la
+importación masiva**).
 
 - Base: `/api`. JSON en camelCase. Instantes en ISO-8601 UTC (`"2026-09-17T13:00:00Z"`), fechas `"2026-09-17"`.
 - Swagger UI: `/api/swagger-ui.html` · OpenAPI: `/api/docs` (esquema `bearerAuth`; en `/api/tenant/**` se documenta
@@ -37,7 +39,8 @@ Response `200`:
   "user": {
     "id": 5, "email": "admin@elsol.com", "fullName": "Laura Gómez", "role": "TENANT_ADMIN", "mustChangePassword": false,
     "tenant": {"id": 2, "name": "Minimercado El Sol", "plan": "PROFESIONAL", "businessType": "MINIMERCADO",
-               "currency": "ARS", "stockRotation": "FIFO", "maxBranches": 10},
+               "currency": "ARS", "stockRotation": "FIFO",
+               "modules": ["POS_GONDOLIA", "POS_INTEGRATION", "MULTI_BRANCH"], "maxBranches": 10},
     "branches": [{"id": 3, "name": "Sucursal Centro", "code": "CEN"}, {"id": 4, "name": "Sucursal Fisherton", "code": "FIS"}]
   }
 }
@@ -59,10 +62,13 @@ Un token viejo o inválido en el encabezado no afecta al login (la ruta es públ
 
 Response `200`: el mismo `MeDto` que `user` en el login.
 - Roles de plataforma (`PLATFORM_OWNER`, `SUPPORT_AGENT`): `tenant` = `null`, `branches` = `[]`.
-- Usuarios de comercio: `tenant.maxBranches` sale del plan (FREEMIUM 1, BASICO 3, PROFESIONAL 10),
-  `tenant.currency` y `tenant.stockRotation` de `tenant_settings`, y `branches` son las **sucursales activas
-  accesibles**, ordenadas por nombre: todas las del tenant para `TENANT_ADMIN`/`TENANT_BOSS`; solo las asignadas en
-  `user_branches` para `TENANT_EMPLOYEE`.
+- Usuarios de comercio: `tenant.currency` y `tenant.stockRotation` salen de `tenant_settings`; `tenant.modules` son los
+  **módulos habilitados** (SPEC §14, en el orden del enum) y `tenant.maxBranches` el **máximo efectivo** de sucursales:
+  el límite del plan (FREEMIUM 1, BASICO 3, PROFESIONAL 10) si `MULTI_BRANCH` está habilitado y **1 si no lo está**.
+  `branches` son las **sucursales activas accesibles**, ordenadas por nombre: todas las del tenant para
+  `TENANT_ADMIN`/`TENANT_BOSS`; solo las asignadas en `user_branches` para `TENANT_EMPLOYEE` y `TENANT_CASHIER`.
+- Cuando los dueños cambian los módulos de un comercio, sus usuarios reciben `{"type":"MODULES_CHANGED"}` por
+  `/user/queue/session` y el frontend vuelve a pedir `/api/auth/me` (§12.7).
 
 ### 1.3 `POST /api/auth/change-password` (autenticado)
 
@@ -99,12 +105,18 @@ Errores: 400 `VALIDATION_ERROR` (`newPassword` entre 8 y 72 caracteres), 400 `IN
 | `/api/auth/login`, `/api/integrations/pos/**`, `/actuator/health`, `/api/docs/**`, `/api/swagger-ui/**`, `/ws/**` | Público (el WebSocket autentica en el CONNECT de STOMP; el webhook POS con `X-API-Key`) |
 | `/api/platform/**` | `PLATFORM_OWNER` |
 | `/api/support/**` | `SUPPORT_AGENT` |
-| `/api/tenant/**` | `TENANT_BOSS`, `TENANT_ADMIN`, `TENANT_EMPLOYEE` |
+| `/api/tenant/**` | `TENANT_BOSS`, `TENANT_ADMIN`, `TENANT_EMPLOYEE`, `TENANT_CASHIER` |
 | resto de `/api/**` (`/api/auth/me`, `/api/notifications/**`, `/api/presence/**`, `/api/attachments/**`) | cualquier usuario autenticado |
 
-El detalle fino se declara en cada controlador con `@PreAuthorize(Roles.X)` (`Roles.OWNER`, `SUPPORT`, `TENANT_ANY`,
-`TENANT_ADMIN`, `TENANT_DASHBOARD`, `TENANT_INVENTORY`). Una denegación por método responde 403 `FORBIDDEN` con el
-formato estándar.
+El detalle fino se declara en cada controlador con `@PreAuthorize(Roles.X)` (`Roles.OWNER`, `SUPPORT`, `TENANT_ANY`
+—incluye al cajero—, `TENANT_POS` = ADMIN + EMPLOYEE + CASHIER, `TENANT_ADMIN`, `TENANT_DASHBOARD`,
+`TENANT_INVENTORY`). Una denegación por método responde 403 `FORBIDDEN` con el formato estándar.
+
+**Rol `TENANT_CASHIER` (Cajero, SPEC §3.1)**: usuario de comercio que solo usa el POS GondolIA, los avisos, la seguridad
+alimentaria y el soporte. A efectos del núcleo se comporta **igual que `TENANT_EMPLOYEE`**: trabaja en las sucursales
+que tiene asignadas en `user_branches` (necesita al menos una), entra en `Role.tenantRoles()` (fan-out de
+notificaciones), en `BranchAccessService.userIdsWithAccess` / `NotificationService.branchRecipients` y en las
+respuestas de `/api/auth/me`. `Role.worksInAssignedBranches()` devuelve `true` para empleado y cajero.
 
 CORS (solo desarrollo con Vite): origen `http://localhost:5173` (configurable con `APP_CORS_ALLOWED_ORIGINS`), métodos
 `GET, POST, PUT, PATCH, DELETE, OPTIONS`, encabezados `Authorization`, `Content-Type`, `Accept`, `Accept-Language`,
@@ -119,8 +131,8 @@ El frontend manda la sucursal elegida en `X-Branch-Id`:
 - ausente, vacío o `all` (sin distinguir mayúsculas) → **todas las sucursales accesibles** (vista consolidada);
 - cualquier otro valor → 400 `VALIDATION_ERROR`.
 
-Acceso: `TENANT_ADMIN` y `TENANT_BOSS` acceden a todas las sucursales **activas** del tenant; `TENANT_EMPLOYEE` solo a
-las activas asignadas en `user_branches`.
+Acceso: `TENANT_ADMIN` y `TENANT_BOSS` acceden a todas las sucursales **activas** del tenant; `TENANT_EMPLOYEE` y
+`TENANT_CASHIER` solo a las activas asignadas en `user_branches`.
 
 Servicio `com.gondolia.security.BranchAccessService` (lo usan los controladores de los módulos):
 
@@ -132,7 +144,7 @@ Servicio `com.gondolia.security.BranchAccessService` (lo usan los controladores 
 | `Long requireSingleBranch(Long explicitBranchId)` | Escrituras. Explícito (p. ej. `branchId` del body) > encabezado > la única accesible. Si el alcance es "todas" y hay más de una → 400 `BRANCH_REQUIRED` ("Elegí una sucursal para esta operación"). Valida acceso. |
 | `void assertAccess(Long branchId)` | 404 `NOT_FOUND` si la sucursal no es del tenant; 403 `BRANCH_FORBIDDEN` si está desactivada o el empleado no la tiene asignada; 400 `BRANCH_REQUIRED` si es `null`. |
 | `boolean canAccess(Long userId, Long branchId)` | Usuario activo de comercio con acceso a esa sucursal activa de su tenant. |
-| `List<Long> userIdsWithAccess(Long tenantId, Long branchId)` | Usuarios activos con acceso: jefes y administradores del tenant + empleados asignados. `[]` si la sucursal no es del tenant o está desactivada. |
+| `List<Long> userIdsWithAccess(Long tenantId, Long branchId)` | Usuarios activos con acceso: jefes y administradores del tenant + empleados y cajeros asignados. `[]` si la sucursal no es del tenant o está desactivada. |
 | `Map<Long,String> branchNames(Long tenantId)` | Id → nombre de todas las sucursales del tenant (incluidas las desactivadas), por nombre. |
 | `Optional<Long> requestedBranchId()` | Id crudo del encabezado, sin validar acceso (vacío si falta o es `all`). Útil para informar `scope: "ALL" \| "BRANCH"`. |
 
@@ -140,7 +152,7 @@ Errores del alcance:
 | Estado | `code` | Cuándo |
 |---|---|---|
 | 400 | `BRANCH_REQUIRED` | Escritura con alcance "todas" y más de una sucursal accesible |
-| 403 | `BRANCH_FORBIDDEN` | Sucursal no asignada al empleado, sucursal desactivada o usuario sin sucursales |
+| 403 | `BRANCH_FORBIDDEN` | Sucursal no asignada al empleado o al cajero, sucursal desactivada o usuario sin sucursales |
 | 404 | `NOT_FOUND` | La sucursal no existe o es de otro comercio |
 | 403 | `NO_TENANT` | Un usuario de plataforma llamó a una operación que requiere comercio |
 
@@ -176,7 +188,10 @@ Mapeo de `GlobalExceptionHandler`:
 Códigos comunes en `com.gondolia.common.error.ErrorCodes`: `VALIDATION_ERROR`, `NOT_FOUND`, `UNAUTHORIZED`, `FORBIDDEN`,
 `BAD_CREDENTIALS`, `TENANT_DISABLED`, `TENANT_CANCELLED`, `USER_DISABLED`, `NO_TENANT`, `CONFLICT`, `INSUFFICIENT_STOCK`,
 `AI_UNAVAILABLE`, `BRANCH_REQUIRED`, `BRANCH_FORBIDDEN`, `BRANCH_LIMIT_REACHED`, `BRANCH_HAS_STOCK`,
-`LOT_NOT_TRANSFERABLE`, `INVALID_FILE`, `INVALID_API_KEY`, `INTERNAL_ERROR`.
+`LOT_NOT_TRANSFERABLE`, `INVALID_FILE`, `INVALID_API_KEY`, `INTERNAL_ERROR` y, para la plataforma modular, el POS y la
+importación masiva: `MODULE_DISABLED` (403), `MODULE_IN_USE` (409), `ALREADY_VOIDED` (409), `REGISTER_BUSY` (409),
+`SESSION_ALREADY_OPEN` (409), `PAYMENT_INSUFFICIENT` (400) e `IMPORT_HAS_ERRORS` (409). Los módulos pueden definir
+códigos propios.
 
 ---
 
@@ -276,7 +291,7 @@ Destinos (SPEC §7). Cualquier otro destino se rechaza, incluidas colas de otros
 |---|---|---|
 | `/user/queue/notifications` | cualquiera | `NotificationDto` |
 | `/user/queue/security-alerts` | cualquiera | `RecallAlertMessage` |
-| `/user/queue/session` | cualquiera | `{"type":"FORCE_LOGOUT","code":"TENANT_DISABLED","message":"..."}` |
+| `/user/queue/session` | cualquiera | `{"type":"FORCE_LOGOUT","code":"TENANT_DISABLED","message":"..."}` y `{"type":"MODULES_CHANGED"}` (cambiaron los módulos del comercio: el frontend recarga `/api/auth/me`) |
 | `/topic/support/presence` | cualquier autenticado | `{"agentsOnline":2}` |
 | `/topic/support/queue` | `SUPPORT_AGENT` | `{"event":"TICKET_CREATED"\|"TICKET_UPDATED","ticket":TicketSummary}` (lo publica soporte) |
 | `/topic/tickets/{ticketId}` | `SUPPORT_AGENT` o usuario del comercio dueño del ticket | eventos del chat (los publica soporte) |
@@ -358,7 +373,8 @@ boolean quarantined = r.lot().getStatus() == LotStatus.RECALLED;       // r.reca
 List<RecallInfo> recalls = recallMatchingService.toRecallInfos(r.recallMatches());
 String warning = r.rotationWarning();                                  // null o el aviso de FIFO
 
-// Venta (una llamada por producto; reusá batchRef para las líneas del mismo ticket)
+// Venta (una llamada por producto; reusá batchRef para las líneas del mismo ticket; POS GondolIA: source
+// POS_GONDOLIA y batchRef "P-...")
 SaleResult sale = stockService.registerSale(new SaleCommand(tenantId, branchId, productId, 3, null, null,
         MovementSource.MANUAL, CurrentUser.id(), batchRef /* null = se genera S-... */));
 String ref = sale.movements().getFirst().getBatchRef();
@@ -370,17 +386,27 @@ StockMovement m = stockService.adjust(new AdjustCommand(tenantId, lotId, Movemen
 // Transferencia
 TransferResult t = stockService.transfer(new TransferCommand(tenantId, fromBranchId, toBranchId,
         List.of(new TransferItem(lotId, 4)), "Reparto semanal", CurrentUser.id()));
+
+// Anulación de una venta completa (SPEC §15.1): devuelve el stock a los mismos lotes
+List<StockMovement> voids = stockService.voidSale(new VoidSaleCommand(tenantId, batchRef, CurrentUser.id(),
+        "Error de cobro"));
 ```
 
 Reglas (SPEC §4.2):
-- **Vendible** = `ACTIVE`, `quantity > 0` y sin vencer. Rotación del comercio (`rotationFor(tenantId)`): FIFO
-  `received_at, id`; FEFO `expiry_date NULLS LAST, received_at, id`. `lotsInRotationOrder(...)` devuelve los lotes en el
-  orden en que se venderán (el primero es "Se vende primero").
+- **Vendible** = `ACTIVE`, `quantity > 0` y sin vencer. Orden de rotación (SPEC §4.2): **primero los lotes en
+  liquidación** (`discount_pct` activo, es decir no nulo y mayor a 0) y dentro de cada grupo la rotación del comercio
+  (`rotationFor(tenantId)`): FIFO `received_at, id`; FEFO `expiry_date NULLS LAST, received_at, id`. Es decir
+  `(discount_pct inactivo) ASC, <FIFO|FEFO>`. `lotsInRotationOrder(...)` devuelve los lotes en el orden en que se
+  venderán (el primero es "Se vende primero" o "En liquidación · sale primero") y lo aplican por igual `registerSale`,
+  las consultas `LotRepository.findSellableFifo/Fefo` y el comparador público
+  `StockService.rotationComparator(rotation)` (útil para ordenar en memoria, p. ej. el `rotationRank` del catálogo o la
+  simulación de consumo de la IA).
 - **Ingreso**: `receivedAt` null = ahora; `source` null = `MANUAL`; producto dado de baja → 409 `CONFLICT`; número de
   lote de más de 60 caracteres (`Lot.MAX_LOT_NUMBER_LENGTH`) → 400 `VALIDATION_ERROR`. Con FIFO,
   `rotationWarning` = "Este lote vence antes que mercadería que ingresó antes: con FIFO se venderá después. Revisalo o
-  aplicá un descuento." si hay lotes vendibles que ingresaron antes y vencen después (o no vencen). Si el lote coincide
-  con un recall queda `RECALLED` y no se informa el aviso.
+  aplicá un descuento." si hay lotes vendibles que ingresaron antes y vencen después (o no vencen). Los lotes en
+  liquidación cuentan igual: con el descuento salen todavía antes, así que el lote nuevo se venderá después de ellos.
+  Si el lote coincide con un recall queda `RECALLED` y no se informa el aviso.
 - **Venta**: bloquea los lotes vendibles (`SELECT ... FOR UPDATE`, siempre en orden de id, igual que ajustes,
   transferencias y recalls) y los consume en el orden de rotación. Si una operación vende varios productos en la misma
   transacción, llamá a `registerSale` ordenando las líneas por `productId` para no bloquearte con otra venta
@@ -390,6 +416,14 @@ Reglas (SPEC §4.2):
   que eran vendibles ese día. Si falta stock, el faltante es un `SALE` con `lotId` null y se abre la alerta
   `SALE_WITHOUT_STOCK` (WARNING, `dedupe_key = SALE_WITHOUT_STOCK:{branchId}:{productId}`). `SaleResult.totalAmount`
   incluye el faltante.
+- **Anulación** (`voidSale`, SPEC §15.1): por cada movimiento `SALE` del `batchRef` crea un `SALE_VOID` con la misma
+  cantidad, lote, precio, descuento y origen, y devuelve las unidades a ese lote; un lote `DEPLETED` vuelve a `ACTIVE`,
+  y uno `RECALLED`, `EXPIRED_DISCARDED` o vencido conserva su estado (recupera las unidades pero sigue sin ser
+  vendible). Las líneas de faltante (`lotId` null) también generan su `SALE_VOID` —para que las ventas netas cierren—
+  pero no devuelven stock. Batch inexistente → 404 `NOT_FOUND`; batch ya anulado → 409 `ALREADY_VOIDED` (idempotente:
+  los lotes se bloquean en orden de id y el chequeo se repite con el bloqueo tomado). Publica `StockChangedEvent` por
+  sucursal y producto. **Toda métrica de ventas (historial, estadísticas, IA, reporte de caja) tiene que descontar los
+  `SALE_VOID`**; `MovementType.isSaleRelated()` y `isInbound()` (true para `SALE_VOID`) ayudan a filtrarlos.
 - **Ajustes**: tipos `ADJUSTMENT_IN`, `ADJUSTMENT_OUT`, `WASTE_EXPIRED`, `WASTE_DAMAGED`, `RECALL_REMOVAL` (otro → 400).
   Una salida mayor al remanente → 409 `INSUFFICIENT_STOCK`. Estados: a 0 → `DEPLETED`; por `WASTE_EXPIRED` →
   `EXPIRED_DISCARDED`; `RECALLED` sigue `RECALLED`. `ADJUSTMENT_IN` sobre un lote `DEPLETED` o `EXPIRED_DISCARDED` lo
@@ -420,6 +454,12 @@ Reglas (SPEC §4.2):
   publicar un recall. Si el aviso no es un recall `PUBLISHED`, devuelve `[]`.
 - `checkLot(tenantId, lotId)`: contra recalls `PUBLISHED`; lo llaman `receiveLot` y `transfer`, y debe llamarse al
   corregir número o vencimiento de un lote.
+- `checkTenant(tenantId)`: barre **todos** los lotes con remanente de un comercio contra los recalls `PUBLISHED`. Lo
+  dispara `TenantReactivationRecallListener` (`@TransactionalEventListener(AFTER_COMMIT)` sobre
+  `TenantStatusChangedEvent` con `to = ACTIVE`): mientras el comercio estuvo `DISABLED` o `CANCELLED`,
+  `matchAnnouncement` no lo alcanzaba, así que al rehabilitarlo se revisa lo que haya entrado en el medio. Mismos
+  efectos e idempotencia que `checkLot`; los errores se registran y no afectan al cambio de estado. El módulo C no
+  tiene que llamarlo: le alcanza con publicar `TenantStatusChangedEvent`.
 - `toRecallInfos(matches)`: recalls distintos de un conjunto de coincidencias (para las respuestas `recalls:[RecallInfo]`).
 - Coincidencia: mismo código de barras y (`recall_all_lots` o número de lote normalizado en la lista) y, si hay rango,
   vencimiento dentro (solo "desde" o solo "hasta" también se respetan; lote sin vencimiento no coincide con un rango).
@@ -430,13 +470,85 @@ Reglas (SPEC §4.2):
   acceso a esa sucursal, `announcements.affected_tenants_count` actualizado, `StockChangedEvent` si el lote pasó a
   cuarentena y un `RecallMatchedEvent(tenantId, announcementId, matchIds)` por tenant.
 
-### 12.5 Alertas idempotentes: `OpenAlertWriter` (`com.gondolia.domain.alert`)
+### 12.5 Módulos por comercio: `ModuleService` y `@RequiresModule` (`com.gondolia.modules`)
+
+Los dueños de GondolIA habilitan por comercio `POS_GONDOLIA`, `POS_INTEGRATION` y `MULTI_BRANCH` (SPEC §14). Sin fila en
+`tenant_modules` —o con `enabled = false`— el módulo está deshabilitado.
+
+```java
+@RestController
+@RequestMapping("/api/tenant/pos")
+@RequiresModule(TenantModule.POS_GONDOLIA)     // también se puede anotar un método suelto
+class PosController { ... }
+
+moduleService.isEnabled(tenantId, TenantModule.MULTI_BRANCH);   // chequeo manual
+moduleService.require(TenantModule.POS_GONDOLIA);               // comercio del usuario actual; 403 MODULE_DISABLED
+moduleService.require(tenantId, TenantModule.POS_INTEGRATION);  // comercio explícito (webhook con API key)
+```
+
+- `@RequiresModule(TenantModule.X)` (clase o método; el método gana) la aplica `RequiresModuleInterceptor`, registrado
+  por `ModuleWebConfig` para **`/api/**`**. Si el comercio del usuario no tiene el módulo responde 403
+  `MODULE_DISABLED` con el mensaje "Esta función no está habilitada para tu comercio. Contactá a GondolIA para
+  activarla." (`ModuleCatalog.MSG_MODULE_DISABLED`), en el formato de error estándar.
+- **El interceptor no bloquea** requests sin usuario de comercio: usuarios de plataforma y endpoints públicos. El
+  **webhook del POS externo** (`POST /api/integrations/pos/sales`) se autentica con API key y no tiene JWT, así que el
+  interceptor no puede resolver el comercio: ese controlador tiene que chequearlo a mano con
+  `moduleService.isEnabled(posBranch.tenantId(), TenantModule.POS_INTEGRATION)` (o `require(tenantId, module)`) después
+  de resolver la sucursal con `ApiKeyService.resolveBranch`.
+- API de `ModuleService` (SPEC §14.2): `Set<TenantModule> enabledModules(tenantId)`, `boolean isEnabled(tenantId, m)`,
+  `void require(m)` / `require(tenantId, m)`, `int effectiveMaxBranches(tenantId)` (límite del plan si `MULTI_BRANCH`,
+  si no 1; hay una variante estática `effectiveMaxBranches(plan, multiBranchEnabled)`),
+  `List<TenantModuleStatus> statuses(tenantId)`,
+  `TenantModuleStatus setEnabled(tenantId, module, enabled, actorUserId)` y `void applyPlanPreset(tenantId, plan)`.
+- `record TenantModuleStatus(TenantModule module, String name, String description, BigDecimal monthlyPricePerBranch,
+  boolean enabled, Instant updatedAt, String updatedByName)`. `ModuleCatalog` tiene los nombres, descripciones y
+  adicionales mensuales por sucursal (POS GondolIA 12.000, POS propio 8.000, Multi-sucursal 0), los presets por plan
+  (FREEMIUM {POS_GONDOLIA}; BASICO y PROFESIONAL los tres) y `monthlyFee(plan, modules, activeBranches)` para la cuota
+  estimada y el MRR.
+- `setEnabled` es idempotente (si ya estaba en ese estado no hace nada más), valida que el comercio exista (404) y que
+  `MULTI_BRANCH` no esté en uso: deshabilitarlo con más de una sucursal activa da 409 `MODULE_IN_USE` ("El cliente tiene
+  N sucursales activas: debe desactivar las sucursales extra antes"). Cada cambio real registra `tenant_events`
+  `MODULE_ENABLED`/`MODULE_DISABLED` con `from_value` = nombre del módulo, `to_value` = `true`/`false` y
+  `actor_user_id`, y al confirmar la transacción hace push `{"type":"MODULES_CHANGED"}` a `/user/queue/session` de
+  **todos los usuarios activos del comercio** (`ModulesChangedMessage`). `applyPlanPreset` aplica el preset del plan
+  (al crear un comercio) y nunca deshabilita `MULTI_BRANCH` si hay más de una sucursal activa.
+- El **límite de sucursales** se calcula siempre con `effectiveMaxBranches` (módulo F y módulo C), no con
+  `plan.maxBranches()`; `MeDto.tenant.maxBranches` ya viene con ese valor.
+- Los rechazos de `ModuleService` (como los de `StockService` y `BranchAccessService`) no marcan la transacción del que
+  llama como rollback-only.
+
+### 12.6 Entidades del POS GondolIA y de la importación masiva
+
+El núcleo define las entidades, los enums y los repositorios (esquema `V2__modulos_cajero_pos_importacion.sql`); la
+lógica la implementan el módulo H (`com.gondolia.pos`) y el módulo I (`com.gondolia.imports`).
+
+`com.gondolia.domain.pos` (SPEC §15): `PosRegister` (caja por sucursal, nombre único en la sucursal), `PosSession`
+(turno; la base garantiza un único `OPEN` por caja y por usuario con índices únicos parciales → chequealo antes para
+devolver 409 `REGISTER_BUSY` o `SESSION_ALREADY_OPEN`), `PosBranchCounter` (numeración por sucursal;
+`PosBranchCounterRepository.lockByBranchId` bloquea la fila con `FOR UPDATE` y `PosBranchCounter.ticketCode(branchId,
+number)` arma el `0003-00000127`), `PosSale` (ticket; `batchRef` = `stock_movements.batch_ref`, `P-...`),
+`PosSaleItem` (`lots` JSONB con los lotes consumidos), `PosPayment` y `PosCashMovement`. Enums: `PosSessionStatus`,
+`PosSaleStatus`, `PaymentMethod`, `CashMovementType`. Consultas útiles: `findByRegisterIdAndStatus`,
+`findByOpenedByAndStatus`, `PosSaleRepository.findByTenantIdAndBatchRef`, `PosPaymentRepository.totalsByMethod` y
+`PosCashMovementRepository.sumByType`.
+
+`com.gondolia.domain.imports` (SPEC §16): `ImportJob` (JSONB `sheetNames`, `headers`, `columnMapping`, `options`,
+`result`) e `ImportJobRow` (JSONB `raw`, `data`, `messages`; `productId`/`lotId` al aplicar). Enums: `ImportType`,
+`ImportStatus`, `ImportFileFormat`, `ImportRowStatus`, `ImportRowAction`. Los repositorios traen paginado por estado y
+bloques ordenados por `rowNumber` para aplicar de a 200 filas. Dependencias disponibles en el `pom.xml`: Apache POI
+`poi` + `poi-ooxml` 5.3.0 (XLSX/XLS) y Apache Commons CSV 1.12.0.
+
+Todas las entidades siguen las convenciones del núcleo: sin asociaciones JPA (FKs como `Long`), enums
+`@Enumerated(STRING)`, JSONB como `JsonNode` con `@JdbcTypeCode(SqlTypes.JSON)` y timestamps que se completan en
+`@PrePersist` solo si vienen en `null` (el seeder puede fechar turnos y ventas hacia atrás).
+
+### 12.7 Alertas idempotentes: `OpenAlertWriter` (`com.gondolia.domain.alert`)
 
 `Optional<Long> openIfAbsent(Alert alert)` inserta la alerta en `OPEN` salvo que ya exista una `OPEN`/`ACKNOWLEDGED` del
 tenant con la misma `dedupe_key` (usa `ON CONFLICT` sobre el índice parcial, así nunca falla por concurrencia).
 Obligatorios: `tenantId`, `type`, `severity`, `title`, `dedupeKey` (≤ 150). Devuelve el id creado o vacío.
 
-### 12.6 `AiClient` (`com.gondolia.ai`)
+### 12.8 `AiClient` (`com.gondolia.ai`)
 
 `isHealthy()`, `health()`, `analyze(AnalyzeRequest)`, `ocr(bytes, filename, contentType)`,
 `barcode(bytes, filename, contentType)`. DTOs en `com.gondolia.ai.dto` (espejo de SPEC §8: `AnalyzeRequest`,
@@ -453,11 +565,15 @@ mensaje.
 
 `DevFixtureRunner` (idempotente, corre después del dueño inicial). Contraseña de todos: `Demo2026!`.
 
-| Comercio | Sucursales | Usuarios |
-|---|---|---|
-| Comercio de Prueba (ALMACEN, BASICO, FIFO) | Sucursal Centro (CEN), Sucursal Norte (NOR) | `jefe@prueba.com` (jefe), `admin@prueba.com` (admin), `empleado@prueba.com` (empleado, solo Centro) |
-| Otro Comercio (KIOSCO, FREEMIUM) | Sucursal Principal | `admin@otro.com` (admin) |
-| — | — | `soporte@gondolia.app` (soporte) |
+| Comercio | Sucursales | Módulos | Usuarios |
+|---|---|---|---|
+| Comercio de Prueba (ALMACEN, BASICO, FIFO) | Sucursal Centro (CEN) con la caja "Caja 1", Sucursal Norte (NOR) | POS_GONDOLIA, POS_INTEGRATION, MULTI_BRANCH | `jefe@prueba.com` (jefe), `admin@prueba.com` (admin), `empleado@prueba.com` (empleado, solo Centro), `cajero@prueba.com` (cajero, solo Centro) |
+| Otro Comercio (KIOSCO, FREEMIUM) | Sucursal Principal | solo POS_INTEGRATION | `admin@otro.com` (admin) |
+| — | — | — | `soporte@gondolia.app` (soporte) |
+
+Sirve para probar el rol Cajero (solo ve Sucursal Centro: con `X-Branch-Id` de Norte recibe 403 `BRANCH_FORBIDDEN`) y
+los módulos (el segundo comercio no tiene POS GondolIA ni multi-sucursal: sus endpoints con `@RequiresModule` responden
+403 `MODULE_DISABLED` y su `maxBranches` efectivo es 1).
 
 Catálogo de "Comercio de Prueba": proveedor "Distribuidora La Pampa", categorías Lácteos y Almacén, y 3 productos con 2
 lotes en Centro y 1 en Norte (cargados con `StockService.receiveLot`, origen `SEED`): Leche entera La Pradera 1 L
@@ -469,10 +585,12 @@ más viejo, caso del aviso de FIFO) y Galletitas de agua Crocantes 200 g (`77912
 ## 14. Pruebas
 
 - `mvn test`: pruebas sin base de datos (utilidades, JWT, API keys, `BranchAccessService`, seguridad HTTP con MockMvc,
+  `@RequiresModule` con MockMvc (`RequiresModuleWebTest`), catálogo y presets de módulos (`ModuleCatalogTest`),
   interceptor STOMP, `RealtimePublisher`, `PresenceTracker`, almacenamiento de adjuntos, `AiClient` contra un servidor
   HTTP local, `BatchRefs`, `NotificationDraft`). Las pruebas contra PostgreSQL se omiten.
-- Pruebas de integración contra PostgreSQL real (`FoundationDatabaseTest`, `StockServiceIntegrationTest`,
-  `RecallMatchingServiceIntegrationTest`, `NotificationServiceIntegrationTest` —cada prueba se revierte— y
+- Pruebas de integración contra PostgreSQL real (`FoundationDatabaseTest`, `StockServiceIntegrationTest` —rotación con
+  lotes en liquidación y `voidSale`—, `ModuleServiceIntegrationTest`, `RecallMatchingServiceIntegrationTest` —incluye
+  `checkTenant` al rehabilitar un comercio—, `NotificationServiceIntegrationTest` —cada prueba se revierte— y
   `RealtimeEndToEndTest`, que levanta el servidor en un puerto aleatorio y usa clientes STOMP reales; confirma sus datos
   y los borra al final):
   ```bash

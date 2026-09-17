@@ -14,7 +14,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Sucursal asignada a un usuario. Solo aplica a {@code TENANT_EMPLOYEE}: jefe y administrador acceden a todas.
+ * Sucursal asignada a un usuario. Solo aplica a {@code TENANT_EMPLOYEE} y {@code TENANT_CASHIER}: jefe y
+ * administrador acceden a todas.
  */
 @Entity
 @Table(name = "user_branches")

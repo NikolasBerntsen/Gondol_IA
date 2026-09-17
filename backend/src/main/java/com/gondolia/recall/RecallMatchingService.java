@@ -190,6 +190,52 @@ public class RecallMatchingService {
         return List.copyOf(run.matches);
     }
 
+    /**
+     * Chequea <b>todos</b> los lotes con remanente de un comercio contra los recalls {@code PUBLISHED}. Se usa cuando
+     * un comercio vuelve a estar {@code ACTIVE} (mientras estuvo bloqueado, {@code matchAnnouncement} lo salteaba) y
+     * lo dispara el listener de {@code TenantStatusChangedEvent}. Mismos efectos e idempotencia que
+     * {@link #checkLot}: solo actúa sobre coincidencias nuevas.
+     *
+     * @return las coincidencias vigentes de ese comercio con recalls publicados (nuevas y previas)
+     */
+    @Transactional
+    public List<RecallMatch> checkTenant(Long tenantId) {
+        if (tenantId == null) {
+            return List.of();
+        }
+        List<Lot> candidates = lotRepository.findStockedLotsWithBarcodeByTenant(tenantId);
+        if (candidates.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, Product> products = productRepository.findAllById(
+                        candidates.stream().map(Lot::getProductId).collect(Collectors.toSet())).stream()
+                .collect(Collectors.toMap(Product::getId, Function.identity()));
+
+        Map<String, List<RecallCriteria>> recallsByBarcode = new HashMap<>();
+        Map<Long, Announcement> announcements = new LinkedHashMap<>();
+        MatchRun run = new MatchRun();
+        for (Lot lot : candidates) {
+            Product product = products.get(lot.getProductId());
+            String barcode = product == null ? null : Barcodes.normalize(product.getBarcode());
+            if (barcode == null) {
+                continue;
+            }
+            for (RecallCriteria recall : recallsByBarcode.computeIfAbsent(barcode, this::publishedRecalls)) {
+                if (!recall.matches(lot)) {
+                    continue;
+                }
+                announcements.putIfAbsent(recall.announcement().getId(), recall.announcement());
+                matchLot(recall, lot, product, run);
+            }
+        }
+        complete(run, announcements.values());
+        if (!run.matches.isEmpty()) {
+            log.info("Comercio {}: {} coincidencias de recall ({} nuevas) al revisar {} lotes", tenantId,
+                    run.matches.size(), run.createdCount, candidates.size());
+        }
+        return List.copyOf(run.matches);
+    }
+
     /** Recalls (sin repetir, en el orden de las coincidencias) de un conjunto de coincidencias. */
     @Transactional(readOnly = true)
     public List<RecallInfo> toRecallInfos(Collection<RecallMatch> matches) {

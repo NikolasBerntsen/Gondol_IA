@@ -14,6 +14,11 @@ public interface StockMovementRepository extends JpaRepository<StockMovement, Lo
 
     boolean existsByTenantIdAndBatchRef(Long tenantId, String batchRef);
 
+    /** {@code true} si el batch ya tiene un movimiento de ese tipo (p. ej. {@code SALE_VOID}: venta ya anulada). */
+    boolean existsByTenantIdAndBatchRefAndType(Long tenantId, String batchRef, MovementType type);
+
+    List<StockMovement> findByTenantIdAndBatchRefAndTypeOrderByIdAsc(Long tenantId, String batchRef, MovementType type);
+
     boolean existsByTenantIdAndProductId(Long tenantId, Long productId);
 
     List<StockMovement> findByTenantIdAndLotIdOrderByOccurredAtAscIdAsc(Long tenantId, Long lotId);

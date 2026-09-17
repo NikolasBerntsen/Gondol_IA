@@ -67,7 +67,8 @@ public class SecurityConfig {
                         .requestMatchers(PUBLIC_PATHS).permitAll()
                         .requestMatchers("/api/platform/**").hasRole("PLATFORM_OWNER")
                         .requestMatchers("/api/support/**").hasRole("SUPPORT_AGENT")
-                        .requestMatchers("/api/tenant/**").hasAnyRole("TENANT_BOSS", "TENANT_ADMIN", "TENANT_EMPLOYEE")
+                        .requestMatchers("/api/tenant/**")
+                        .hasAnyRole("TENANT_BOSS", "TENANT_ADMIN", "TENANT_EMPLOYEE", "TENANT_CASHIER")
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);

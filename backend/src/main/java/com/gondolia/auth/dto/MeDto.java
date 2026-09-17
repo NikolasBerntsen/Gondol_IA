@@ -2,6 +2,7 @@ package com.gondolia.auth.dto;
 
 import com.gondolia.domain.tenant.BusinessType;
 import com.gondolia.domain.tenant.StockRotation;
+import com.gondolia.domain.tenant.TenantModule;
 import com.gondolia.domain.tenant.TenantPlan;
 import com.gondolia.domain.user.Role;
 import com.gondolia.security.BranchAccessService.BranchRef;
@@ -24,6 +25,10 @@ public record MeDto(
         branches = branches == null ? List.of() : List.copyOf(branches);
     }
 
+    /**
+     * Comercio del usuario. {@code modules} son los módulos habilitados (SPEC §14) y {@code maxBranches} el
+     * <b>máximo efectivo</b> de sucursales: el límite del plan si {@code MULTI_BRANCH} está habilitado; si no, 1.
+     */
     public record TenantInfo(
             Long id,
             String name,
@@ -31,6 +36,11 @@ public record MeDto(
             BusinessType businessType,
             String currency,
             StockRotation stockRotation,
+            List<TenantModule> modules,
             int maxBranches) {
+
+        public TenantInfo {
+            modules = modules == null ? List.of() : List.copyOf(modules);
+        }
     }
 }

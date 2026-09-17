@@ -26,13 +26,14 @@ public interface UserBranchRepository extends JpaRepository<UserBranch, Long> {
     @Query("select ub.userId from UserBranch ub where ub.branchId = :branchId")
     List<Long> findUserIdsByBranchId(@Param("branchId") Long branchId);
 
-    /** Empleados activos asignados a una sucursal. */
+    /** Usuarios activos asignados a una sucursal (empleados y cajeros). */
     @Query("""
             select count(ub) from UserBranch ub, User u
             where ub.userId = u.id
               and ub.branchId = :branchId
               and u.active = true
-              and u.role = com.gondolia.domain.user.Role.TENANT_EMPLOYEE
+              and u.role in (com.gondolia.domain.user.Role.TENANT_EMPLOYEE,
+                             com.gondolia.domain.user.Role.TENANT_CASHIER)
             """)
     long countActiveEmployeesByBranchId(@Param("branchId") Long branchId);
 

@@ -13,8 +13,10 @@ import com.gondolia.domain.tenant.Tenant;
 import com.gondolia.domain.tenant.TenantRepository;
 import com.gondolia.domain.tenant.TenantSettings;
 import com.gondolia.domain.tenant.TenantSettingsRepository;
+import com.gondolia.domain.tenant.TenantModule;
 import com.gondolia.domain.user.User;
 import com.gondolia.domain.user.UserRepository;
+import com.gondolia.modules.ModuleService;
 import com.gondolia.security.AuthUser;
 import com.gondolia.security.BranchAccessService;
 import com.gondolia.security.IssuedToken;
@@ -23,6 +25,7 @@ import com.gondolia.security.UserAccessValidator;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.util.List;
+import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -45,6 +48,7 @@ public class AuthService {
     private final TenantRepository tenantRepository;
     private final TenantSettingsRepository tenantSettingsRepository;
     private final BranchAccessService branchAccessService;
+    private final ModuleService moduleService;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final UserAccessValidator userAccessValidator;
@@ -55,12 +59,13 @@ public class AuthService {
 
     public AuthService(UserRepository userRepository, TenantRepository tenantRepository,
                        TenantSettingsRepository tenantSettingsRepository, BranchAccessService branchAccessService,
-                       PasswordEncoder passwordEncoder, JwtService jwtService,
+                       ModuleService moduleService, PasswordEncoder passwordEncoder, JwtService jwtService,
                        UserAccessValidator userAccessValidator, Clock clock) {
         this.userRepository = userRepository;
         this.tenantRepository = tenantRepository;
         this.tenantSettingsRepository = tenantSettingsRepository;
         this.branchAccessService = branchAccessService;
+        this.moduleService = moduleService;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.userAccessValidator = userAccessValidator;
@@ -140,11 +145,15 @@ public class AuthService {
                 user.isMustChangePassword(), tenantInfo, branches);
     }
 
+    /** Comercio con sus módulos habilitados y el máximo efectivo de sucursales (SPEC §14.2). */
     private MeDto.TenantInfo toTenantInfo(Tenant tenant) {
         TenantSettings settings = tenantSettingsRepository.findById(tenant.getId())
                 .orElseGet(() -> TenantSettings.defaultsFor(tenant.getId()));
+        Set<TenantModule> modules = moduleService.enabledModules(tenant.getId());
+        int maxBranches = ModuleService.effectiveMaxBranches(tenant.getPlan(),
+                modules.contains(TenantModule.MULTI_BRANCH));
         return new MeDto.TenantInfo(tenant.getId(), tenant.getName(), tenant.getPlan(), tenant.getBusinessType(),
-                settings.getCurrency(), settings.getStockRotation(), tenant.getPlan().maxBranches());
+                settings.getCurrency(), settings.getStockRotation(), List.copyOf(modules), maxBranches);
     }
 
     private User loadUser(Long userId) {

@@ -9,11 +9,13 @@ import static org.mockito.Mockito.verify;
 
 import com.gondolia.common.events.RecallMatchedEvent;
 import com.gondolia.common.events.StockChangedEvent;
+import com.gondolia.common.events.TenantStatusChangedEvent;
 import com.gondolia.domain.announcement.RecallMatch;
 import com.gondolia.domain.inventory.Lot;
 import com.gondolia.domain.inventory.LotRepository;
 import com.gondolia.domain.inventory.LotStatus;
 import com.gondolia.domain.inventory.MovementSource;
+import com.gondolia.domain.tenant.TenantStatus;
 import com.gondolia.domain.user.Role;
 import com.gondolia.it.PostgresIntegrationTest;
 import com.gondolia.it.TestData;
@@ -52,6 +54,8 @@ class RecallMatchingServiceIntegrationTest extends PostgresIntegrationTest {
 
     @Autowired
     private RecallMatchingService recallMatchingService;
+    @Autowired
+    private TenantReactivationRecallListener tenantReactivationRecallListener;
     @Autowired
     private StockService stockService;
     @Autowired
@@ -272,6 +276,65 @@ class RecallMatchingServiceIntegrationTest extends PostgresIntegrationTest {
         assertThat(lotStatus(destination.getId())).isEqualTo(LotStatus.RECALLED);
         assertThat(notifiedUsers(result.recallMatches().getFirst().getId()))
                 .containsExactlyInAnyOrder(admin.id(), boss.id(), employeeNorte.id());
+    }
+
+    @Test
+    void checkTenantQuarantinesWhatWasMissedWhileTheTenantWasBlocked() {
+        long blockedTenant = data.tenant("Recall D", "KIOSCO", "FREEMIUM", "DISABLED", "FIFO");
+        long blockedBranch = data.branch(blockedTenant, "Principal", true);
+        long blockedProduct = data.product(blockedTenant, barcode, "Sopa de tomate", "800", "1200");
+        AuthUser blockedAdmin = data.user(blockedTenant, Role.TENANT_ADMIN, true);
+        long matching = data.lot(blockedTenant, blockedBranch, blockedProduct, "L2409A", "L2409A", today.plusDays(20),
+                6, "ACTIVE", 3);
+        long other = data.lot(blockedTenant, blockedBranch, blockedProduct, "L9999Z", "L9999Z", today.plusDays(20), 4,
+                "ACTIVE", 3);
+        long recall = data.recall(barcode, false, today, today.plusDays(30), "PUBLISHED", "L2409A");
+
+        assertThat(recallMatchingService.matchAnnouncement(recall))
+                .as("mientras el comercio esta bloqueado el barrido no lo alcanza").isEmpty();
+
+        jdbc.update("update tenants set status = 'ACTIVE' where id = ?", blockedTenant);
+        List<RecallMatch> matches = recallMatchingService.checkTenant(blockedTenant);
+
+        assertThat(matches).extracting(RecallMatch::getLotId, RecallMatch::getBranchId)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(matching, blockedBranch));
+        assertThat(lotStatus(matching)).isEqualTo(LotStatus.RECALLED);
+        assertThat(lotStatus(other)).isEqualTo(LotStatus.ACTIVE);
+        long matchId = matches.getFirst().getId();
+        assertThat(notifiedUsers(matchId)).containsExactly(blockedAdmin.id());
+        assertThat(affectedTenants(recall)).isEqualTo(1);
+        assertThat(events.stream(RecallMatchedEvent.class))
+                .containsExactly(new RecallMatchedEvent(blockedTenant, recall, List.of(matchId)));
+        assertThat(jdbc.queryForObject("select count(*) from alerts where tenant_id = ? and type = 'RECALL_MATCH'",
+                Long.class, blockedTenant)).isEqualTo(1);
+
+        List<RecallMatch> again = recallMatchingService.checkTenant(blockedTenant);
+
+        assertThat(again).extracting(RecallMatch::getId).as("idempotente").containsExactly(matchId);
+        assertThat(notifiedUsers(matchId)).hasSize(1);
+        assertThat(events.stream(RecallMatchedEvent.class)).hasSize(1);
+        assertThat(recallMatchingService.checkTenant(null)).isEmpty();
+    }
+
+    @Test
+    void theListenerOnlyRunsWhenTheTenantGoesBackToActive() {
+        long blockedTenant = data.tenant("Recall E", "KIOSCO", "FREEMIUM", "DISABLED", "FIFO");
+        long blockedBranch = data.branch(blockedTenant, "Principal", true);
+        long blockedProduct = data.product(blockedTenant, barcode, "Sopa de tomate", "800", "1200");
+        data.user(blockedTenant, Role.TENANT_ADMIN, true);
+        long matching = data.lot(blockedTenant, blockedBranch, blockedProduct, "L2409A", "L2409A", today.plusDays(20),
+                6, "ACTIVE", 3);
+        data.recall(barcode, false, today, today.plusDays(30), "PUBLISHED", "L2409A");
+
+        tenantReactivationRecallListener.onTenantStatusChanged(
+                new TenantStatusChangedEvent(blockedTenant, TenantStatus.ACTIVE, TenantStatus.DISABLED));
+        assertThat(lotStatus(matching)).as("al bloquear no se revisa nada").isEqualTo(LotStatus.ACTIVE);
+
+        jdbc.update("update tenants set status = 'ACTIVE' where id = ?", blockedTenant);
+        tenantReactivationRecallListener.onTenantStatusChanged(
+                new TenantStatusChangedEvent(blockedTenant, TenantStatus.DISABLED, TenantStatus.ACTIVE));
+
+        assertThat(lotStatus(matching)).isEqualTo(LotStatus.RECALLED);
     }
 
     private List<Long> notifiedUsers(long matchId) {

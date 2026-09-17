@@ -34,14 +34,15 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     /**
      * Ids de usuarios activos del tenant con acceso a la sucursal: todos los jefes y administradores más los empleados
-     * asignados. No verifica que la sucursal pertenezca al tenant ni que esté activa.
+     * y cajeros asignados. No verifica que la sucursal pertenezca al tenant ni que esté activa.
      */
     @Query("""
             select u.id from User u
             where u.tenantId = :tenantId
               and u.active = true
               and (u.role in (com.gondolia.domain.user.Role.TENANT_ADMIN, com.gondolia.domain.user.Role.TENANT_BOSS)
-                   or (u.role = com.gondolia.domain.user.Role.TENANT_EMPLOYEE
+                   or (u.role in (com.gondolia.domain.user.Role.TENANT_EMPLOYEE,
+                                  com.gondolia.domain.user.Role.TENANT_CASHIER)
                        and exists (select 1 from UserBranch ub where ub.userId = u.id and ub.branchId = :branchId)))
             order by u.id
             """)

@@ -7,5 +7,9 @@ public enum TenantEventType {
     ENABLED,
     CANCELLED,
     REACTIVATED,
-    DELETED
+    DELETED,
+    /** Módulo habilitado; {@code from_value} = nombre del {@link TenantModule} (SPEC §14.1). */
+    MODULE_ENABLED,
+    /** Módulo deshabilitado; {@code from_value} = nombre del {@link TenantModule} (SPEC §14.1). */
+    MODULE_DISABLED
 }

@@ -1,7 +1,9 @@
 # Guía del frontend de GondolIA
 
-Guía para los módulos que construyen pantallas sobre la fundación del frontend (SPEC §9).
+Guía para los módulos que construyen pantallas sobre la fundación del frontend (SPEC §9, §14, §15, §16).
 Stack: React 18 + TypeScript estricto + Vite 5 + Tailwind 3 + React Router 6 + TanStack Query 5 + STOMP.
+**El lenguaje visual es "Góndola UI"**: la fuente de verdad es `docs/design-system.md` y el prototipo
+`design/gondola-ui/`. Esta guía explica cómo usarlo dentro del frontend real.
 
 ```bash
 cd frontend
@@ -12,8 +14,8 @@ npm run typecheck
 ```
 
 - Backend en otro puerto/host: `GONDOLIA_BACKEND_URL=http://192.168.0.10:8080 npm run dev`.
-- El dev server escucha en la red local (`host: true`); para usar la cámara desde el celular hace falta HTTPS (ver §10).
-  El proxy reescribe el header `Origin` al del backend, así que abrirlo desde otra IP (celular, `127.0.0.1`) no choca con el CORS del backend.
+- El dev server escucha en la red local (`host: true`); para usar la cámara desde el celular hace falta HTTPS (ver §11).
+  El proxy reescribe el header `Origin` al del backend, así que abrirlo desde otra IP (celular, `127.0.0.1`) no choca con el CORS.
 - Variables opcionales (`frontend/.env.local`): `VITE_HTTPS_PORT` (defecto `8443`), `VITE_SHOW_DEMO_ACCOUNTS=false` para ocultar las cuentas demo del login.
 
 ---
@@ -22,15 +24,19 @@ npm run typecheck
 
 ```
 src/
-├── App.tsx                     rutas (solo fundación)
+├── App.tsx                     rutas (solo fundación) · main.tsx (tipografías + index.css)
+├── index.css                   tokens de Góndola UI (claro/oscuro) + utilidades gd-*
 ├── api/        client.ts (axios + helpers), types.ts (enums/DTOs compartidos), auth.ts, notifications.ts
 ├── auth/       AuthContext (useAuth), RequireAuth, RequireRole, tokenStorage, roleHome
 ├── branches/   BranchContext (useBranch, useBranchQueryKey, useWriteBranch), BranchSelector, BranchPicker, branchColumn
+├── modules/    useModules, RequireModule, ModuleDisabledPage          ← módulos por tenant (SPEC §14)
 ├── realtime/   StompProvider, useStompSubscription, useStompPublish, useSessionEvents
-├── components/ui/          componentes base (importar desde '@/components/ui')
-├── components/layout/      AppShell, Sidebar, Topbar, NotificationBell, UserMenu, Logo
+├── components/ui/          kit base (importar desde '@/components/ui')
+├── components/gondola/     componentes firma (PriceTag, ExpiryChip, Ticket80mm…)
+├── components/scanner/     BarcodeScanner, useBarcodeWedge, CameraCapture
+├── components/layout/      AppShell, Sidebar (riel), Topbar, NotificationBell, UserMenu, Logo
 ├── components/notifications/  NotificationItem, useNotificationActions
-├── config/     navigation.ts (menú por rol), access.ts (ROLE_GROUPS, canAccessPath)
+├── config/     navigation.ts (menú por rol + módulo), access.ts (ROLE_GROUPS, canAccessPath, requiredModuleForPath)
 ├── lib/        format.ts, cn.ts, useDebounce.ts, queryClient.ts, secureContext.ts, focus.ts, scrollLock.ts
 ├── pages/      Login, Profile, Notifications, NotFound, Forbidden
 └── features/<modulo>/      pages/ (ya existen como placeholder), api.ts, types.ts, components/, hooks/
@@ -41,8 +47,10 @@ Reglas:
 - Cada módulo **solo** toca `src/features/<modulo>/`. Reemplazá el contenido de tus páginas placeholder
   manteniendo el nombre del archivo y `export default function NombrePage()`.
 - Imports con alias `@/` (`import { Button } from '@/components/ui'`).
-- Todo texto visible en español rioplatense ("Cargá", "Elegí", "No tenés…").
+- Todo texto visible en **español rioplatense** ("Cargá", "Elegí", "No tenés…"), botones con verbo + objeto.
 - Si necesitás algo en la fundación (un componente, un tipo compartido), pedilo o hacé el cambio mínimo compatible y reportalo.
+- Los archivos de `components/ui` se llaman en PascalCase (convención del repo), aunque vengan de shadcn.
+  Al copiar un componente nuevo de shadcn: renombrá el archivo y cambiá `@/lib/utils` por `@/lib/cn`.
 
 ---
 
@@ -72,9 +80,9 @@ export const productsApi = {
 |---|---|
 | `apiGet<T>(url, params?, config?)` | GET. Los params `undefined`/`null`/`''` se omiten; los arrays se repiten (`a=1&a=2`). |
 | `apiPost<T>(url, body?, config?)` · `apiPut` · `apiPatch` · `apiDelete<T>(url, config?)` | Devuelven `response.data`. |
-| `uploadFile<T>(url, file, { fieldName='file', fields, fileName, method, onProgress, signal })` | `multipart/form-data`. `fields` agrega campos de texto (p. ej. `{ body: 'Hola' }` para soporte). `file` puede ser `null` si solo mandás campos. |
+| `uploadFile<T>(url, file, { fieldName='file', fields, fileName, method, onProgress, signal })` | `multipart/form-data`. `fields` agrega campos de texto. `file` puede ser `null` si solo mandás campos. |
 | `fetchBlob(url)` | Descarga autenticada como `Blob` (imágenes). Acepta rutas con o sin `/api`. |
-| `downloadFile(url, fallbackName, params?)` | Descarga y guarda un archivo (p. ej. plantilla CSV). |
+| `downloadFile(url, fallbackName, params?)` | Descarga y guarda un archivo (plantilla CSV/XLSX, export del catálogo, errores de importación). |
 | `getErrorMessage(err, fallback?)` | Mensaje en español para mostrar (usa `ErrorResponse.message`). |
 | `getFieldErrors(err)` | `{ campo: mensaje }` de un `VALIDATION_ERROR`. |
 | `isApiError(err, ...codes)` | Type guard: `isApiError(err, 'BRANCH_REQUIRED')`. |
@@ -88,18 +96,20 @@ Opciones extra de `config` (axios):
 
 Comportamiento global (no lo repliquen): 401 → cierra sesión y va a `/login?motivo=sesion`; 403 con
 `TENANT_DISABLED | TENANT_CANCELLED | USER_DISABLED` → cierra sesión mostrando el mensaje del backend;
-403 `BRANCH_FORBIDDEN` (sucursal desactivada o desasignada con la sesión abierta) → vuelve a pedir `/api/auth/me`
-y, si la sucursal elegida ya no es accesible, el selector vuelve al valor por defecto y se refrescan las queries.
+403 `BRANCH_FORBIDDEN` → vuelve a pedir `/api/auth/me` y, si la sucursal elegida ya no es accesible, el selector
+vuelve al valor por defecto y se refrescan las queries.
+
+**403 `MODULE_DISABLED`** (SPEC §14.1) no cierra sesión: mostralo con `getErrorMessage(err)` o, mejor, evitá
+llegar ahí ocultando la acción con `useModules()` (§5).
 
 ---
 
 ## 3. Sucursales
 
-El catálogo es por comercio; stock, lotes, ventas, alertas, IA y recalls son **por sucursal** (SPEC §3.5).
-El usuario elige la sucursal en el topbar (`BranchSelector`); la fundación la persiste
+El catálogo es por comercio; stock, lotes, ventas, alertas, IA, POS y recalls son **por sucursal** (SPEC §3.5).
+El usuario elige la sucursal en la barra superior (`BranchSelector`); la fundación la persiste
 (`gondolia.branch.<userId>`), la manda en `X-Branch-Id` e invalida todas las queries al cambiarla.
-Default: jefe/admin con más de una sucursal → "Todas las sucursales"; si no, la primera por nombre. Una sucursal
-guardada que ya no es accesible se descarta sola.
+Default: jefe/admin con más de una sucursal → "Todas las sucursales"; empleado y **cajero** → su sucursal.
 
 ```ts
 import { useBranch } from '@/branches/BranchContext';
@@ -132,14 +142,17 @@ const query = useQuery({ queryKey, queryFn: () => expirationsApi.list(params) })
 queryClient.invalidateQueries({ queryKey: ['expirations'] });
 ```
 
-Datos que no dependen de la sucursal (categorías, proveedores, usuarios, avisos, tickets) no necesitan el segmento.
-Usá siempre `useBranchQueryKey` (no armes el `{ branch }` a mano): al cambiar de sucursal la fundación reconoce ese
-segmento final para no repetir requests que ya salieron con la sucursal nueva.
+Datos que no dependen de la sucursal (categorías, proveedores, usuarios, avisos, tickets, importaciones)
+no necesitan el segmento. Usá siempre `useBranchQueryKey` (no armes el `{ branch }` a mano): al cambiar de
+sucursal la fundación reconoce ese segmento final para no repetir requests que ya salieron con la sucursal nueva.
+
+Convención de keys: `[recurso, 'list' | 'detail' | 'stats', params|id, {branch}?]`, definidas en
+`features/<modulo>/api.ts` (`posKeys`, `importKeys`…).
 
 ### 3.2 Escrituras: `useWriteBranch` + `BranchPicker`
 
-Las escrituras por sucursal (carga de lotes, ventas, ajustes, descarte, resolución de recall, simulador POS) requieren
-**una** sucursal. Con "Todas las sucursales" y más de una sucursal accesible hay que pedirla en el formulario:
+Las escrituras por sucursal (carga de lotes, ventas, ajustes, descarte, resolución de recall, apertura de caja,
+importación con stock) requieren **una** sucursal. Con "Todas las sucursales" y más de una accesible hay que pedirla:
 
 ```tsx
 import { useWriteBranch } from '@/branches/BranchContext';
@@ -163,7 +176,8 @@ function IntakeForm() {
 }
 ```
 
-- `BranchPicker` no se muestra si hay una sucursal elegida en el topbar (usá `alwaysVisible` para casos como el destino de una transferencia; `excludeIds` para excluir la de origen).
+- `BranchPicker` no se muestra si hay una sucursal elegida arriba (`alwaysVisible` para casos como el destino de
+  una transferencia; `excludeIds` para excluir la de origen).
 - Mandá siempre `branchId` en el body: el backend lo prioriza sobre el header.
 - Si igual llega `400 BRANCH_REQUIRED`, mostrá `getErrorMessage(err)` junto al picker.
 
@@ -184,15 +198,14 @@ const columns: Array<TableColumn<ExpirationRow> | null> = [productCol, branchCol
 ## 4. React Query
 
 - `QueryClient` global: `staleTime` 30 s, sin reintentos para errores 4xx, 2 reintentos para red/5xx.
-- Keys como arrays que empiezan con el recurso: `['products', 'list', params]`, `['products', 'detail', id]`.
-  Definilas en `features/<modulo>/api.ts` (p. ej. `productKeys`) y agregá la sucursal con `useBranchQueryKey` cuando corresponda.
 - Listas paginadas: `placeholderData: keepPreviousData` para no parpadear al cambiar de página.
-- Después de mutar: `invalidateQueries` con el prefijo del recurso (y de los recursos afectados: una venta cambia stock, vencimientos y dashboard).
+- Después de mutar: `invalidateQueries` con el prefijo del recurso (y de los recursos afectados: una venta del POS
+  cambia stock, vencimientos, ventas y dashboard).
 - Errores de mutaciones: si la mutación **no** define `onError`, la fundación muestra `toast.error(getErrorMessage(err))`.
-  Si la manejás vos (mensaje en el formulario), definí `onError` o `meta: { errorToast: false }`.
-  Si pasás `onError` recién en `mutate(vars, { onError })`, agregá `meta: { errorToast: false }` para no duplicar.
-- Éxitos: `toast.success('Guardaste el producto.')` (import de `sonner`).
-- Estados de carga/error/vacío: `isPending` → esqueleto o `PageSpinner`; `isError` → `<ErrorState error={q.error} onRetry={q.refetch} />`; sin datos → `<EmptyState />`.
+  Si lo manejás vos, definí `onError` o `meta: { errorToast: false }`.
+- Éxitos: `toast.success('Ingreso registrado.')` (import de `sonner`), en participio.
+- Estados: `isPending` → `Skeleton`/`PageSpinner`; `isError` → `<ErrorState error={q.error} onRetry={q.refetch} />`;
+  sin datos → `<EmptyState />`. **Las tres siempre**, en todas las pantallas.
 
 ```tsx
 const queryClient = useQueryClient();
@@ -209,23 +222,58 @@ const createProduct = useMutation({
 
 ---
 
-## 5. Autenticación y roles
+## 5. Roles, permisos y módulos
 
 ```ts
 const { me, isTenantUser, isPlatformUser, hasRole, logout, refreshMe } = useAuth();
 const me = useCurrentUser();       // MeDto garantizado (dentro de rutas protegidas)
 me.tenant?.stockRotation;          // 'FIFO' | 'FEFO'
+me.tenant?.modules;                // TenantModule[] habilitados
+me.tenant?.maxBranches;            // máximo EFECTIVO (sin MULTI_BRANCH es 1)
 me.branches;                       // sucursales accesibles
 hasRole('TENANT_ADMIN');           // p. ej. mostrar "Eliminar" solo al admin
 ```
 
-- Grupos de roles (espejo de `Roles.java`): `ROLE_GROUPS` en `@/config/access` (`TENANT_DASHBOARD`, `TENANT_INVENTORY`, `TENANT_ADMIN`, `TENANT_ANY`, `OWNER`, `SUPPORT`).
-- Las rutas ya están protegidas en `App.tsx`; dentro de la página ocultá acciones según la matriz §3.3 (el backend igual valida).
-- Etiquetas en español para enums: `ROLE_LABELS`, `PLAN_LABELS`, `BUSINESS_TYPE_LABELS`, `STOCK_ROTATION_LABELS`,
-  `LOT_STATUS_LABELS`, `MOVEMENT_TYPE_LABELS`, `MOVEMENT_SOURCE_LABELS`, `EXPIRY_BUCKET_LABELS`, `STOCK_STATUS_LABELS`,
-  `REORDER_STATUS_LABELS`, `ALERT_TYPE_LABELS`, `ALERT_STATUS_LABELS`, `SEVERITY_LABELS`, `SALES_PATTERN_LABELS`,
-  `RECOMMENDATION_TYPE_LABELS`, `RECOMMENDATION_STATUS_LABELS`, `ANNOUNCEMENT_*_LABELS`, `RECALL_*_LABELS`,
-  `TICKET_*_LABELS`, `NOTIFICATION_TYPE_LABELS`, `TENANT_STATUS_LABELS` — todas en `@/api/types`.
+### 5.1 Roles
+
+Seis roles (SPEC §3.1): `PLATFORM_OWNER`, `SUPPORT_AGENT`, `TENANT_BOSS`, `TENANT_ADMIN`, `TENANT_EMPLOYEE`,
+**`TENANT_CASHIER`** (etiqueta "Cajero", inicio `/app/pos`). Grupos en `@/config/access` (espejo de `Roles.java`):
+`ALL`, `OWNER`, `SUPPORT`, `TENANT_ANY`, `TENANT_DASHBOARD`, `TENANT_INVENTORY`, `TENANT_ADMIN` y **`TENANT_POS`**
+(admin + empleado + cajero).
+
+Las rutas ya están protegidas en `App.tsx`; dentro de la página ocultá acciones según la matriz §3.3
+(el backend igual valida). El cajero solo ve POS + Avisos/Seguridad alimentaria/Soporte.
+
+### 5.2 Módulos por tenant (SPEC §14)
+
+```tsx
+import { useModules } from '@/modules/useModules';
+import { TENANT_MODULE_LABELS } from '@/api/types';
+
+const { modules, hasModule, maxBranches, isTenant } = useModules();
+
+{hasModule('POS_GONDOLIA') && <ButtonLink to="/app/pos">Ir al punto de venta</ButtonLink>}
+```
+
+| Módulo | Etiqueta | Habilita |
+|---|---|---|
+| `POS_GONDOLIA` | Punto de venta GondolIA | Cajas, turnos, cobro, tickets, anulaciones (§15) |
+| `POS_INTEGRATION` | Integración con POS propio | API keys, importación CSV de ventas, simulador |
+| `MULTI_BRANCH` | Multi-sucursal | Más de una sucursal, transferencias, vista consolidada |
+
+Patrón de uso:
+
+1. **Menú**: el ítem declara `module` en `config/navigation.ts` y la fundación lo oculta solo.
+2. **Ruta**: `<RequireModule module="POS_GONDOLIA" />` envuelve las rutas del módulo en `App.tsx` y muestra
+   `ModuleDisabledPage` si entran por URL ("Esta función no está habilitada para tu comercio…" + link a Soporte).
+3. **Dentro de la página**: escondé botones y links con `hasModule(...)`; nunca muestres una acción que el backend
+   va a rechazar con 403 `MODULE_DISABLED`.
+4. **En vivo**: si los dueños cambian los módulos llega `{"type":"MODULES_CHANGED"}` por `/user/queue/session`;
+   la fundación hace `refreshMe()`, muestra el toast "Se actualizaron las funciones habilitadas" y, si la pantalla
+   abierta dependía del módulo que desactivaron, vuelve al inicio del rol. **No te suscribas de nuevo a eso.**
+
+La consola de dueños (módulo C) usa `TENANT_MODULES`, `TENANT_MODULE_LABELS`, `TENANT_MODULE_DESCRIPTIONS`,
+`TENANT_MODULE_MONTHLY_PRICE` y el tipo `TenantModuleStatus` de `@/api/types`.
 
 ---
 
@@ -238,7 +286,6 @@ import { useStompSubscription } from '@/realtime/useStompSubscription';
 import { useStompPublish } from '@/realtime/useStompPublish';
 import { useStompConnected } from '@/realtime/StompProvider';
 
-// Se suscribe al montar, se cancela al desmontar; sobrevive reconexiones y cambios de handler.
 useStompSubscription<TicketEvent>(
   ticketId ? `/topic/tickets/${ticketId}` : null,
   (event) => {
@@ -255,120 +302,216 @@ const live = useStompConnected(); // para un indicador "En vivo"
 
 Ya resuelto por la fundación (no volver a suscribirse para lo mismo):
 
-- `/user/queue/session` → `FORCE_LOGOUT` cierra sesión con toast (`useSessionEvents`).
+- `/user/queue/session` → `FORCE_LOGOUT` (cierra sesión) y `MODULES_CHANGED` (`useSessionEvents`).
 - `/user/queue/notifications` → contador, lista y toast de la campana (`NotificationBell`).
 - `/user/queue/security-alerts` lo consume `SecurityAlertHost` (módulo D).
 
 ---
 
-## 7. Componentes UI (`@/components/ui`)
+## 7. Diseño: tokens de Góndola UI
+
+Todo color sale de un **token** (`src/index.css`), nunca de un literal ni de la paleta de Tailwind
+(`slate-500`, `brand-600` y `emerald-*` ya no existen). Los tokens tienen versión clara y oscura; el tema sigue al
+sistema operativo (`prefers-color-scheme`) y se puede forzar con `data-theme="light|dark"` en `<html>`.
+**Probá siempre las dos.**
+
+| Token / clase | Cuándo se usa |
+|---|---|
+| `bg-background` | Lienzo de la app (lo pone el shell; la página no lo repite). |
+| `bg-card` · `text-foreground` | Paneles, tablas, barra superior, popovers. |
+| `bg-muted` · `text-muted-foreground` | Hover, segmentados, zonas secundarias; bajadas y metadatos. |
+| `border-border` · `border-input` | Divisores y bordes de panel · borde de controles. |
+| `bg-primary` · `text-primary` · `ring-ring` | Verde góndola: acción principal, ítem activo, foco. |
+| `bg-accent` | **Amarillo de etiqueta de precio.** Solo `PriceTag`, el total del POS y ofertas. Nunca botones ni bordes. |
+| `bg-ok/-soft` `text-ok-ink` | Stock suficiente, operación completada. |
+| `bg-warn/-soft` `text-warn-ink` | Por vencer, stock bajo, advertencias que no bloquean. |
+| `bg-crit/-soft` `text-crit-ink` | Vencido, sin stock, recall, errores que bloquean. |
+| `bg-info/-soft` `text-info-ink` | Próximo, IA, avisos neutrales. |
+| `bg-rail` `text-rail-foreground` … | Solo el riel de navegación. |
+| `bg-paper` `text-paper-ink` | Ticket térmico (sigue siendo papel en tema oscuro). |
+| `bg-camera` | Visor de cámara. |
+
+Reglas rápidas (detalle en `docs/design-system.md`):
+
+- **Radios por rol:** `rounded-control` (8, botones e inputs) · `rounded-panel` (12, paneles y popovers) ·
+  `rounded-dialog` (16, diálogos) · `rounded-tag` (4, chips de dato) · tablas sin radio · `rounded-full` **solo** estados.
+- **Bordes antes que sombras.** `shadow-pop` solo para lo que flota (diálogo, popover, menú).
+- **Tipografías:** `font-display` (Bricolage: títulos de página, KPI, precios) · `font-sans` (Figtree: todo lo demás) ·
+  `font-mono` (JetBrains Mono: códigos, lotes, fechas en chips, tickets, atajos). Se instalan con
+  `@fontsource-variable/*` en `main.tsx`: **sin CDN** (el contenedor funciona sin internet).
+- **Escala de texto cerrada:** `text-xs` 12 · `text-sm` 13 · `text-base` 14 (base de UI) · `text-read` 15 (lectura) ·
+  `text-md` 16 · `text-lg` 20 · `text-xl` 26 · `text-2xl` 34 · `text-3xl` 48.
+- `tabular-nums` en toda cifra que se compara (columnas, totales, contadores).
+- Utilidades propias: `gd-stripe-crit|warn|info|ok|none` (franja de severidad), `gd-eyebrow` (rótulo en mayúsculas),
+  `gd-kbd`, `gd-scroll`, `gd-skeleton`, `gd-no-print`.
+- `cn(...)` (de `@/lib/cn`) conoce estas escalas: `cn('rounded-panel', 'rounded-tag')` deja solo la última.
+
+---
+
+## 8. Componentes
+
+### 8.1 Kit base (`@/components/ui`)
 
 | Componente | Props principales |
 |---|---|
-| `Button` | `variant: primary \| secondary \| outline \| ghost \| danger \| danger-outline \| link`, `size: sm \| md \| lg \| xl \| icon \| icon-sm`, `loading`, `leftIcon`, `rightIcon`, `fullWidth`. `type="button"` por defecto. |
+| `Button` | `variant: default \| secondary \| outline \| ghost \| destructive \| link` (siguen andando `primary`, `danger`, `danger-outline`), `size: sm \| default \| lg \| xl \| icon \| icon-sm`, `loading`, `leftIcon`, `rightIcon`, `fullWidth`, `asChild`. `type="button"` por defecto. |
 | `ButtonLink` | Igual que `Button` pero es un `<Link to>` de react-router. `buttonClasses({...})` para otros elementos. |
-| `Card`, `CardHeader`, `CardFooter` | `Card padding: none \| sm \| md \| lg`. `CardHeader title description icon actions`. |
-| `Badge` | `tone: neutral \| brand \| success \| warning \| orange \| danger \| info \| purple`, `size`, `dot`, `icon`. Tonos listos: `severityTone`, `expiryBucketTone`, `stockStatusTone`, `reorderStatusTone`. |
-| `Alert` | `tone: info \| success \| warning \| danger \| brand`, `title`, `icon` (o `null`), `action`. |
-| `Input` | `invalid`, `inputSize: sm \| md \| lg`, `leftIcon`, `rightElement`. En mobile usa 16 px (evita el zoom de iOS). |
-| `Select` | `options: {value,label,disabled}[]`, `placeholder` (opción vacía), `invalid`, `selectSize`, `leftIcon`. Nativo. |
+| `Card` (= `Panel`), `CardHeader`, `CardFooter` | `Card padding: none \| sm \| md \| lg`. `CardHeader title description icon actions`. Sin sombra: borde + `rounded-panel`. |
+| `Badge` | Etiqueta de **dato** (radio 4): `tone: neutral \| primary \| ok \| warn \| crit \| info`, `size`, `dot`, `icon`, `solid`, `pill`. Helpers: `severityTone`, `expiryBucketTone`, `stockStatusTone`, `reorderStatusTone`. |
+| `Alert` | `tone: info \| ok \| warn \| crit \| brand`, `title`, `icon` (o `null`), `action`. `warn`/`crit` se anuncian con `role="alert"`. |
+| `Input` | `invalid`, `inputSize: sm \| md \| lg`, `leftIcon`, `rightElement`. 16 px en móvil (evita el zoom de iOS). |
+| `Select` | `<select>` nativo: `options: {value,label,disabled}[]`, `placeholder`, `invalid`, `selectSize`, `leftIcon`. Es el control por defecto de los formularios. |
+| `SelectMenu` + `SelectTrigger/SelectValue/SelectContent/SelectItem` | Select flotante de Radix, para menús con contenido rico. |
 | `Textarea` | `invalid`, `rows`. |
-| `Checkbox` | `label`, `description`. |
-| `Toggle` | `checked`, `onChange(checked)`, `label`, `description`, `size: sm \| md`, `ariaLabel`. |
-| `Field` | `label`, `hint`, `error`, `required`, `optional`, `labelAction`. Conecta `id`/`aria-*` con su hijo. |
+| `Checkbox` | Radix: `checked` (`boolean \| 'indeterminate'`), `onCheckedChange`, `label`, `description`. |
+| `Switch` / `Toggle` | `Switch` (Radix, `checked`/`onCheckedChange`, `size`) para tablas; `Toggle` (`checked`, `onChange(checked)`, `label`, `description`) para filas de configuración. |
+| `Field` | `label`, `hint`, `error`, `required` (solo `aria`), `optional` (muestra "(opcional)"), `labelAction`. Conecta `id`/`aria-*` con su hijo. Góndola UI marca lo opcional, no lo obligatorio. |
 | `SearchInput` | `value`, `onValueChange`, `onSearch` (Enter), `placeholder`, `inputSize`. Combinar con `useDebounce`. |
-| `Modal` | `open`, `onClose`, `title`, `description`, `footer`, `size: sm \| md \| lg \| xl \| full`, `preventClose`, `closeOnOverlayClick`, `initialFocusRef`. Portal, ESC, foco atrapado; hoja inferior en mobile. `data-autofocus` marca el control inicial. |
-| `ConfirmDialog` | `open`, `onClose`, `onConfirm` (puede devolver promesa), `title`, `description`, `confirmLabel`, `tone: primary \| danger`, `children` (p. ej. campo "motivo"). |
-| `Table<T>` | `columns: TableColumn<T>[]` (`id`, `header`, `cell(row)`, `align`, `className`, `headerClassName`, `hideBelow: lg \| xl`, `mobile: title \| subtitle \| aside \| field \| actions \| hidden`, `mobileLabel`), `data`, `rowKey`, `loading`, `error`, `onRetry`, `empty: {icon,title,description,action}`, `onRowClick`, `rowClassName`, `mobileLayout: cards \| scroll`, `renderMobileCard`, `dense`, `footer`, `caption`. |
+| `Segmented` | Filtros excluyentes con contadores: `value`, `onChange`, `options: {value,label,count,tone,icon}[]`, `label`, `size`. Flechas del teclado incluidas. |
+| `QtyStepper` | `value`, `onChange`, `label`, `min`, `max`, `size: sm \| md \| lg` (44 px para el POS y la carga móvil). |
+| `WizardSteps` | `steps: string[]`, `current`. Solo para procesos secuenciales reales (importación). |
+| `Kbd` | Tecla de atajo (`F2`, `F4`, `Esc`). Se oculta en pantallas táctiles. |
+| `Modal` | `open`, `onClose`, `title`, `description`, `footer`, `size: sm \| md \| lg \| xl \| full`, `preventClose`, `closeOnOverlayClick`, `hideCloseButton`, `initialFocusRef`. Radix Dialog: foco atrapado, ESC y scroll bloqueado. En móvil se ancla abajo. `data-autofocus` marca el control inicial. |
+| `Dialog*` | Primitivas de Radix (`Dialog`, `DialogContent`, `DialogHeader`…) para diálogos a medida (p. ej. la hoja de cobro). |
+| `ConfirmDialog` | `open`, `onClose`, `onConfirm` (puede devolver promesa), `title`, `description`, `confirmLabel` (verbo exacto), `tone: primary \| danger`, `children` (p. ej. campo "motivo"). |
+| `Table<T>` | `columns: TableColumn<T>[]` (`id`, `header`, `cell(row)`, `align`, `className`, `headerClassName`, `hideBelow: lg \| xl`, `mobile: title \| subtitle \| aside \| field \| actions \| hidden`, `mobileLabel`), `data`, `rowKey`, `loading`, `error`, `onRetry`, `empty`, `onRowClick`, `rowClassName`, **`rowSeverity`** (franja de 4 px), `mobileLayout: cards \| scroll`, `renderMobileCard`, `dense`, `footer`, `caption`. |
+| `TableRoot`, `TableHeader`, `TableBody`, `TableRow`, `TableHead`, `TableCell`, `TableFooter`, `TableCaption` | Primitivas para tablas a medida (con `SeverityRow`). |
 | `Pagination` | `page` (0-based), `totalPages`, `totalElements`, `size`, `onPageChange`, `disabled`. `pageInfo(data)` arma las props desde un `PageResponse`. |
 | `Tabs<V>` | `tabs: {value,label,icon,count,disabled}[]`, `value`, `onChange`, `variant: underline \| pills`, `ariaLabel`, `idPrefix`. |
-| `PageHeader` | `title`, `description`, `icon`, `actions`, `back: {to,label}`, `children` (filtros/tabs debajo). |
-| `StatCard` | `label`, `value`, `icon`, `tone: brand \| orange \| red \| amber \| sky \| violet \| slate`, `hint`, `trend: {value,label,invert}`, `loading`, `to`. |
-| `EmptyState` | `icon`, `title`, `description`, `action`, `size: sm \| md`, `bordered`. |
+| `PageHeader` | `title`, `description`, `eyebrow`, `icon`, `actions`, `back: {to,label}`, `children` (filtros/tabs debajo). |
+| `StatCard` | `label`, `value`, `icon`, `tone: primary \| ok \| warn \| crit \| info \| neutral`, `hint`, `trend: {value,label,invert}`, `sparkline`, `loading`, `to`. |
+| `EmptyState` | `icon`, `title` (qué falta), `description` (próxima acción), `action`, `size`, `bordered`. |
 | `ErrorState` | `error` (se traduce), `message`, `title`, `onRetry`, `retrying`, `size`. |
 | `Spinner`, `PageSpinner`, `Skeleton` | Cargas en línea, de sección y esqueletos (`<Skeleton className="h-4 w-32" />`). |
-| `AuthImage` | `src` (ruta `/api/...` protegida), `alt`, `fallback`, `placeholderClassName` + props de `<img>`. |
+| `Progress` | Barra de progreso (Radix) para la aplicación de una importación. |
+| `Tooltip` + `TooltipProvider/Trigger/Content` | Requiere un `TooltipProvider` arriba. |
+| `Popover`, `DropdownMenu*`, `Sheet*`, `Separator`, `Label` | Primitivas de Radix ya adaptadas a los tokens. |
+| `useDropdown`, `DropdownPanel`, `DropdownItem`, `DropdownSeparator`, `DropdownLabel` | Desplegable propio (click afuera, ESC, flechas) para paneles con contenido libre. |
+| `AuthImage` | `src` (ruta `/api/...` protegida), `alt`, `fallback`, `placeholderClassName`. |
 | `Avatar` | `name`, `size: sm \| md \| lg \| xl`. |
-| `useDropdown`, `DropdownPanel`, `DropdownItem`, `DropdownSeparator`, `DropdownLabel` | Menús desplegables accesibles (click afuera, ESC, flechas). |
-| `SecureContextWarning` | Aviso de cámara en HTTP (ver §10). |
+| `SecureContextWarning` | Aviso de cámara en HTTP (ver §11). |
 
-Ejemplo de tabla responsive:
+### 8.2 Componentes firma (`@/components/gondola`)
+
+Son los que le dan identidad al producto (docs/design-system.md §5). Usalos tal cual: no hagas variantes propias.
+
+| Componente | Props | Cuándo |
+|---|---|---|
+| `PriceTag` | `price`, `size: sm \| md \| lg \| xl`, `label`, `unit`, `perUnit`, `listPrice`, `offer` | Total del POS, precio en la ficha, ofertas por vencimiento. **Una sola etiqueta grande por pantalla**; nunca para montos contables. |
+| `ExpiryChip` | `expiry` (ISO), `lot`, `bucket` (del backend), `thresholds`, `longYear`, `showDays` | Tablas de vencimientos, líneas del carrito, lotes en la carga. Acompañalo con una píldora o franja. |
+| `LotRankChip` | `rank`, `rotation` (`me.tenant.stockRotation`), `discounted` | Lotes de **un mismo producto y sucursal**. `rank=1` → "1º sale"; con `discounted` → "En liquidación · sale primero" (SPEC §4.2). |
+| `StatusPill` | `tone: ok \| warn \| crit \| info \| neutral`, `solid`, `dot`, `size` | Estado de una fila. Es el único elemento totalmente redondeado. |
+| `StockStatusPill` | `status: OUT \| LOW \| OK \| SIN_STOCK \| CRITICO \| BAJO` | Sin stock (sólido) / Crítico / Bajo / OK. En consolidado, el **peor** estado. |
+| `SeverityRow`, `SeverityItem`, `SeverityStripe`, `stripeClass`, `severityStripe` | `severity: crit \| warn \| info \| ok \| none` | Franja de 4 px en filas y listas rectas ("Para hoy", notificaciones). Con el componente `Table` usá `rowSeverity`. |
+| `Ticket80mm` | `data: Ticket80mmData` | Vista previa del comprobante después de cobrar, en el historial y en la página de impresión. Siempre con la leyenda "Comprobante no válido como factura". |
+| `BarcodeDigits` | `code`, `width`, `digitsOnly`, `bare` | Producto detectado por el escáner, alerta de recall, ficha. En listados largos usá `digitsOnly`. |
+| `Sparkline` | `data: number[]`, `tone`, `width`, `height` | Minigráfico decorativo dentro de un `StatCard`. |
 
 ```tsx
-const columns: Array<TableColumn<LotRow> | null> = [
-  { id: 'product', header: 'Producto', mobile: 'title', cell: (r) => r.productName },
-  useBranchColumn<LotRow>(),
-  { id: 'expiry', header: 'Vencimiento', cell: (r) => formatDate(r.expiryDate) },
-  { id: 'qty', header: 'Cantidad', align: 'right', cell: (r) => formatNumber(r.quantity) },
-  {
-    id: 'bucket', header: 'Estado', mobile: 'aside',
-    cell: (r) => <Badge tone={expiryBucketTone(r.bucket)} dot>{EXPIRY_BUCKET_LABELS[r.bucket]}</Badge>,
-  },
-];
+import { ExpiryChip, LotRankChip, PriceTag, StockStatusPill } from '@/components/gondola';
 
-<Card padding="none">
-  <Table
-    columns={columns}
-    data={query.data?.content}
-    rowKey={(r) => r.lotId}
-    loading={query.isPending}
-    error={query.error}
-    onRetry={() => query.refetch()}
-    empty={{ icon: CalendarCheck, title: 'No hay vencimientos próximos' }}
-    footer={<Pagination {...pageInfo(query.data)} onPageChange={setPage} />}
-  />
-</Card>
+<PriceTag price={16270.5} size="lg" label="Total" />
+<ExpiryChip expiry={lot.expiryDate} lot={lot.lotNumber} bucket={lot.bucket} showDays />
+<LotRankChip rank={index + 1} rotation={me.tenant.stockRotation} discounted={!!lot.discountPct} />
+<StockStatusPill status={row.stockStatus} />
 ```
 
-Si una fila tiene `onRowClick` y además botones, frená la propagación en los botones (`event.stopPropagation()`).
+### 8.3 Escáner y cámara (`@/components/scanner`)
+
+Compartidos por la carga de mercadería (A1) y el POS (H).
+
+```tsx
+import { BarcodeScanner, CameraCapture, useBarcodeWedge } from '@/components/scanner';
+
+// 1. Cámara (celular y notebook): cámara trasera por defecto, cambio de cámara, linterna, pitido + vibración.
+<BarcodeScanner
+  onDetected={(code) => lookup(code)}
+  active={!paymentOpen}                    // apaga la cámara sin desmontar
+  hint="Apuntá al código de barras del producto"
+  fallback={<Button onClick={openManual}>Ingresar el código a mano</Button>}
+/>
+
+// 2. Lector USB de caja (keyboard wedge): captura ráfagas rápidas terminadas en Enter en toda la página.
+useBarcodeWedge({ onScan: (code) => addToCart(code) });
+// opciones: { enabled, minLength=6, maxKeyIntervalMs=50, captureWhileTyping=false }
+
+// 3. Foto para el OCR de etiquetas: devuelve un Blob listo para uploadFile().
+<CameraCapture
+  captureLabel="Leer vencimiento y lote"
+  busy={ocr.isPending}
+  onCapture={(photo) => ocr.mutate(photo)}
+/>
+```
+
+- Los tres avisan en español si falta el permiso, no hay cámara o la página no es contexto seguro, y ofrecen la
+  alternativa manual (o subir una foto). **Siempre dejá un camino sin cámara.**
+- `useBarcodeWedge` ignora las teclas mientras el foco está en un input (el lector ya escribe ahí); en el POS, donde
+  el buscador está siempre enfocado, leé el código desde ese input o usá `captureWhileTyping: true` con cuidado.
+- `scanFeedback()` (pitido + vibración) está exportado por si confirmás una lectura por otro camino.
 
 ---
 
-## 8. Formato (`@/lib/format`)
+## 9. Layout, shell e impresión
 
-Siempre es-AR y zona `America/Argentina/Buenos_Aires`. Valores nulos → `—`.
+- `AppShell` pone riel, barra superior y el contenedor (`max-w-7xl`, padding responsive). La página solo renderiza
+  su contenido: `PageHeader` + secciones. **No agreguen** `min-h-screen`, fondos de página ni otro contenedor centrado.
+- **Variante compacta**: en `/app/pos` el riel arranca colapsado y el shell **no** pone padding ni ancho máximo
+  (la terminal maneja su layout de dos paneles y su propio scroll). Si tu pantalla puede aparecer en las dos
+  variantes, leé `useShellLayout()` de `@/components/layout/AppShell` y agregá tu padding cuando `compact` sea `true`.
+- Rutas que comparten página (`/support` y `/support/tickets/:id`, `/app/support` y `/app/support/:id`) no se remontan
+  al navegar entre ellas: el estado de la lista se conserva y el detalle se decide con `useParams()`.
+- El menú lateral se arma en `src/config/navigation.ts` (lo mantiene la fundación). El buscador de la barra superior
+  navega a `/app/inventory?q=<texto>`: la página de inventario debe leer `q` de `useSearchParams`.
 
-| Función | Ejemplo |
-|---|---|
-| `formatMoney(8450000)` | `$ 8.450.000` (sin decimales si es entero; `$ 1.234,50` si no) |
-| `formatNumber(1234.5)` · `formatNumber(x, { decimals: 1 })` | `1.234,5` |
-| `formatPercent(37.5)` (0..100) · `formatRatio(0.78)` (0..1) | `37,5%` · `78%` |
-| `formatDate('2026-09-25')` / instante | `25/09/2026` (los `LocalDate` no se corren por UTC) |
-| `formatDateTime(instante)` · `formatTime(instante)` | `25/09/2026 14:30` · `14:30` |
-| `formatLongDate()` | `Jueves, 17 de septiembre de 2026` |
-| `formatShortDate('2026-09-17')` | `17 sep` (ejes de gráficos) |
-| `formatRelative(instante)` | `recién`, `hace 5 min`, `hace 2 h`, `ayer`, `hace 3 días`, luego la fecha |
-| `daysUntil('2026-09-25')` · `formatDaysLeft(8)` | `8` · `Vence en 8 días` / `Vence hoy` / `Venció hace 3 días` |
-| `todayLocalDate()` · `toLocalDateString(date)` | `2026-09-17` (para la API y `<input type="date">`) |
-| `pluralize(3, 'producto')` · `formatBytes(n)` · `initials(nombre)` · `capitalize(s)` | `3 productos` · `1,2 MB` · `LG` |
+### 9.1 Imprimir el ticket
 
-Otros: `cn(...)` combina clases de Tailwind; `useDebounce(value, 300)`.
+`/app/pos/sales/:id/ticket` se renderiza **fuera del AppShell** (ver `App.tsx`) y es la única pantalla pensada para
+la impresora:
 
----
+```tsx
+export default function PosTicketPage() {
+  const ticket = useQuery(...);
+  return (
+    <div className="min-h-dvh bg-background px-4 py-6">
+      <div className="mx-auto flex w-full max-w-[420px] flex-col items-center gap-4">
+        {/* Los controles no se imprimen */}
+        <div className="gd-no-print flex w-full items-center justify-between">
+          <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>Volver</Button>
+          <Button size="sm" onClick={() => window.print()}>Imprimir</Button>
+        </div>
+        <Ticket80mm data={ticket.data} />
+      </div>
+    </div>
+  );
+}
+```
 
-## 9. Layout y mobile
-
-- `AppShell` ya pone sidebar, topbar y el contenedor (`max-w-7xl`, padding responsive). La página solo renderiza su contenido:
-  `PageHeader` + secciones. No agreguen `min-h-screen`, fondos de página ni otro contenedor centrado.
-- Rutas que comparten página (`/support` y `/support/tickets/:id`, `/app/support` y `/app/support/:id`) no se remontan al
-  navegar entre ellas: el estado de la lista se conserva y el detalle se decide con `useParams()`. Si una página falla al
-  renderizar, `AppShell` muestra un error recuperable y lo descarta al cambiar de ruta.
-- Breakpoints: sidebar fija desde `lg` (1024 px), drawer debajo. Diseñá **mobile first** (empleados usan el celular):
-  - Tablas: `Table` pasa a tarjetas debajo de `md`; definí `mobile: 'title'` en la columna principal.
-  - Grillas: `grid gap-4 sm:grid-cols-2 xl:grid-cols-4` para `StatCard`.
-  - Acciones de formulario: `flex flex-col-reverse gap-2 sm:flex-row sm:justify-end`; en la carga con cámara usá `size="lg"`/`"xl"` y `fullWidth`.
-  - Filtros: apilados en mobile (`flex flex-col gap-3 md:flex-row`).
-  - Dejá aire abajo: el `SupportWidget` flota abajo a la derecha (el shell ya agrega `pb-24` en mobile).
-- Estilo: tarjetas blancas `rounded-2xl border border-slate-200/70 shadow-sm` (`Card`), verde `brand-*` para acciones,
-  ámbar/naranja por vencer/bajo, rojo crítico/vencido/recall, celeste informativo. Íconos de `lucide-react` con `aria-hidden`.
-- Todas las pantallas muestran estados de carga, error (con reintento) y vacío con textos en español.
-- Accesibilidad: botones solo-ícono con `aria-label`, `Field` para etiquetas, foco visible (ya incluido en los componentes).
-- Navegación del sidebar: `src/config/navigation.ts` (lo mantiene la fundación). El buscador del topbar navega a `/app/inventory?q=<texto>`:
-  la página de inventario debe leer `q` de `useSearchParams`.
+- `gd-no-print` (en `index.css`) oculta cualquier cosa al imprimir; el `@media print` global ya pone fondo blanco.
+- El ticket mide 302 px (80 mm) y usa `--paper`/`--paper-ink`: **no** cambia con el tema oscuro.
+- Después de cobrar, mostrá el mismo `Ticket80mm` dentro del diálogo con "Imprimir" y "Nueva venta"; el link a esta
+  página sirve para reimprimir desde el historial.
 
 ---
 
-## 10. Cámara y contexto seguro
+## 10. Mobile y accesibilidad
+
+Diseñá **mobile first**: los empleados cargan mercadería con el celular y el cajero trabaja parado.
+
+- Funciona de 375 px para arriba **sin scroll horizontal de página**; las tablas scrollean solas.
+- Riel → drawer debajo de `lg` (1024 px). `Table` pasa a tarjetas debajo de `md`: definí `mobile: 'title'` en la
+  columna principal y `mobile: 'aside'` en el estado.
+- Grillas de KPI: `grid gap-4 sm:grid-cols-2 xl:grid-cols-4`.
+- Acciones de formulario: `flex flex-col-reverse gap-2 sm:flex-row sm:justify-end`. En la carga con cámara y en el POS
+  la acción principal va abajo, `size="xl"` y `fullWidth` (56 px, al alcance del pulgar, con `env(safe-area-inset-bottom)`).
+- Filtros apilados en mobile (`flex flex-col gap-3 md:flex-row`).
+- El `SupportWidget` flota abajo a la derecha: el shell ya agrega `pb-24` en mobile.
+- Botones solo-ícono con `aria-label`; `Field` para etiquetas; foco visible (ya incluido); `role="alert"` en lo que
+  bloquea; `aria-live` en el vuelto y en las lecturas de OCR.
+- Nunca dependas solo del color: estado = **palabra + forma + color** (píldora, chip o franja).
+
+---
+
+## 11. Cámara y contexto seguro
 
 Los navegadores solo permiten la cámara en HTTPS o `localhost`. En pantallas con escáner/OCR:
 
@@ -377,18 +520,60 @@ import { SecureContextWarning } from '@/components/ui';
 import { isCameraSupported } from '@/lib/secureContext';
 
 <SecureContextWarning className="mb-4" />            {/* solo aparece si hace falta */}
-{isCameraSupported() ? <Scanner /> : <ManualBarcodeInput />}
+{isCameraSupported() ? <BarcodeScanner onDetected={...} /> : <ManualBarcodeInput />}
 ```
 
-`getSecureUrl()` devuelve la URL equivalente en `https://<host>:<VITE_HTTPS_PORT|8443>`; `LOCAL_CA_CERT_PATH` es el certificado de la CA local que sirve nginx.
+`getSecureUrl()` devuelve la URL equivalente en `https://<host>:<VITE_HTTPS_PORT|8443>`; `LOCAL_CA_CERT_PATH` es el
+certificado de la CA local que sirve nginx. `BarcodeScanner` y `CameraCapture` ya muestran su propio aviso.
 
 ---
 
-## 11. Checklist de una página nueva
+## 12. Formato (`@/lib/format`)
 
-1. Tipos en `features/<modulo>/types.ts` y funciones en `features/<modulo>/api.ts` usando los helpers de `@/api/client`.
+Siempre es-AR y zona `America/Argentina/Buenos_Aires`. Valores nulos → `—`.
+
+| Función | Ejemplo |
+|---|---|
+| `formatMoney(8450000)` | `$ 8.450.000` (sin decimales si es entero; `$ 1.234,50` si no; `{ decimals: 2 }` fuerza centavos) |
+| `splitMoney(16270.5)` | `{ int: '16.270', cents: '50' }` (lo usa `PriceTag`) |
+| `formatNumber(1234.5)` · `formatNumber(x, { decimals: 1 })` | `1.234,5` |
+| `formatPercent(37.5)` (0..100) · `formatRatio(0.78)` (0..1) | `37,5%` · `78%` |
+| `formatDate('2026-09-25')` / instante | `25/09/2026` (los `LocalDate` no se corren por UTC) |
+| `formatDateCompact('2026-09-25')` | `25/09/26` (chips y tickets) |
+| `formatDateTime(instante)` · `formatTime(instante)` | `25/09/2026 14:30` · `14:30` |
+| `formatLongDate()` | `Jueves, 17 de septiembre de 2026` |
+| `formatShortDate('2026-09-17')` | `17 sep` (ejes de gráficos) |
+| `formatRelative(instante)` | `recién`, `hace 5 min`, `hace 2 h`, `ayer`, `hace 3 días`, luego la fecha |
+| `daysUntil('2026-09-25')` · `formatDaysLeft(8)` | `8` · `Vence en 8 días` / `Vence hoy` / `Venció hace 3 días` |
+| `todayLocalDate()` · `toLocalDateString(date)` | `2026-09-17` (para la API y `<input type="date">`) |
+| `pluralize(3, 'producto')` · `formatBytes(n)` · `initials(nombre)` · `capitalize(s)` | `3 productos` · `1,2 MB` · `LG` |
+
+Otros: `cn(...)` combina clases de Tailwind (conoce los radios y tamaños de Góndola UI); `useDebounce(value, 300)`.
+
+Etiquetas en español para enums (todas en `@/api/types`): `ROLE_LABELS`, `PLAN_LABELS`, `BUSINESS_TYPE_LABELS`,
+`STOCK_ROTATION_LABELS`, `LOT_STATUS_LABELS`, `MOVEMENT_TYPE_LABELS`, `MOVEMENT_SOURCE_LABELS`, `EXPIRY_BUCKET_LABELS`,
+`STOCK_STATUS_LABELS`, `REORDER_STATUS_LABELS`, `ALERT_TYPE_LABELS`, `ALERT_STATUS_LABELS`, `SEVERITY_LABELS`,
+`SALES_PATTERN_LABELS`, `RECOMMENDATION_TYPE_LABELS`, `RECOMMENDATION_STATUS_LABELS`, `ANNOUNCEMENT_*_LABELS`,
+`RECALL_*_LABELS`, `TICKET_*_LABELS`, `NOTIFICATION_TYPE_LABELS`, `TENANT_STATUS_LABELS`, `TENANT_MODULE_LABELS`.
+
+---
+
+## 13. Charts (recharts)
+
+- Colores con `hsl(var(--primary))`, `hsl(var(--info))`…: nunca literales, así funcionan en los dos temas.
+- Grilla solo horizontal y tenue, ejes en `muted-foreground` de 12 px, tooltip propio con superficie `card`,
+  `rounded-panel` y `shadow-pop`.
+- Área verde para stock (eje izquierdo) + línea tinta para ventas (eje derecho), con el punto final destacado.
+
+---
+
+## 14. Checklist de una página nueva
+
+1. Tipos en `features/<modulo>/types.ts` y funciones en `features/<modulo>/api.ts` con los helpers de `@/api/client`.
 2. Queries con keys por sucursal (`useBranchQueryKey`) si los datos son por sucursal; columna "Sucursal" con `useBranchColumn`.
 3. Escrituras por sucursal con `useWriteBranch` + `BranchPicker` y `branchId` en el body.
-4. `PageHeader` + estados de carga / error / vacío.
-5. Acciones visibles según rol (`hasRole` / `ROLE_GROUPS`), toasts de éxito, errores con `getErrorMessage`.
-6. Probar en 375 px de ancho y en escritorio. `npm run build` sin errores.
+4. Acciones visibles según **rol** (`hasRole`, `ROLE_GROUPS`) y **módulo** (`hasModule`).
+5. `PageHeader` + estados de carga / error / vacío, los tres con texto en voseo.
+6. Componentes firma donde correspondan (precio, vencimiento, lote, estado de stock, código de barras).
+7. Toasts de éxito en participio; errores con `getErrorMessage`.
+8. Probar en **375 px** y en escritorio, en **tema claro y oscuro**. `npm run build` sin errores.

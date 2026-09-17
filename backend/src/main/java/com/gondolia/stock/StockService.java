@@ -63,9 +63,12 @@ import org.springframework.transaction.annotation.Transactional;
  * <ul>
  *   <li>Cada ingreso crea un lote nuevo, aunque repita número o vencimiento de otro.</li>
  *   <li>Las ventas consumen lotes vendibles ({@code ACTIVE}, con remanente, no vencidos) en el orden de rotación del
- *       comercio: FIFO {@code received_at, id}; FEFO {@code expiry_date NULLS LAST, received_at, id}. Los lotes se
- *       bloquean con {@code SELECT ... FOR UPDATE} siempre en orden de id (ventas, ajustes, transferencias y recalls),
- *       así las operaciones concurrentes no se bloquean mutuamente.</li>
+ *       comercio: <b>primero los lotes en liquidación</b> ({@code discount_pct} activo) y dentro de cada grupo FIFO
+ *       {@code received_at, id} o FEFO {@code expiry_date NULLS LAST, received_at, id} (SPEC §4.2). Los lotes se
+ *       bloquean con {@code SELECT ... FOR UPDATE} siempre en orden de id (ventas, anulaciones, ajustes,
+ *       transferencias y recalls), así las operaciones concurrentes no se bloquean mutuamente.</li>
+ *   <li>Anular una venta ({@link #voidSale}) crea un {@code SALE_VOID} por cada línea del batch y devuelve las
+ *       unidades a sus lotes: toda métrica de ventas tiene que descontar esos movimientos.</li>
  *   <li>Un lote que llega a 0 queda {@code DEPLETED}; si fue por {@code WASTE_EXPIRED}, {@code EXPIRED_DISCARDED}; un
  *       lote {@code RECALLED} sigue {@code RECALLED}.</li>
  * </ul>
@@ -127,6 +130,17 @@ public class StockService {
                                  List<RecallMatch> recallMatches) {
     }
 
+    /**
+     * Anulación de una venta completa (SPEC §15.1). {@code batchRef} es el de la venta ({@code P-...} en el POS
+     * GondolIA, {@code S-...} en una venta manual); {@code reason} queda en el motivo de cada movimiento.
+     */
+    public record VoidSaleCommand(Long tenantId, String batchRef, Long userId, String reason) {
+    }
+
+    /** Sucursal y producto afectados por una operación (para no repetir eventos). */
+    private record BranchProduct(Long branchId, Long productId) {
+    }
+
     // ------------------------------------------------------------------ mensajes
 
     static final String MSG_QUANTITY = "La cantidad tiene que ser mayor a cero";
@@ -143,6 +157,9 @@ public class StockService {
     static final String MSG_SAME_BRANCH = "La sucursal de origen y la de destino tienen que ser distintas";
     static final String MSG_NO_ITEMS = "Indicá al menos un lote para transferir";
     static final String MSG_BATCH_REF_LENGTH = "La referencia de la operación no puede superar 40 caracteres";
+    static final String MSG_BATCH_REF_REQUIRED = "Indicá la referencia de la venta que querés anular";
+    static final String MSG_SALE_NOT_FOUND = "La venta no existe";
+    static final String MSG_ALREADY_VOIDED = "La venta ya fue anulada";
     static final String MSG_LOT_NUMBER_LENGTH =
             "El número de lote no puede superar " + Lot.MAX_LOT_NUMBER_LENGTH + " caracteres";
 
@@ -151,12 +168,20 @@ public class StockService {
             MovementType.RECALL_REMOVAL);
     private static final int MAX_REASON_LENGTH = 300;
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
-    /** SPEC §4.2: FIFO {@code received_at, id}; FEFO {@code expiry_date NULLS LAST, received_at, id}. */
-    private static final Comparator<Lot> FIFO_ORDER =
+    /** "Primero lo que entró antes": {@code received_at, id}. */
+    private static final Comparator<Lot> RECEIVED_ORDER =
             Comparator.comparing(Lot::getReceivedAt).thenComparing(Lot::getId);
-    private static final Comparator<Lot> FEFO_ORDER =
+    /** "Primero lo que vence antes": {@code expiry_date NULLS LAST, received_at, id}. */
+    private static final Comparator<Lot> EXPIRY_ORDER =
             Comparator.comparing(Lot::getExpiryDate, Comparator.nullsLast(Comparator.naturalOrder()))
-                    .thenComparing(FIFO_ORDER);
+                    .thenComparing(RECEIVED_ORDER);
+    /** SPEC §4.2: los lotes en liquidación ({@code discount_pct} activo) salen antes que el resto. */
+    private static final Comparator<Lot> DISCOUNTED_FIRST =
+            Comparator.comparingInt((Lot lot) -> activeDiscount(lot) != null ? 0 : 1);
+    /** SPEC §4.2: liquidación primero y después FIFO {@code received_at, id}. */
+    private static final Comparator<Lot> FIFO_ORDER = DISCOUNTED_FIRST.thenComparing(RECEIVED_ORDER);
+    /** SPEC §4.2: liquidación primero y después FEFO {@code expiry_date NULLS LAST, received_at, id}. */
+    private static final Comparator<Lot> FEFO_ORDER = DISCOUNTED_FIRST.thenComparing(EXPIRY_ORDER);
 
     private final LotRepository lotRepository;
     private final StockMovementRepository movementRepository;
@@ -235,7 +260,8 @@ public class StockService {
     /**
      * Descuenta la venta de los lotes vendibles en el orden de rotación del comercio. El vencimiento de los lotes se
      * evalúa a la fecha de la venta ({@code occurredAt} en la zona de negocio): una venta histórica (CSV, datos demo)
-     * puede consumir un lote que vencía después de esa fecha, pero nunca uno que ya estaba vencido. Cada lote aplica su
+     * puede consumir un lote que vencía después de esa fecha, pero nunca uno que ya estaba vencido. Los lotes en
+     * liquidación salen primero (SPEC §4.2). Cada lote aplica su
      * {@code discount_pct}. Si el stock no alcanza, el faltante se registra como {@code SALE} con {@code lotId} null
      * y se abre (una vez por sucursal y producto) la alerta {@code SALE_WITHOUT_STOCK}.
      */
@@ -309,6 +335,82 @@ public class StockService {
         movementRepository.flush();
         eventPublisher.publishEvent(new StockChangedEvent(tenantId, branch.getId(), product.getId()));
         return new SaleResult(List.copyOf(movements), remaining, scaleMoney(total));
+    }
+
+    /**
+     * Anula una venta completa (SPEC §15.1): por cada movimiento {@code SALE} del batch crea un {@code SALE_VOID} con
+     * la misma cantidad, lote y precio, y devuelve las unidades a ese lote (un lote {@code DEPLETED} vuelve a
+     * {@code ACTIVE}; uno {@code RECALLED}, {@code EXPIRED_DISCARDED} o vencido conserva su estado). Las líneas de
+     * faltante ({@code lotId} null) también se anulan para que las ventas netas cierren, pero no devuelven stock.
+     * <p>
+     * Es idempotente por batch: si ya existe un {@code SALE_VOID}, 409 {@code ALREADY_VOIDED}. Los lotes se bloquean
+     * en orden de id y se publica un {@link StockChangedEvent} por sucursal y producto afectados.
+     *
+     * @return los movimientos {@code SALE_VOID} creados, en el orden de las líneas originales
+     */
+    @Transactional(noRollbackFor = ApiException.class)
+    public List<StockMovement> voidSale(VoidSaleCommand cmd) {
+        Objects.requireNonNull(cmd, "cmd");
+        Long tenantId = requireTenant(cmd.tenantId());
+        String batchRef = cmd.batchRef() == null ? null : cmd.batchRef().strip();
+        if (batchRef == null || batchRef.isBlank()) {
+            throw new BadRequestException(ErrorCodes.VALIDATION_ERROR, MSG_BATCH_REF_REQUIRED);
+        }
+        List<StockMovement> batch = movementRepository.findByTenantIdAndBatchRefOrderByIdAsc(tenantId, batchRef);
+        List<StockMovement> sales = batch.stream().filter(movement -> movement.getType() == MovementType.SALE).toList();
+        if (sales.isEmpty()) {
+            throw new NotFoundException(MSG_SALE_NOT_FOUND);
+        }
+        if (batch.stream().anyMatch(movement -> movement.getType() == MovementType.SALE_VOID)) {
+            throw new ConflictException(ErrorCodes.ALREADY_VOIDED, MSG_ALREADY_VOIDED);
+        }
+
+        // Bloqueo en orden de id (igual que ventas, ajustes y transferencias) y recién después el chequeo definitivo
+        // de idempotencia: dos anulaciones simultáneas del mismo ticket se serializan en los lotes.
+        Map<Long, Lot> lots = new HashMap<>();
+        sales.stream().map(StockMovement::getLotId).filter(Objects::nonNull).distinct().sorted()
+                .forEach(lotId -> lots.put(lotId, lockLot(tenantId, lotId)));
+        if (movementRepository.existsByTenantIdAndBatchRefAndType(tenantId, batchRef, MovementType.SALE_VOID)) {
+            throw new ConflictException(ErrorCodes.ALREADY_VOIDED, MSG_ALREADY_VOIDED);
+        }
+
+        Instant occurredAt = now();
+        String reason = abbreviateReason(cmd.reason());
+        List<StockMovement> voids = new ArrayList<>();
+        Set<BranchProduct> touched = new LinkedHashSet<>();
+        for (StockMovement sale : sales) {
+            Lot lot = sale.getLotId() == null ? null : lots.get(sale.getLotId());
+            if (lot != null) {
+                lot.setQuantity(lot.getQuantity() + sale.getQuantity());
+                if (lot.getStatus() == LotStatus.DEPLETED) {
+                    lot.setStatus(LotStatus.ACTIVE);
+                }
+            }
+            StockMovement reversal = new StockMovement();
+            reversal.setTenantId(tenantId);
+            reversal.setBranchId(sale.getBranchId());
+            reversal.setProductId(sale.getProductId());
+            reversal.setLotId(sale.getLotId());
+            reversal.setType(MovementType.SALE_VOID);
+            reversal.setQuantity(sale.getQuantity());
+            reversal.setUnitPrice(sale.getUnitPrice());
+            reversal.setDiscountPct(sale.getDiscountPct());
+            reversal.setTotalAmount(sale.getTotalAmount());
+            reversal.setSource(sale.getSource());
+            reversal.setBatchRef(batchRef);
+            reversal.setReason(reason);
+            reversal.setUserId(cmd.userId());
+            reversal.setOccurredAt(occurredAt);
+            voids.add(reversal);
+            touched.add(new BranchProduct(sale.getBranchId(), sale.getProductId()));
+        }
+        movementRepository.saveAll(voids);
+        movementRepository.flush();
+
+        touched.forEach(key -> eventPublisher.publishEvent(
+                new StockChangedEvent(tenantId, key.branchId(), key.productId())));
+        log.info("Venta {} anulada: {} movimientos devueltos a stock", batchRef, voids.size());
+        return List.copyOf(voids);
     }
 
     // ------------------------------------------------------------------ ajustes
@@ -476,7 +578,11 @@ public class StockService {
 
     // ------------------------------------------------------------------ lecturas
 
-    /** Lotes vendibles de un producto en una sucursal, en el orden en que se venderán (el primero "se vende primero"). */
+    /**
+     * Lotes vendibles de un producto en una sucursal, en el orden en que se venderán: primero los que están en
+     * liquidación y después, dentro de cada grupo, FIFO o FEFO según el comercio (SPEC §4.2). El primero es el que la
+     * UI marca como "Se vende primero" (o "En liquidación · sale primero").
+     */
     @Transactional(readOnly = true)
     public List<Lot> lotsInRotationOrder(Long tenantId, Long branchId, Long productId) {
         LocalDate today = LocalDate.now(clock);
@@ -516,6 +622,14 @@ public class StockService {
         return result;
     }
 
+    /**
+     * Comparador del orden de rotación (SPEC §4.2) para ordenar en memoria lotes vendibles ya cargados: liquidación
+     * primero y después FIFO o FEFO. Lo usan la IA (simulación de consumo) y el catálogo ({@code rotationRank}).
+     */
+    public static Comparator<Lot> rotationComparator(StockRotation rotation) {
+        return rotation == StockRotation.FEFO ? FEFO_ORDER : FIFO_ORDER;
+    }
+
     /** Rotación configurada del comercio (FIFO si no tiene configuración). */
     @Transactional(readOnly = true)
     public StockRotation rotationFor(Long tenantId) {
@@ -551,7 +665,7 @@ public class StockService {
         lots.forEach(entityManager::refresh);
         return lots.stream()
                 .filter(lot -> lot.isSellableOn(date))
-                .sorted(rotation == StockRotation.FEFO ? FEFO_ORDER : FIFO_ORDER)
+                .sorted(rotationComparator(rotation))
                 .toList();
     }
 

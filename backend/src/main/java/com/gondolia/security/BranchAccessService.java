@@ -24,7 +24,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 /**
  * Alcance por sucursal (SPEC §3.5). Jefe y administrador acceden a todas las sucursales activas del tenant; el
- * empleado solo a las asignadas en {@code user_branches}. El frontend elige la sucursal con el encabezado
+ * empleado y el cajero solo a las asignadas en {@code user_branches}. El frontend elige la sucursal con el encabezado
  * {@code X-Branch-Id} (id numérico, o {@code all}/ausente para todas las accesibles).
  * <p>
  * Fuera de un request HTTP autenticado (tareas programadas, listeners asincrónicos, STOMP) no hay encabezado ni
@@ -65,7 +65,10 @@ public class BranchAccessService {
     private final UserBranchRepository userBranchRepository;
     private final UserRepository userRepository;
 
-    /** Sucursales activas accesibles por el usuario actual, por nombre. Vacía sin usuario de tenant. */
+    /**
+     * Sucursales activas accesibles por el usuario actual, por nombre. Vacía sin usuario de tenant. ADMIN y BOSS ven
+     * todas las del comercio; EMPLOYEE y CASHIER, solo las asignadas.
+     */
     public List<BranchRef> accessibleBranches() {
         return CurrentUser.optional().map(this::accessibleBranches).orElse(List.of());
     }
@@ -151,7 +154,8 @@ public class BranchAccessService {
     }
 
     /**
-     * Usuarios activos con acceso a la sucursal: jefes y administradores del tenant más los empleados asignados.
+     * Usuarios activos con acceso a la sucursal: jefes y administradores del tenant más los empleados y cajeros
+     * asignados.
      * Vacía si la sucursal no es del tenant o está desactivada.
      */
     public List<Long> userIdsWithAccess(Long tenantId, Long branchId) {

@@ -24,6 +24,20 @@ public final class ErrorCodes {
     public static final String BRANCH_LIMIT_REACHED = "BRANCH_LIMIT_REACHED";
     public static final String BRANCH_HAS_STOCK = "BRANCH_HAS_STOCK";
     public static final String LOT_NOT_TRANSFERABLE = "LOT_NOT_TRANSFERABLE";
+    /** El módulo no está habilitado para el comercio (SPEC §14.1). */
+    public static final String MODULE_DISABLED = "MODULE_DISABLED";
+    /** No se puede deshabilitar el módulo porque el comercio lo está usando (SPEC §14.1). */
+    public static final String MODULE_IN_USE = "MODULE_IN_USE";
+    /** La venta ya tiene una anulación registrada (SPEC §15.1). */
+    public static final String ALREADY_VOIDED = "ALREADY_VOIDED";
+    /** La caja ya tiene un turno abierto (SPEC §15.2). */
+    public static final String REGISTER_BUSY = "REGISTER_BUSY";
+    /** El usuario ya tiene un turno abierto (SPEC §15.2). */
+    public static final String SESSION_ALREADY_OPEN = "SESSION_ALREADY_OPEN";
+    /** Los pagos no cubren el total de la venta (SPEC §15.2). */
+    public static final String PAYMENT_INSUFFICIENT = "PAYMENT_INSUFFICIENT";
+    /** La importación tiene filas con error sin omitir (SPEC §16.3). */
+    public static final String IMPORT_HAS_ERRORS = "IMPORT_HAS_ERRORS";
     public static final String INVALID_FILE = "INVALID_FILE";
     public static final String INVALID_API_KEY = "INVALID_API_KEY";
     public static final String METHOD_NOT_ALLOWED = "METHOD_NOT_ALLOWED";
