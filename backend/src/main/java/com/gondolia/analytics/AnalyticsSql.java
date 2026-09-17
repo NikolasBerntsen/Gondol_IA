@@ -68,7 +68,6 @@ public final class AnalyticsSql {
         return sellable * 2 <= minStock ? "CRITICO" : "BAJO";
     }
 
-    /** Comienzo del día de negocio (00:00 en la zona del comercio) como instante. */
     /**
      * Comienzo del día en la zona del comercio, tipado como {@code OffsetDateTime}: un {@code Instant} suelto no le
      * permite a Postgres inferir el tipo del parámetro.

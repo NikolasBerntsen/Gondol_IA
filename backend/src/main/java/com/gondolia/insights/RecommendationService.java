@@ -86,6 +86,9 @@ public class RecommendationService {
     static final String FIELD_LOT_UNITS_AT_ACCEPT = "lotUnitsAtAccept";
     static final String FIELD_MEASURED_AT = "measuredAt";
 
+    /** Código de país para los links de WhatsApp (el prototipo es de comercios argentinos). */
+    static final String COUNTRY_CODE = "54";
+
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     private static final String SELECT_RECOMMENDATION = """
@@ -382,8 +385,8 @@ public class RecommendationService {
         }
         text.append("\n\n¡Gracias!");
         String body = text.toString();
-        String phone = supplier == null ? null : digits(supplier.getPhone());
-        String url = phone == null || phone.isBlank() ? null
+        String phone = supplier == null ? null : whatsappPhone(supplier.getPhone());
+        String url = phone == null ? null
                 : "https://wa.me/" + phone + "?text=" + URLEncoder.encode(body, StandardCharsets.UTF_8);
         return new Order(supplier == null ? null : supplier.getName(), body, url);
     }
@@ -451,8 +454,22 @@ public class RecommendationService {
         return value.stripTrailingZeros().toPlainString();
     }
 
-    private static String digits(String phone) {
-        return phone == null ? null : phone.replaceAll("\\D", "");
+    /**
+     * Teléfono en el formato que espera {@code wa.me}: solo dígitos, sin el 0 de larga distancia y con el código de
+     * país. Si el proveedor ya lo cargó con código de país se respeta. {@code null} si no parece un número.
+     */
+    static String whatsappPhone(String phone) {
+        if (phone == null) {
+            return null;
+        }
+        String digits = phone.replaceAll("\\D", "").replaceFirst("^0+", "");
+        if (digits.isEmpty()) {
+            return null;
+        }
+        if (!digits.startsWith(COUNTRY_CODE)) {
+            digits = COUNTRY_CODE + digits;
+        }
+        return digits.length() >= 10 && digits.length() <= 15 ? digits : null;
     }
 
     private static String trim(String note) {

@@ -112,7 +112,7 @@ public class RecommendationOutcomeJob {
         outcome.put(RecommendationService.FIELD_MEASURED_AT, clock.instant().toString());
 
         recommendation.setOutcome(outcome);
-        recommendationRepository.save(recommendation);
+        recommendationRepository.saveAndFlush(recommendation);
         return true;
     }
 }
