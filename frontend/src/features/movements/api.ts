@@ -128,3 +128,31 @@ export const productPickApi = {
   search: (q: string, size = 12) =>
     apiGet<PageResponse<ProductPick>>('/tenant/products', { q, size, active: true, sort: 'name,asc' }),
 };
+
+// ---------------------------------------------------------------------------
+// Lotes del catálogo (endpoint del módulo A1, SPEC §6.3) — los usa el diálogo de ajustes
+// ---------------------------------------------------------------------------
+
+/** Lote tal como lo devuelve `GET /api/tenant/lots` (SPEC §6.3). */
+export interface LotPick {
+  id: number;
+  branchId: number;
+  branchName: string;
+  productId: number;
+  lotNumber: string | null;
+  expiryDate: string | null;
+  daysToExpiry: number | null;
+  initialQuantity: number;
+  quantity: number;
+  costPrice: number | null;
+  receivedAt: string;
+  status: 'ACTIVE' | 'DEPLETED' | 'EXPIRED_DISCARDED' | 'RECALLED';
+  discountPct: number | null;
+  expiryBucket: 'EXPIRED' | 'CRITICAL' | 'WARNING' | 'UPCOMING' | 'OK' | null;
+  rotationRank: number | null;
+}
+
+export const lotPickApi = {
+  byProduct: (productId: number) =>
+    apiGet<LotPick[]>('/tenant/lots', { productId, includeEmpty: true }),
+};
