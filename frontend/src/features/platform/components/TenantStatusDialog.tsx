@@ -154,7 +154,8 @@ export function TenantStatusDialog({ action, tenant, onClose, redirectAfterDelet
           setError('Escribí el nombre exacto del cliente para confirmar.');
           return;
         }
-        return mutation.mutateAsync();
+        // El error ya se muestra en `onError`: acá solo evitamos que la promesa quede rechazada.
+        return mutation.mutateAsync().catch(() => undefined);
       }}
       title={copy.title}
       description={

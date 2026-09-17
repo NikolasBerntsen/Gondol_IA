@@ -67,8 +67,12 @@ export function useModuleToggle() {
 
   const confirmDisable = async () => {
     if (!pending || pending.blocked) return;
-    await mutation.mutateAsync({ tenantId: pending.target.tenantId, module: pending.module, enabled: false });
-    setPending(null);
+    try {
+      await mutation.mutateAsync({ tenantId: pending.target.tenantId, module: pending.module, enabled: false });
+      setPending(null);
+    } catch {
+      // El mensaje ya se mostró en `onError`; el diálogo queda abierto para reintentar o cancelar.
+    }
   };
 
   return {
