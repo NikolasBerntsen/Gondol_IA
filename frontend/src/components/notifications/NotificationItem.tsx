@@ -23,9 +23,16 @@ const TYPE_ICONS: Record<NotificationType, LucideIcon> = {
 };
 
 const SEVERITY_ICON_CLASSES: Record<Severity, string> = {
-  INFO: 'bg-sky-50 text-sky-600',
-  WARNING: 'bg-amber-50 text-amber-600',
-  CRITICAL: 'bg-red-100 text-red-600',
+  INFO: 'bg-info-soft text-info-ink',
+  WARNING: 'bg-warn-soft text-warn-ink',
+  CRITICAL: 'bg-crit-soft text-crit-ink',
+};
+
+/** Franja de severidad de la fila (docs/design-system.md §5.5): esquinas rectas, nunca sobre tarjeta. */
+const SEVERITY_STRIPE: Record<Severity, string> = {
+  INFO: 'gd-stripe-info',
+  WARNING: 'gd-stripe-warn',
+  CRITICAL: 'gd-stripe-crit',
 };
 
 export function notificationIcon(type: NotificationType): LucideIcon {
@@ -51,14 +58,15 @@ export function NotificationItem({ notification, onClick, expanded = false, clas
       type="button"
       onClick={() => onClick?.(notification)}
       className={cn(
-        'group flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500',
-        critical && unread ? 'bg-red-50/80 hover:bg-red-50' : unread ? 'bg-brand-50/50 hover:bg-brand-50' : 'hover:bg-slate-50',
+        'group flex w-full items-start gap-3 py-3 pl-4 pr-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        SEVERITY_STRIPE[notification.severity],
+        unread ? 'bg-muted/50 hover:bg-muted' : 'hover:bg-muted/40',
         className,
       )}
     >
       <span
         className={cn(
-          'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl',
+          'mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-control',
           SEVERITY_ICON_CLASSES[notification.severity],
         )}
       >
@@ -68,29 +76,29 @@ export function NotificationItem({ notification, onClick, expanded = false, clas
         <span className="flex items-start gap-2">
           <span
             className={cn(
-              'min-w-0 flex-1 text-sm',
-              unread ? 'font-semibold text-slate-900' : 'font-medium text-slate-700',
-              critical && 'text-red-700',
+              'min-w-0 flex-1 text-base',
+              unread ? 'font-semibold text-foreground' : 'font-medium text-foreground',
+              critical && 'text-crit-ink',
               !expanded && 'line-clamp-2',
             )}
           >
             {notification.title}
           </span>
           {unread && (
-            <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', critical ? 'bg-red-500' : 'bg-brand-500')}>
+            <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', critical ? 'bg-crit' : 'bg-primary')}>
               <span className="sr-only">No leída</span>
             </span>
           )}
         </span>
         {notification.body && (
-          <span className={cn('mt-0.5 block text-sm text-slate-500', !expanded && 'line-clamp-2')}>
+          <span className={cn('mt-0.5 block text-sm text-muted-foreground', !expanded && 'line-clamp-2')}>
             {notification.body}
           </span>
         )}
         <time
           dateTime={notification.createdAt}
           title={formatDateTime(notification.createdAt)}
-          className="mt-1 block text-xs text-slate-400"
+          className="mt-1 block font-mono text-[11px] text-muted-foreground"
         >
           {formatRelative(notification.createdAt)}
         </time>

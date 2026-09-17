@@ -3,19 +3,24 @@ import { cn } from '@/lib/cn';
 
 export type ControlSize = 'sm' | 'md' | 'lg';
 
-/** Clases compartidas por Input, Select y Textarea. */
+/**
+ * Clases compartidas por Input, Select y Textarea (docs/design-system.md §6):
+ * radio de control (8 px), borde `--input`, foco con borde `ring` + halo al 25 %,
+ * `aria-invalid` pinta el borde en `crit`.
+ */
 export const controlBaseClasses =
-  'block w-full rounded-xl border border-slate-300 bg-white text-slate-900 shadow-sm transition placeholder:text-slate-400 ' +
-  'focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/25 ' +
-  'disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 read-only:bg-slate-50';
+  'block w-full rounded-control border border-input bg-card text-foreground transition-colors ' +
+  'placeholder:text-muted-foreground hover:border-muted-foreground/60 ' +
+  'focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/25 ' +
+  'disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground read-only:bg-muted/60';
 
-export const controlInvalidClasses = 'border-red-400 focus:border-red-500 focus:ring-red-500/25';
+export const controlInvalidClasses = 'border-crit focus-visible:border-crit focus-visible:ring-crit/25';
 
-/** En mobile se usa 16px para evitar el zoom automático de iOS al enfocar. */
+/** Alturas: sm 32 · md 36 (base) · lg 44 (táctil). 16 px en móvil para evitar el zoom de iOS. */
 export const CONTROL_SIZE_CLASSES: Record<ControlSize, string> = {
-  sm: 'h-8 px-2.5 text-sm',
-  md: 'h-10 px-3 text-base sm:text-sm',
-  lg: 'h-12 px-4 text-base',
+  sm: 'h-8 px-2.5 text-base',
+  md: 'h-9 px-3 text-md sm:text-base',
+  lg: 'h-11 px-3.5 text-md',
 };
 
 export function isAriaInvalid(value: unknown): boolean {
@@ -45,8 +50,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         controlBaseClasses,
         CONTROL_SIZE_CLASSES[inputSize],
         hasError && controlInvalidClasses,
-        leftIcon && 'pl-10',
-        rightElement && 'pr-11',
+        leftIcon && 'pl-9',
+        rightElement && 'pr-10',
         className,
       )}
       {...props}
@@ -56,12 +61,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   return (
     <div className={cn('relative', containerClassName)}>
       {leftIcon && (
-        <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400 [&_svg]:h-4 [&_svg]:w-4">
+        <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-muted-foreground [&_svg]:h-4 [&_svg]:w-4">
           {leftIcon}
         </span>
       )}
       {input}
-      {rightElement && <span className="absolute inset-y-0 right-1.5 flex items-center">{rightElement}</span>}
+      {rightElement && <span className="absolute inset-y-0 right-1 flex items-center">{rightElement}</span>}
     </div>
   );
 });

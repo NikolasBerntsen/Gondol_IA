@@ -55,7 +55,7 @@ export default function NotificationsPage() {
             onClick={() => markAllRead.mutate()}
             loading={markAllRead.isPending}
             disabled={unread === 0}
-            leftIcon={<CheckCheck className="h-4 w-4" aria-hidden="true" />}
+            leftIcon={<CheckCheck aria-hidden="true" />}
           >
             Marcar todas como leídas
           </Button>
@@ -63,7 +63,7 @@ export default function NotificationsPage() {
       />
 
       <Card padding="none">
-        <div className="border-b border-slate-100 px-4 py-3">
+        <div className="border-b border-border px-4 py-3">
           <Tabs<Filter>
             variant="pills"
             ariaLabel="Filtrar notificaciones"
@@ -81,7 +81,7 @@ export default function NotificationsPage() {
           <ul className="space-y-1 p-2" aria-hidden="true">
             {Array.from({ length: 5 }, (_, index) => (
               <li key={index} className="flex gap-3 px-3 py-3">
-                <Skeleton className="h-9 w-9 rounded-xl" />
+                <Skeleton className="h-9 w-9 rounded-control" />
                 <div className="flex-1 space-y-2">
                   <Skeleton className="h-4 w-2/3" />
                   <Skeleton className="h-3 w-full" />
@@ -99,9 +99,9 @@ export default function NotificationsPage() {
             description="Cuando haya avisos, alertas o respuestas de soporte, las vas a ver acá."
           />
         ) : (
-          <ul className={`divide-y divide-slate-100 p-2 transition-opacity ${listQuery.isPlaceholderData ? 'opacity-60' : ''}`}>
+          <ul className={`divide-y divide-border transition-opacity ${listQuery.isPlaceholderData ? 'opacity-60' : ''}`}>
             {notifications.map((notification) => (
-              <li key={notification.id} className="flex items-start gap-1 py-0.5">
+              <li key={notification.id} className="flex items-start gap-1 pr-2">
                 <NotificationItem notification={notification} onClick={openNotification} expanded className="flex-1" />
                 {!notification.read && (
                   <Button

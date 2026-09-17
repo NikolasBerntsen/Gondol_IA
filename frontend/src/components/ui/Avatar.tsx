@@ -2,10 +2,10 @@ import { cn } from '@/lib/cn';
 import { initials } from '@/lib/format';
 
 const SIZE_CLASSES = {
-  sm: 'h-8 w-8 text-xs',
-  md: 'h-9 w-9 text-sm',
-  lg: 'h-12 w-12 text-base',
-  xl: 'h-16 w-16 text-xl',
+  sm: 'h-7 w-7 text-[11px]',
+  md: 'h-8 w-8 text-xs',
+  lg: 'h-10 w-10 text-sm',
+  xl: 'h-14 w-14 text-md',
 } as const;
 
 export interface AvatarProps {
@@ -14,13 +14,13 @@ export interface AvatarProps {
   className?: string;
 }
 
-/** Círculo con las iniciales del usuario. */
+/** Círculo con las iniciales del usuario (sin foto: el prototipo no usa avatares con imagen). */
 export function Avatar({ name, size = 'md', className }: AvatarProps) {
   return (
     <span
       aria-hidden="true"
       className={cn(
-        'inline-flex shrink-0 select-none items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 font-semibold text-white ring-2 ring-white',
+        'inline-grid shrink-0 select-none place-items-center rounded-full bg-primary/[0.12] font-bold text-primary',
         SIZE_CLASSES[size],
         className,
       )}

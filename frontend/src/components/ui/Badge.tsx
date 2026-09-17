@@ -3,28 +3,69 @@ import type { HTMLAttributes } from 'react';
 import type { ExpiryBucket, ReorderStatus, Severity, StockStatus } from '@/api/types';
 import { cn } from '@/lib/cn';
 
-export type BadgeTone = 'neutral' | 'brand' | 'success' | 'warning' | 'orange' | 'danger' | 'info' | 'purple';
+/**
+ * Tonos preferidos: `neutral` · `primary` · `ok` · `warn` · `crit` · `info`.
+ * Los nombres del kit anterior (`brand`, `success`, `warning`, `orange`, `danger`, `purple`) siguen
+ * funcionando como alias.
+ */
+export type BadgeTone =
+  | 'neutral'
+  | 'primary'
+  | 'brand'
+  | 'ok'
+  | 'success'
+  | 'warn'
+  | 'warning'
+  | 'orange'
+  | 'crit'
+  | 'danger'
+  | 'info'
+  | 'purple';
 
-const TONE_CLASSES: Record<BadgeTone, string> = {
-  neutral: 'bg-slate-100 text-slate-700 ring-slate-500/15',
-  brand: 'bg-brand-50 text-brand-700 ring-brand-600/20',
-  success: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
-  warning: 'bg-amber-50 text-amber-800 ring-amber-600/25',
-  orange: 'bg-orange-50 text-orange-700 ring-orange-600/20',
-  danger: 'bg-red-50 text-red-700 ring-red-600/20',
-  info: 'bg-sky-50 text-sky-700 ring-sky-600/20',
-  purple: 'bg-violet-50 text-violet-700 ring-violet-600/20',
+const SOFT: Record<BadgeTone, string> = {
+  neutral: 'bg-muted text-muted-foreground',
+  primary: 'bg-primary/10 text-primary',
+  brand: 'bg-primary/10 text-primary',
+  ok: 'bg-ok-soft text-ok-ink',
+  success: 'bg-ok-soft text-ok-ink',
+  warn: 'bg-warn-soft text-warn-ink',
+  warning: 'bg-warn-soft text-warn-ink',
+  orange: 'bg-warn-soft text-warn-ink',
+  crit: 'bg-crit-soft text-crit-ink',
+  danger: 'bg-crit-soft text-crit-ink',
+  info: 'bg-info-soft text-info-ink',
+  purple: 'bg-info-soft text-info-ink',
 };
 
-const DOT_CLASSES: Record<BadgeTone, string> = {
-  neutral: 'bg-slate-400',
-  brand: 'bg-brand-500',
-  success: 'bg-emerald-500',
-  warning: 'bg-amber-500',
-  orange: 'bg-orange-500',
-  danger: 'bg-red-500',
-  info: 'bg-sky-500',
-  purple: 'bg-violet-500',
+/** `ok` y `warn` sólidos usan la tinta: el blanco sobre el color pleno no llega a AA (§2.6). */
+const SOLID: Record<BadgeTone, string> = {
+  neutral: 'bg-foreground text-background',
+  primary: 'bg-primary text-primary-foreground',
+  brand: 'bg-primary text-primary-foreground',
+  ok: 'bg-ok-ink text-card',
+  success: 'bg-ok-ink text-card',
+  warn: 'bg-warn-ink text-card',
+  warning: 'bg-warn-ink text-card',
+  orange: 'bg-warn-ink text-card',
+  crit: 'bg-crit text-crit-foreground',
+  danger: 'bg-crit text-crit-foreground',
+  info: 'bg-info text-info-foreground',
+  purple: 'bg-info text-info-foreground',
+};
+
+const DOT: Record<BadgeTone, string> = {
+  neutral: 'bg-muted-foreground',
+  primary: 'bg-primary',
+  brand: 'bg-primary',
+  ok: 'bg-ok',
+  success: 'bg-ok',
+  warn: 'bg-warn',
+  warning: 'bg-warn',
+  orange: 'bg-warn',
+  crit: 'bg-crit',
+  danger: 'bg-crit',
+  info: 'bg-info',
+  purple: 'bg-info',
 };
 
 export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
@@ -33,66 +74,90 @@ export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
   /** Punto de color a la izquierda. */
   dot?: boolean;
   icon?: LucideIcon;
+  /** Relleno pleno: solo para estados terminales o que bloquean. */
+  solid?: boolean;
+  /** Forma de píldora (totalmente redondeada). Reservada para **estados**; ver `StatusPill`. */
+  pill?: boolean;
 }
 
-export function Badge({ tone = 'neutral', size = 'md', dot, icon: Icon, className, children, ...props }: BadgeProps) {
+/**
+ * Etiqueta de dato (radio 4 px): plan, categoría, tipo de movimiento, cantidad…
+ * Para el **estado** de una fila usá `StatusPill`/`StockStatusPill` de `@/components/gondola`.
+ */
+export function Badge({
+  tone = 'neutral',
+  size = 'md',
+  dot,
+  icon: Icon,
+  solid,
+  pill,
+  className,
+  children,
+  ...props
+}: BadgeProps) {
   return (
     <span
       className={cn(
-        'inline-flex max-w-full items-center gap-1.5 whitespace-nowrap rounded-full font-medium ring-1 ring-inset',
-        size === 'sm' ? 'px-2 py-0.5 text-[11px]' : 'px-2.5 py-0.5 text-xs',
-        TONE_CLASSES[tone],
+        'inline-flex max-w-full items-center gap-1.5 whitespace-nowrap font-semibold',
+        pill ? 'rounded-full' : 'rounded-tag',
+        size === 'sm' ? 'h-[20px] px-1.5 text-[11px]' : 'h-[22px] px-2 text-xs',
+        solid ? SOLID[tone] : SOFT[tone],
         className,
       )}
       {...props}
     >
-      {dot && <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', DOT_CLASSES[tone])} aria-hidden="true" />}
+      {dot && (
+        <span
+          className={cn('h-1.5 w-1.5 shrink-0 rounded-full', solid ? 'bg-current opacity-80' : DOT[tone])}
+          aria-hidden="true"
+        />
+      )}
       {Icon && <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
       <span className="truncate">{children}</span>
     </span>
   );
 }
 
-/** Tono de badge para una severidad (INFO → celeste, WARNING → ámbar, CRITICAL → rojo). */
+/** Tono para una severidad (INFO → info, WARNING → warn, CRITICAL → crit). */
 export function severityTone(severity: Severity): BadgeTone {
   switch (severity) {
     case 'CRITICAL':
-      return 'danger';
+      return 'crit';
     case 'WARNING':
-      return 'warning';
+      return 'warn';
     default:
       return 'info';
   }
 }
 
-/** Tono para buckets de vencimiento: Vencido/Crítico rojo, Por vencer naranja, Próximo ámbar, Vigente verde. */
+/** Tono por bucket de vencimiento: Vencido/Crítico `crit`, Por vencer `warn`, Próximo `info`, OK `neutral`. */
 export function expiryBucketTone(bucket: ExpiryBucket): BadgeTone {
   switch (bucket) {
     case 'EXPIRED':
     case 'CRITICAL':
-      return 'danger';
+      return 'crit';
     case 'WARNING':
-      return 'orange';
+      return 'warn';
     case 'UPCOMING':
-      return 'warning';
+      return 'info';
     default:
-      return 'success';
+      return 'neutral';
   }
 }
 
-/** Tono para el estado de stock de un producto: Sin stock rojo, Stock bajo ámbar, Normal verde. */
+/** Tono del estado de stock de un producto: Sin stock `crit`, Bajo `warn`, OK `ok`. */
 export function stockStatusTone(status: StockStatus): BadgeTone {
   switch (status) {
     case 'OUT':
-      return 'danger';
+      return 'crit';
     case 'LOW':
-      return 'warning';
+      return 'warn';
     default:
-      return 'success';
+      return 'ok';
   }
 }
 
-/** Tono para "Artículos a reponer": Sin stock y Crítico rojo, Bajo ámbar. */
+/** Tono para "Artículos a reponer": Sin stock y Crítico `crit`, Bajo `warn`. */
 export function reorderStatusTone(status: ReorderStatus): BadgeTone {
-  return status === 'BAJO' ? 'warning' : 'danger';
+  return status === 'BAJO' ? 'warn' : 'crit';
 }

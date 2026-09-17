@@ -43,7 +43,7 @@ export function BranchPicker({
     .map((branch) => ({ value: branch.id, label: branch.code ? `${branch.name} (${branch.code})` : branch.name }));
 
   return (
-    <div className={cn('rounded-2xl border border-brand-200 bg-brand-50/60 p-3 sm:p-4', className)}>
+    <div className={cn('rounded-control border border-primary/25 bg-primary/[0.06] p-3 sm:p-4', className)}>
       <Field label={label} hint={hint} error={error} required>
         <Select
           value={value ?? ''}

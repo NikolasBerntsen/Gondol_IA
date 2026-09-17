@@ -6,13 +6,14 @@ import { ALL_BRANCHES_LABEL, ALL_MY_BRANCHES_LABEL, useBranch } from './BranchCo
 
 export interface BranchSelectorProps {
   className?: string;
-  /** Siempre en versión reducida (ícono + sucursal, sin el nombre del comercio). En mobile ya se reduce solo. */
+  /** Solo la sucursal, sin el nombre del comercio (en pantallas chicas ya se reduce solo). */
   compact?: boolean;
 }
 
 /**
- * Selector de sucursal del topbar: nombre del comercio + sucursal elegida (SPEC §1.1, §9.6).
- * Oculto para roles de plataforma; solo texto cuando hay una única sucursal.
+ * Selector de alcance de la barra superior: "Minimercado El Sol · Todas las sucursales ▾"
+ * (SPEC §1.1, §9.6; docs/design-system.md §7.1). Es un **control** (radio 8 px), no una píldora.
+ * Oculto para roles de plataforma; solo texto cuando hay una única sucursal accesible.
  */
 export function BranchSelector({ className, compact = false }: BranchSelectorProps) {
   const { me } = useAuth();
@@ -23,42 +24,26 @@ export function BranchSelector({ className, compact = false }: BranchSelectorPro
 
   const tenantName = me.tenant.name;
   const Icon = isAll ? Building2 : Store;
-  const allLabel = me.role === 'TENANT_EMPLOYEE' ? ALL_MY_BRANCHES_LABEL : ALL_BRANCHES_LABEL;
+  const worksOnOneBranch = me.role === 'TENANT_EMPLOYEE' || me.role === 'TENANT_CASHIER';
+  const allLabel = worksOnOneBranch ? ALL_MY_BRANCHES_LABEL : ALL_BRANCHES_LABEL;
 
-  const content = (
-    <>
-      <span
-        className={cn(
-          'flex shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-700',
-          compact ? 'h-8 w-8' : 'h-8 w-8 sm:h-9 sm:w-9',
-        )}
-      >
-        <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
-      </span>
-      <span className="min-w-0 text-left leading-tight">
-        {!compact && <span className="hidden truncate text-xs font-medium text-slate-500 sm:block">{tenantName}</span>}
-        <span className="block truncate text-sm font-semibold text-slate-900">
-          {isAll ? (
-            <>
-              <span className="sm:hidden">Todas</span>
-              <span className="hidden sm:inline">{allLabel}</span>
-            </>
-          ) : (
-            scopeLabel || tenantName
-          )}
-        </span>
-      </span>
-    </>
+  // shrink-0: el alcance es dato operativo; se encoge antes el buscador que el nombre de la sucursal.
+  const base =
+    'inline-flex h-9 min-w-0 max-w-[58vw] shrink-0 items-center gap-2 rounded-control border border-input bg-card px-2.5 text-sm font-semibold text-foreground sm:max-w-[min(42vw,320px)] xl:max-w-none';
+
+  const label = (
+    <span className="truncate">
+      {!compact && <span className="hidden xl:inline">{tenantName} · </span>}
+      {isAll ? allLabel : scopeLabel || tenantName}
+    </span>
   );
 
   if (branches.length <= 1) {
     return (
-      <div
-        className={cn('flex min-w-0 max-w-[16rem] items-center gap-2.5 rounded-2xl py-1 pl-1 pr-3', className)}
-        title={`${tenantName} · ${scopeLabel}`}
-      >
-        {content}
-      </div>
+      <span className={cn(base, className)} title={`${tenantName} · ${scopeLabel}`}>
+        <Icon className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        {label}
+      </span>
     );
   }
 
@@ -68,24 +53,31 @@ export function BranchSelector({ className, compact = false }: BranchSelectorPro
   };
 
   return (
-    <div className={cn('relative min-w-0', className)}>
+    <div className={cn('relative min-w-0 shrink-0', className)}>
       <button
         {...dropdown.triggerProps}
-        aria-label={`Sucursal: ${scopeLabel}. Cambiar sucursal`}
+        aria-label={`Alcance: ${scopeLabel}. Cambiar sucursal`}
         className={cn(
-          'flex w-full min-w-0 max-w-[18rem] items-center gap-2.5 rounded-2xl border border-slate-200 bg-white py-1 pl-1 pr-2.5 shadow-sm transition',
-          'hover:border-brand-300 hover:bg-brand-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500',
-          dropdown.open && 'border-brand-300 ring-2 ring-brand-500/20',
+          base,
+          'w-full transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          dropdown.open && 'bg-muted',
         )}
       >
-        {content}
+        <Icon className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        {label}
         <ChevronDown
-          className={cn('ml-auto h-4 w-4 shrink-0 text-slate-400 transition-transform', dropdown.open && 'rotate-180')}
+          className={cn('ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform', dropdown.open && 'rotate-180')}
           aria-hidden="true"
         />
       </button>
+
       {dropdown.open && (
-        <DropdownPanel {...dropdown.panelProps} align="start" aria-label="Elegí una sucursal" className="w-72 max-w-[calc(100vw-1.5rem)]">
+        <DropdownPanel
+          {...dropdown.panelProps}
+          align="end"
+          aria-label="Elegí una sucursal"
+          className="w-72 max-w-[calc(100vw-1.5rem)]"
+        >
           <DropdownLabel>{tenantName}</DropdownLabel>
           {canSelectAll && (
             <>
@@ -93,7 +85,7 @@ export function BranchSelector({ className, compact = false }: BranchSelectorPro
                 checked={selectedBranchId === 'all'}
                 icon={<Building2 />}
                 description={`Consolidado de ${branches.length} sucursales`}
-                trailing={selectedBranchId === 'all' ? <Check className="h-4 w-4 text-brand-600" aria-hidden="true" /> : null}
+                trailing={selectedBranchId === 'all' ? <Check className="h-4 w-4 text-primary" aria-hidden="true" /> : null}
                 onClick={() => select('all')}
               >
                 {allLabel}
@@ -110,7 +102,7 @@ export function BranchSelector({ className, compact = false }: BranchSelectorPro
                   checked={checked}
                   icon={<Store />}
                   description={branch.code ?? undefined}
-                  trailing={checked ? <Check className="h-4 w-4 text-brand-600" aria-hidden="true" /> : null}
+                  trailing={checked ? <Check className="h-4 w-4 text-primary" aria-hidden="true" /> : null}
                   onClick={() => select(branch.id)}
                 >
                   {branch.name}

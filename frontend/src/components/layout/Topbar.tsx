@@ -3,21 +3,25 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthContext';
 import { BranchSelector } from '@/branches/BranchSelector';
+import { Button } from '@/components/ui/Button';
 import { SearchInput } from '@/components/ui/SearchInput';
 import { cn } from '@/lib/cn';
 import { formatLongDate } from '@/lib/format';
-import { Logo } from './Logo';
+import { LogoMark } from './Logo';
 import { NotificationBell } from './NotificationBell';
 import { UserMenu } from './UserMenu';
 
 const INVENTORY_PATH = '/app/inventory';
-const SEARCH_PLACEHOLDER = 'Buscar productos, categorías o códigos…';
+const SEARCH_PLACEHOLDER = 'Buscar productos o códigos…';
 
 export interface TopbarProps {
   onOpenSidebar: () => void;
 }
 
-/** Barra superior: menú (mobile), buscador, sucursal, fecha, notificaciones y usuario (SPEC §1.1). */
+/**
+ * Barra superior al ras (56 px): menú (mobile), buscador, alcance (comercio · sucursal),
+ * campana y usuario (docs/design-system.md §7.1).
+ */
 export function Topbar({ onOpenSidebar }: TopbarProps) {
   const { me, isTenantUser } = useAuth();
   const navigate = useNavigate();
@@ -43,65 +47,68 @@ export function Topbar({ onOpenSidebar }: TopbarProps) {
     navigate(q ? `${INVENTORY_PATH}?q=${encodeURIComponent(q)}` : INVENTORY_PATH);
   };
 
-  const today = formatLongDate();
-
   return (
-    <header className="sticky top-0 z-20 border-b border-slate-200/70 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/75">
-      <div className="flex h-16 items-center gap-2 px-3 sm:gap-3 sm:px-6 lg:px-8">
-        <button
-          type="button"
-          onClick={onOpenSidebar}
-          className="order-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 lg:hidden"
-          aria-label="Abrir menú"
-        >
+    <header className="sticky top-0 z-20 shrink-0 border-b border-border bg-card">
+      <div className="flex h-14 items-center gap-2 px-3 sm:gap-3 sm:px-4">
+        <Button variant="ghost" size="icon" className="lg:hidden" onClick={onOpenSidebar} aria-label="Abrir menú">
           <Menu className="h-5 w-5" aria-hidden="true" />
-        </button>
+        </Button>
 
         {!isTenantUser && (
-          <div className="order-2 min-w-0 lg:hidden">
-            <Logo variant="dark" size="sm" />
-          </div>
+          <span className="lg:hidden">
+            <LogoMark size={24} />
+          </span>
         )}
 
         {canSearch && (
-          <form onSubmit={submitSearch} className="order-2 hidden min-w-0 max-w-md flex-1 md:block">
-            <SearchInput value={query} onValueChange={setQuery} placeholder={SEARCH_PLACEHOLDER} />
+          <form onSubmit={submitSearch} className="hidden min-w-0 shrink basis-[420px] md:block">
+            <SearchInput
+              value={query}
+              onValueChange={setQuery}
+              placeholder={SEARCH_PLACEHOLDER}
+              className="border-transparent bg-muted focus-visible:bg-card"
+            />
           </form>
         )}
 
-        {isTenantUser && (
-          <div className={cn('order-2 flex min-w-0 flex-1 md:order-3 md:flex-none', !canSearch && 'md:flex-1')}>
-            <BranchSelector />
-          </div>
+        <div className="flex-1" />
+
+        {isTenantUser ? (
+          <BranchSelector />
+        ) : (
+          <span className="hidden h-9 items-center gap-2 rounded-control border border-dashed border-input px-2.5 text-sm font-semibold text-foreground sm:inline-flex">
+            <LogoMark size={18} />
+            Consola GondolIA
+          </span>
         )}
 
-        <div className="order-4 ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
-          <p
-            className={cn(
-              'hidden whitespace-nowrap pr-2 text-sm font-medium text-slate-500',
-              isTenantUser ? 'xl:block' : 'md:block',
-            )}
+        <p className="hidden whitespace-nowrap px-1 text-sm font-medium text-muted-foreground 2xl:block">
+          {formatLongDate()}
+        </p>
+
+        {canSearch && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="md:hidden"
+            onClick={() => setMobileSearchOpen((open) => !open)}
+            aria-label={mobileSearchOpen ? 'Cerrar buscador' : 'Buscar productos'}
+            aria-expanded={mobileSearchOpen}
           >
-            {today}
-          </p>
-          {canSearch && (
-            <button
-              type="button"
-              onClick={() => setMobileSearchOpen((open) => !open)}
-              className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 md:hidden"
-              aria-label={mobileSearchOpen ? 'Cerrar buscador' : 'Buscar productos'}
-              aria-expanded={mobileSearchOpen}
-            >
-              {mobileSearchOpen ? <X className="h-5 w-5" aria-hidden="true" /> : <Search className="h-5 w-5" aria-hidden="true" />}
-            </button>
-          )}
-          <NotificationBell />
-          <UserMenu />
-        </div>
+            {mobileSearchOpen ? (
+              <X className="h-5 w-5" aria-hidden="true" />
+            ) : (
+              <Search className="h-5 w-5" aria-hidden="true" />
+            )}
+          </Button>
+        )}
+
+        <NotificationBell />
+        <UserMenu />
       </div>
 
       {canSearch && mobileSearchOpen && (
-        <form onSubmit={submitSearch} className="border-t border-slate-100 px-3 py-2.5 md:hidden">
+        <form onSubmit={submitSearch} className={cn('border-t border-border px-3 py-2.5 md:hidden')}>
           <SearchInput value={query} onValueChange={setQuery} placeholder={SEARCH_PLACEHOLDER} autoFocus />
         </form>
       )}

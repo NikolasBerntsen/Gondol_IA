@@ -48,7 +48,7 @@ export function AuthImage({ src, alt, fallback, className, placeholderClassName,
             role="img"
             aria-label={`${alt} (no disponible)`}
             className={cn(
-              'flex items-center justify-center gap-2 rounded-xl bg-slate-100 p-4 text-xs text-slate-500',
+              'flex items-center justify-center gap-2 rounded-control border border-dashed border-input bg-muted p-4 text-xs text-muted-foreground',
               placeholderClassName ?? className,
             )}
           >
@@ -66,7 +66,7 @@ export function AuthImage({ src, alt, fallback, className, placeholderClassName,
         role="img"
         aria-label={`${alt} (cargando)`}
         aria-busy="true"
-        className={cn('min-h-[6rem] animate-pulse rounded-xl bg-slate-100', placeholderClassName ?? className)}
+        className={cn('gd-skeleton min-h-[6rem] rounded-control bg-muted', placeholderClassName ?? className)}
       />
     );
   }

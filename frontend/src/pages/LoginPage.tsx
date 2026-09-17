@@ -22,7 +22,7 @@ import { Alert, type AlertTone } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { Input } from '@/components/ui/Input';
-import { canAccessPath } from '@/config/access';
+import { canAccessPath, requiredModuleForPath } from '@/config/access';
 import { cn } from '@/lib/cn';
 
 const PLATFORM_PASSWORD = 'Gondolia2026!';
@@ -56,17 +56,18 @@ const DEMO_GROUPS: DemoGroup[] = [
   },
   {
     title: 'Almacén Don Pepe',
-    detail: 'CABA · 1 sucursal · FIFO',
+    detail: 'CABA · 1 sucursal · FIFO · POS GondolIA',
     password: TENANT_PASSWORD,
     accounts: [
       { email: 'jefe@donpepe.com', role: 'TENANT_BOSS' },
       { email: 'admin@donpepe.com', role: 'TENANT_ADMIN' },
       { email: 'empleado@donpepe.com', role: 'TENANT_EMPLOYEE' },
+      { email: 'cajero@donpepe.com', role: 'TENANT_CASHIER' },
     ],
   },
   {
     title: 'Dietética Vida Sana',
-    detail: 'Córdoba · 2 sucursales · FEFO',
+    detail: 'Córdoba · 2 sucursales · FEFO · POS propio',
     password: TENANT_PASSWORD,
     accounts: [
       { email: 'jefe@vidasana.com', role: 'TENANT_BOSS' },
@@ -76,13 +77,15 @@ const DEMO_GROUPS: DemoGroup[] = [
   },
   {
     title: 'Minimercado El Sol',
-    detail: 'Rosario · 3 sucursales · FIFO',
+    detail: 'Rosario · 3 sucursales · FIFO · los 3 módulos',
     password: TENANT_PASSWORD,
     accounts: [
       { email: 'jefe@elsol.com', role: 'TENANT_BOSS' },
       { email: 'admin@elsol.com', role: 'TENANT_ADMIN' },
       { email: 'empleado@elsol.com', role: 'TENANT_EMPLOYEE', note: 'Centro y Fisherton' },
       { email: 'empleado.echesortu@elsol.com', role: 'TENANT_EMPLOYEE', note: 'Solo Echesortu' },
+      { email: 'cajero@elsol.com', role: 'TENANT_CASHIER', note: 'Centro' },
+      { email: 'cajero.fisherton@elsol.com', role: 'TENANT_CASHIER', note: 'Fisherton' },
     ],
   },
   {
@@ -122,17 +125,24 @@ interface FormErrors {
 }
 
 function noticeAlert(notice: SessionNotice | null, sessionExpired: boolean): { tone: AlertTone; text: string } | null {
-  if (notice?.kind === 'message') return { tone: 'warning', text: notice.message };
+  if (notice?.kind === 'message') return { tone: 'warn', text: notice.message };
   if (notice?.kind === 'expired' || sessionExpired) {
     return { tone: 'info', text: 'Tu sesión expiró. Volvé a iniciar sesión para continuar.' };
   }
-  if (notice?.kind === 'logout') return { tone: 'success', text: 'Cerraste sesión. ¡Hasta pronto!' };
+  if (notice?.kind === 'logout') return { tone: 'ok', text: 'Cerraste sesión. ¡Hasta pronto!' };
   return null;
+}
+
+/** La pantalla de la que venía solo sirve si el rol la puede abrir y el comercio tiene su módulo. */
+function canOpen(user: MeDto, pathname: string): boolean {
+  if (!canAccessPath(user.role, pathname)) return false;
+  const required = requiredModuleForPath(pathname);
+  return !required || (user.tenant?.modules ?? []).includes(required);
 }
 
 function destinationAfterLogin(user: MeDto, from: Location | undefined): string {
   if (user.mustChangePassword) return '/profile';
-  if (from && from.pathname !== '/' && canAccessPath(user.role, from.pathname)) {
+  if (from && from.pathname !== '/' && canOpen(user, from.pathname)) {
     return `${from.pathname}${from.search}${from.hash}`;
   }
   return roleHome(user.role);
@@ -206,12 +216,10 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-dvh bg-app">
-      {/* Panel de marca */}
-      <aside className="relative hidden w-[46%] max-w-2xl flex-col justify-between overflow-hidden bg-gradient-to-br from-brand-800 via-brand-900 to-brand-950 p-10 text-white lg:flex xl:p-14">
-        <div className="pointer-events-none absolute -right-24 -top-24 h-80 w-80 rounded-full bg-brand-500/20 blur-3xl" aria-hidden="true" />
-        <div className="pointer-events-none absolute -bottom-32 -left-20 h-96 w-96 rounded-full bg-lime-300/10 blur-3xl" aria-hidden="true" />
-        <svg className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.07]" aria-hidden="true">
+    <div className="flex min-h-dvh bg-background">
+      {/* Panel de marca: el mismo verde profundo del riel, plano y sin degradados. */}
+      <aside className="relative hidden w-[46%] max-w-2xl flex-col justify-between overflow-hidden bg-rail p-10 text-rail-foreground lg:flex xl:p-14">
+        <svg className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.06]" aria-hidden="true">
           <defs>
             <pattern id="login-dots" width="28" height="28" patternUnits="userSpaceOnUse">
               <circle cx="2" cy="2" r="1.5" fill="currentColor" />
@@ -224,48 +232,52 @@ export default function LoginPage() {
 
         <div className="relative space-y-10">
           <div className="space-y-4">
-            <p className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-lime-200 ring-1 ring-inset ring-white/15">
+            <p className="gd-eyebrow inline-flex items-center gap-2 text-rail-muted">
               <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
               Inventario inteligente para tu comercio
             </p>
-            <h2 className="text-4xl font-bold leading-tight tracking-tight xl:text-5xl">
-              Tu negocio <span className="text-lime-300">siempre a tiempo</span>
+            <h2 className="max-w-[16ch] font-display text-2xl font-bold leading-tight tracking-[-0.02em] text-rail-strong xl:text-3xl xl:leading-[1.05]">
+              Tu negocio <span className="text-accent">siempre a tiempo</span>
             </h2>
-            <p className="max-w-md text-base text-brand-100/80">
+            <p className="max-w-[46ch] text-read text-rail-foreground/80">
               Controlá productos, lotes y vencimientos, y dejá que GondolIA te diga qué hacer antes de que sea tarde.
             </p>
           </div>
 
           <ul className="space-y-5">
             {VALUE_BULLETS.map(({ icon: Icon, title, text }) => (
-              <li key={title} className="flex gap-4">
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-lime-300 ring-1 ring-inset ring-white/10">
+              <li key={title} className="flex gap-3.5">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-control bg-rail-strong/10 text-rail-strong">
                   <Icon className="h-5 w-5" aria-hidden="true" />
                 </span>
                 <div>
-                  <p className="font-semibold">{title}</p>
-                  <p className="text-sm text-brand-100/75">{text}</p>
+                  <p className="font-semibold text-rail-strong">{title}</p>
+                  <p className="text-base text-rail-foreground/75">{text}</p>
                 </div>
               </li>
             ))}
           </ul>
         </div>
 
-        <p className="relative text-sm text-brand-200/70">Productos de hoy, clientes de siempre · © {new Date().getFullYear()} GondolIA</p>
+        <p className="relative text-sm text-rail-muted">
+          Productos de hoy, clientes de siempre · © {new Date().getFullYear()} GondolIA
+        </p>
       </aside>
 
       {/* Formulario */}
       <main className="flex flex-1 flex-col">
-        <div className="bg-gradient-to-br from-brand-800 to-brand-950 px-5 pb-16 pt-8 text-white lg:hidden">
+        <div className="bg-rail px-5 pb-14 pt-8 text-rail-foreground lg:hidden">
           <Logo variant="light" showTagline />
         </div>
 
-        <div className="-mt-10 flex flex-1 items-start justify-center px-4 pb-10 sm:px-6 lg:mt-0 lg:items-center lg:py-12">
+        <div className="-mt-8 flex flex-1 items-start justify-center px-4 pb-10 sm:px-6 lg:mt-0 lg:items-center lg:py-12">
           <div className="w-full max-w-md">
-            <div className="rounded-3xl border border-slate-200/70 bg-white p-6 shadow-xl shadow-slate-900/5 sm:p-8 lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
+            <div className="rounded-panel border border-border bg-card p-5 sm:p-7 lg:border-0 lg:bg-transparent lg:p-0">
               <div className="mb-6 space-y-1.5">
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Iniciá sesión</h1>
-                <p className="text-sm text-slate-500 sm:text-base">Ingresá con el email y la contraseña de tu cuenta.</p>
+                <h1 className="font-display text-xl font-bold tracking-[-0.015em] text-foreground sm:text-2xl">
+                  Iniciá sesión
+                </h1>
+                <p className="text-read text-muted-foreground">Ingresá con el email y la contraseña de tu cuenta.</p>
               </div>
 
               {sessionAlert && (
@@ -274,7 +286,7 @@ export default function LoginPage() {
                 </Alert>
               )}
               {submitError && (
-                <Alert tone="danger" title={submitError.title} className="mb-5">
+                <Alert tone="crit" title={submitError.title} className="mb-5">
                   {submitError.message}
                 </Alert>
               )}
@@ -317,11 +329,15 @@ export default function LoginPage() {
                       <button
                         type="button"
                         onClick={() => setShowPassword((value) => !value)}
-                        className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                        className="grid h-8 w-8 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                         aria-pressed={showPassword}
                       >
-                        {showPassword ? <EyeOff className="h-5 w-5" aria-hidden="true" /> : <Eye className="h-5 w-5" aria-hidden="true" />}
+                        {showPassword ? (
+                          <EyeOff className="h-[18px] w-[18px]" aria-hidden="true" />
+                        ) : (
+                          <Eye className="h-[18px] w-[18px]" aria-hidden="true" />
+                        )}
                       </button>
                     }
                   />
@@ -333,47 +349,52 @@ export default function LoginPage() {
                   size="lg"
                   fullWidth
                   loading={submitting}
-                  rightIcon={<LogIn className="h-5 w-5" aria-hidden="true" />}
+                  rightIcon={<LogIn aria-hidden="true" />}
                   className="!mt-6"
                 >
                   {submitting ? 'Ingresando…' : 'Ingresar'}
                 </Button>
               </form>
 
-              <p className="mt-5 text-center text-xs text-slate-500">
+              <p className="mt-5 text-sm text-muted-foreground">
                 ¿Olvidaste tu contraseña? Pedile al administrador de tu comercio que te la restablezca.
               </p>
             </div>
 
             {SHOW_DEMO_ACCOUNTS && (
-              <section className="mt-6 overflow-hidden rounded-2xl border border-brand-200 bg-brand-50/70">
+              <section className="mt-6 overflow-hidden rounded-panel border border-border bg-card">
                 <button
                   type="button"
                   onClick={() => setDemoOpen((open) => !open)}
                   aria-expanded={demoOpen}
                   aria-controls={demoPanelId}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-brand-100/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500"
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-brand-700 shadow-sm">
-                    <UserRound className="h-5 w-5" aria-hidden="true" />
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-control bg-primary/10 text-primary">
+                    <UserRound className="h-[18px] w-[18px]" aria-hidden="true" />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-semibold text-brand-900">Cuentas de demostración</span>
-                    <span className="block text-xs text-brand-700/80">Tocá una cuenta para completar el formulario.</span>
+                    <span className="block text-base font-semibold text-foreground">Cuentas de demostración</span>
+                    <span className="block text-sm text-muted-foreground">
+                      Tocá una cuenta para completar el formulario.
+                    </span>
                   </span>
                   <ChevronDown
-                    className={cn('h-5 w-5 shrink-0 text-brand-700 transition-transform', demoOpen && 'rotate-180')}
+                    className={cn('h-5 w-5 shrink-0 text-muted-foreground transition-transform', demoOpen && 'rotate-180')}
                     aria-hidden="true"
                   />
                 </button>
 
                 {demoOpen && (
-                  <div id={demoPanelId} className="max-h-[26rem] space-y-4 overflow-y-auto border-t border-brand-200 bg-white/70 px-3 py-4">
+                  <div
+                    id={demoPanelId}
+                    className="gd-scroll max-h-[26rem] space-y-4 overflow-y-auto border-t border-border px-3 py-4"
+                  >
                     {DEMO_GROUPS.map((group) => (
                       <div key={group.title}>
                         <div className="flex flex-wrap items-baseline justify-between gap-x-3 px-1">
-                          <p className="text-sm font-semibold text-slate-800">{group.title}</p>
-                          <p className="text-xs text-slate-500">{group.detail}</p>
+                          <p className="text-base font-semibold text-foreground">{group.title}</p>
+                          <p className="text-sm text-muted-foreground">{group.detail}</p>
                         </div>
                         <ul className="mt-1.5 grid gap-1.5">
                           {group.accounts.map((account) => (
@@ -382,17 +403,21 @@ export default function LoginPage() {
                                 type="button"
                                 onClick={() => fillDemo(account, group.password)}
                                 className={cn(
-                                  'flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500',
+                                  'flex w-full items-center justify-between gap-3 rounded-control border px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                                   email === account.email
-                                    ? 'border-brand-400 bg-brand-50'
-                                    : 'border-slate-200 bg-white hover:border-brand-300 hover:bg-brand-50/50',
+                                    ? 'border-primary bg-primary/[0.08]'
+                                    : 'border-border bg-card hover:bg-muted',
                                 )}
                               >
                                 <span className="min-w-0">
-                                  <span className="block truncate text-sm font-medium text-slate-800">{account.email}</span>
-                                  {account.note && <span className="block text-xs text-slate-500">{account.note}</span>}
+                                  <span className="block truncate font-mono text-base text-foreground">
+                                    {account.email}
+                                  </span>
+                                  {account.note && (
+                                    <span className="block text-sm text-muted-foreground">{account.note}</span>
+                                  )}
                                 </span>
-                                <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                                <span className="shrink-0 rounded-tag bg-muted px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
                                   {ROLE_LABELS[account.role]}
                                 </span>
                               </button>
@@ -401,9 +426,10 @@ export default function LoginPage() {
                         </ul>
                       </div>
                     ))}
-                    <p className="px-1 text-xs text-slate-500">
-                      Contraseñas: equipo GondolIA <code className="font-semibold text-slate-700">{PLATFORM_PASSWORD}</code> ·
-                      comercios <code className="font-semibold text-slate-700">{TENANT_PASSWORD}</code>
+                    <p className="px-1 text-sm text-muted-foreground">
+                      Contraseñas: equipo GondolIA{' '}
+                      <code className="font-mono font-semibold text-foreground">{PLATFORM_PASSWORD}</code> · comercios{' '}
+                      <code className="font-mono font-semibold text-foreground">{TENANT_PASSWORD}</code>
                     </p>
                   </div>
                 )}

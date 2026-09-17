@@ -6,14 +6,18 @@ export interface EmptyStateProps {
   icon?: LucideIcon;
   title: ReactNode;
   description?: ReactNode;
-  /** Botón o link de acción (p. ej. "Cargar producto"). */
+  /** Botón o link con la próxima acción (p. ej. "Cargar producto"). */
   action?: ReactNode;
   size?: 'sm' | 'md';
-  /** Dibuja el borde punteado de contenedor. */
+  /** Dibuja un contenedor con borde punteado (para usarlo fuera de un panel). */
   bordered?: boolean;
   className?: string;
 }
 
+/**
+ * Estado vacío (docs/design-system.md §8): ícono en cuadro punteado, título que dice qué falta,
+ * texto con la próxima acción y botón. Alineado a la izquierda, como todo el sistema.
+ */
 export function EmptyState({
   icon: Icon = Inbox,
   title,
@@ -26,25 +30,20 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        'flex flex-col items-center justify-center text-center',
-        size === 'sm' ? 'gap-2 px-4 py-8' : 'gap-3 px-6 py-14',
-        bordered && 'rounded-2xl border border-dashed border-slate-300 bg-white/60',
+        'flex flex-col items-start gap-3',
+        size === 'sm' ? 'px-4 py-6' : 'px-5 py-8',
+        bordered && 'rounded-panel border border-dashed border-input bg-card/60',
         className,
       )}
     >
-      <span
-        className={cn(
-          'flex items-center justify-center rounded-2xl bg-brand-50 text-brand-600',
-          size === 'sm' ? 'h-10 w-10' : 'h-14 w-14',
-        )}
-      >
-        <Icon className={size === 'sm' ? 'h-5 w-5' : 'h-7 w-7'} aria-hidden="true" />
+      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-control border border-dashed border-input bg-muted text-muted-foreground">
+        <Icon className="h-5 w-5" aria-hidden="true" />
       </span>
-      <div className="max-w-md space-y-1">
-        <h3 className={cn('font-semibold text-slate-900', size === 'sm' ? 'text-sm' : 'text-base')}>{title}</h3>
-        {description && <p className="text-sm text-slate-500">{description}</p>}
+      <div className="max-w-[52ch]">
+        <h3 className={cn('font-semibold text-foreground', size === 'sm' ? 'text-base' : 'text-md')}>{title}</h3>
+        {description && <p className="mt-1 text-base text-muted-foreground">{description}</p>}
       </div>
-      {action && <div className="mt-2 flex flex-wrap justify-center gap-2">{action}</div>}
+      {action && <div className="flex flex-wrap gap-2">{action}</div>}
     </div>
   );
 }

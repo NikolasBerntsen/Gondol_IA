@@ -12,5 +12,7 @@ export function roleHome(role: Role): string {
       return '/app/dashboard';
     case 'TENANT_EMPLOYEE':
       return '/app/intake';
+    case 'TENANT_CASHIER':
+      return '/app/pos';
   }
 }

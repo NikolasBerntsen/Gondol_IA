@@ -53,9 +53,14 @@ function sortBranches(branches: BranchRef[] | undefined): BranchRef[] {
   return [...(branches ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'es'));
 }
 
+/** Empleados y cajeros trabajan sobre una sucursal concreta (SPEC §3.5). */
+function worksOnOneBranch(role: MeDto['role']): boolean {
+  return role === 'TENANT_EMPLOYEE' || role === 'TENANT_CASHIER';
+}
+
 /** Default (SPEC §9.6): ADMIN/BOSS con más de una sucursal → consolidado; si no, la primera. */
 function defaultScope(me: MeDto, branches: BranchRef[]): BranchScope {
-  if (branches.length > 1 && me.role !== 'TENANT_EMPLOYEE') return 'all';
+  if (branches.length > 1 && !worksOnOneBranch(me.role)) return 'all';
   return branches[0]?.id ?? 'all';
 }
 
@@ -122,8 +127,7 @@ export function BranchProvider({ children }: { children: ReactNode }) {
   const value = useMemo<BranchContextValue>(() => {
     const currentBranch =
       selectedBranchId === 'all' ? null : (branches.find((b) => b.id === selectedBranchId) ?? null);
-    const isEmployee = me?.role === 'TENANT_EMPLOYEE';
-    const allLabel = isEmployee ? ALL_MY_BRANCHES_LABEL : ALL_BRANCHES_LABEL;
+    const allLabel = me && worksOnOneBranch(me.role) ? ALL_MY_BRANCHES_LABEL : ALL_BRANCHES_LABEL;
     return {
       branches,
       selectedBranchId,

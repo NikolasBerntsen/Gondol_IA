@@ -18,7 +18,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
       aria-invalid={hasError || undefined}
       className={cn(
         controlBaseClasses,
-        'min-h-[2.5rem] px-3 py-2 text-base sm:text-sm',
+        'min-h-[72px] px-3 py-2 text-md sm:text-base',
         hasError && controlInvalidClasses,
         className,
       )}

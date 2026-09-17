@@ -7,13 +7,14 @@ import { Modal } from './Modal';
 export interface ConfirmDialogProps {
   open: boolean;
   onClose: () => void;
-  /** Si devuelve una promesa, el botón muestra "cargando" hasta que termine. No cierra solo: cerrá en `onSuccess`. */
+  /** Si devuelve una promesa, el botón queda "cargando" hasta que termine. No cierra solo: cerrá en `onSuccess`. */
   onConfirm: () => void | Promise<unknown>;
   title: ReactNode;
   description?: ReactNode;
+  /** Verbo exacto de la acción: "Deshabilitar módulo", "Descartar lote"… (no "Aceptar"). */
   confirmLabel?: string;
   cancelLabel?: string;
-  /** `danger` para acciones destructivas. */
+  /** `danger` para acciones destructivas o que bloquean. */
   tone?: 'primary' | 'danger';
   loading?: boolean;
   confirmDisabled?: boolean;
@@ -21,6 +22,7 @@ export interface ConfirmDialogProps {
   children?: ReactNode;
 }
 
+/** Confirmación de una acción: explica el efecto y ofrece la salida. */
 export function ConfirmDialog({
   open,
   onClose,
@@ -34,7 +36,7 @@ export function ConfirmDialog({
   confirmDisabled = false,
   children,
 }: ConfirmDialogProps) {
-  const titleId = `confirm-${useId()}`;
+  const titleId = `confirm-${useId().replace(/:/g, '')}`;
   const [pending, setPending] = useState(false);
   const busy = loading || pending;
   const Icon = tone === 'danger' ? AlertTriangle : HelpCircle;
@@ -46,7 +48,7 @@ export function ConfirmDialog({
       try {
         await result;
       } catch {
-        // El error lo informa quien llama (toast / mensaje en el diálogo).
+        // El error lo informa quien llama (toast o mensaje dentro del diálogo).
       } finally {
         setPending(false);
       }
@@ -63,35 +65,36 @@ export function ConfirmDialog({
       ariaLabelledBy={titleId}
       footer={
         <>
-          <Button variant="outline" onClick={onClose} disabled={busy}>
+          {/* En una acción destructiva el foco arranca en "Cancelar": Enter no borra nada sin querer. */}
+          <Button variant="outline" onClick={onClose} disabled={busy} data-autofocus={tone === 'danger' || undefined}>
             {cancelLabel}
           </Button>
           <Button
-            variant={tone === 'danger' ? 'danger' : 'primary'}
+            variant={tone === 'danger' ? 'destructive' : 'default'}
             onClick={handleConfirm}
             loading={busy}
             disabled={confirmDisabled}
-            data-autofocus
+            data-autofocus={tone === 'danger' ? undefined : true}
           >
             {confirmLabel}
           </Button>
         </>
       }
     >
-      <div className="flex gap-4 pt-1">
+      <div className="flex gap-3.5 pt-1">
         <span
           className={cn(
-            'flex h-10 w-10 shrink-0 items-center justify-center rounded-full',
-            tone === 'danger' ? 'bg-red-100 text-red-600' : 'bg-brand-100 text-brand-700',
+            'grid h-10 w-10 shrink-0 place-items-center rounded-control',
+            tone === 'danger' ? 'bg-crit-soft text-crit-ink' : 'bg-primary/10 text-primary',
           )}
         >
           <Icon className="h-5 w-5" aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1 space-y-2">
-          <h2 id={titleId} className="text-base font-semibold text-slate-900">
+          <h2 id={titleId} className="font-display text-md font-semibold text-foreground">
             {title}
           </h2>
-          {description && <div className="text-sm text-slate-600">{description}</div>}
+          {description && <div className="text-base text-muted-foreground">{description}</div>}
           {children}
         </div>
       </div>

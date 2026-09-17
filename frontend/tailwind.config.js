@@ -1,49 +1,117 @@
-import defaultTheme from 'tailwindcss/defaultTheme';
+import tailwindcssAnimate from 'tailwindcss-animate';
 
 /** @type {import('tailwindcss').Config} */
+// Góndola UI · tema de Tailwind (docs/design-system.md §2-§4).
+// Los colores salen SIEMPRE de tokens CSS (src/index.css) en formato HSL "h s% l%",
+// así funcionan los modificadores de opacidad (bg-primary/10) y los tres estados de tema
+// (sistema / data-theme="light" / data-theme="dark"). No se usa la estrategia .dark de Tailwind.
+const token = (name) => `hsl(var(--${name}) / <alpha-value>)`;
+
 export default {
+  darkMode: ['class'], // sin uso: el tema lo resuelven los tokens + data-theme
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
+    // Escala tipográfica cerrada: 12 / 13 / 14 / 15 (lectura) / 16 / 20 / 26 / 34 / 48
+    fontSize: {
+      xs: ['12px', { lineHeight: '16px' }],
+      sm: ['13px', { lineHeight: '18px' }],
+      base: ['14px', { lineHeight: '20px' }],
+      read: ['15px', { lineHeight: '24px' }],
+      md: ['16px', { lineHeight: '24px' }],
+      lg: ['20px', { lineHeight: '28px' }],
+      xl: ['26px', { lineHeight: '32px' }],
+      '2xl': ['34px', { lineHeight: '40px' }],
+      '3xl': ['48px', { lineHeight: '52px' }],
+    },
+    // Las variantes "Variable" son las que instala @fontsource-variable (sin CDN, funcionan offline).
+    fontFamily: {
+      display: [
+        '"Bricolage Grotesque Variable"',
+        '"Bricolage Grotesque"',
+        '"Segoe UI"',
+        'system-ui',
+        '-apple-system',
+        'Roboto',
+        'sans-serif',
+      ],
+      sans: [
+        '"Figtree Variable"',
+        'Figtree',
+        '"Segoe UI"',
+        'system-ui',
+        '-apple-system',
+        'Roboto',
+        '"Helvetica Neue"',
+        'Arial',
+        'sans-serif',
+      ],
+      mono: [
+        '"JetBrains Mono Variable"',
+        '"JetBrains Mono"',
+        'ui-monospace',
+        '"Cascadia Mono"',
+        'Consolas',
+        '"SFMono-Regular"',
+        'Menlo',
+        'monospace',
+      ],
+    },
     extend: {
       colors: {
-        brand: {
-          50: '#eef7f1',
-          100: '#d6ecdd',
-          200: '#aed8bb',
-          300: '#7fbf95',
-          400: '#4fa36f',
-          500: '#2f8753',
-          600: '#226c42',
-          700: '#1c5636',
-          800: '#17452c',
-          900: '#123824',
-          950: '#0b2416',
+        border: token('border'),
+        input: token('input'),
+        ring: token('ring'),
+        background: token('background'),
+        foreground: token('foreground'),
+        scrim: token('scrim'),
+        primary: { DEFAULT: token('primary'), foreground: token('primary-foreground') },
+        secondary: { DEFAULT: token('muted'), foreground: token('foreground') },
+        destructive: { DEFAULT: token('crit'), foreground: token('on-solid') },
+        muted: { DEFAULT: token('muted'), foreground: token('muted-foreground') },
+        accent: { DEFAULT: token('accent'), foreground: token('accent-foreground') },
+        popover: { DEFAULT: token('card'), foreground: token('foreground') },
+        card: { DEFAULT: token('card'), foreground: token('foreground') },
+        rail: {
+          DEFAULT: token('rail'),
+          foreground: token('rail-foreground'),
+          active: token('rail-active'),
+          hover: token('rail-hover'),
+          muted: token('rail-muted'),
+          strong: token('rail-strong'),
         },
-        app: '#f4f7f5',
+        ok: { DEFAULT: token('ok'), soft: token('ok-soft'), ink: token('ok-ink'), foreground: token('on-solid') },
+        warn: { DEFAULT: token('warn'), soft: token('warn-soft'), ink: token('warn-ink'), foreground: token('on-solid') },
+        crit: { DEFAULT: token('crit'), soft: token('crit-soft'), ink: token('crit-ink'), foreground: token('on-solid') },
+        info: { DEFAULT: token('info'), soft: token('info-soft'), ink: token('info-ink'), foreground: token('on-solid') },
+        paper: { DEFAULT: token('paper'), ink: token('paper-ink') },
+        device: token('device'),
+        camera: { DEFAULT: token('camera'), foreground: token('camera-foreground') },
       },
-      fontFamily: {
-        sans: ['"Inter Variable"', 'Inter', ...defaultTheme.fontFamily.sans],
+      // Radios por rol (no uniformes): control 8 · panel 12 · diálogo 16 · etiqueta 4 · tabla 0
+      borderRadius: {
+        control: 'var(--r-control)',
+        panel: 'var(--r-panel)',
+        dialog: 'var(--r-dialog)',
+        tag: 'var(--r-tag)',
+        lg: 'var(--r-control)',
+        md: '6px',
+        sm: '4px',
       },
       boxShadow: {
-        card: '0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06)',
-        popover: '0 10px 38px -10px rgb(15 23 42 / 0.25), 0 10px 20px -15px rgb(15 23 42 / 0.2)',
+        pop: 'var(--shadow-pop)',
+        sheet: 'var(--shadow-sheet)',
       },
       keyframes: {
-        'fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },
-        'scale-in': {
-          from: { opacity: '0', transform: 'translateY(4px) scale(0.98)' },
-          to: { opacity: '1', transform: 'translateY(0) scale(1)' },
-        },
-        'slide-in-left': { from: { transform: 'translateX(-100%)' }, to: { transform: 'translateX(0)' } },
-        'slide-up': { from: { transform: 'translateY(100%)' }, to: { transform: 'translateY(0)' } },
+        'accordion-down': { from: { height: '0' }, to: { height: 'var(--radix-accordion-content-height)' } },
+        'accordion-up': { from: { height: 'var(--radix-accordion-content-height)' }, to: { height: '0' } },
+        scanline: { '0%': { top: '0%' }, '100%': { top: 'calc(100% - 2px)' } },
       },
       animation: {
-        'fade-in': 'fade-in 150ms ease-out',
-        'scale-in': 'scale-in 160ms ease-out',
-        'slide-in-left': 'slide-in-left 200ms ease-out',
-        'slide-up': 'slide-up 220ms ease-out',
+        'accordion-down': 'accordion-down 0.2s ease-out',
+        'accordion-up': 'accordion-up 0.2s ease-out',
+        scanline: 'scanline 1.6s ease-in-out infinite alternate',
       },
     },
   },
-  plugins: [],
+  plugins: [tailwindcssAnimate],
 };

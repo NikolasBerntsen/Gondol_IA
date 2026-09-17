@@ -145,6 +145,18 @@ export function formatMoney(value: NumericInput, options: FormatMoneyOptions = {
   return `${rounded < 0 ? '-' : ''}$ ${abs}`;
 }
 
+/**
+ * Parte un importe para la etiqueta de precio: `16270` → `{ int: "16.270", cents: "00" }`.
+ * Los centavos van en superíndice subrayado (`PriceTag`), como en la góndola.
+ */
+export function splitMoney(value: NumericInput): { int: string; cents: string; negative: boolean } {
+  const n = toNumber(value) ?? 0;
+  const rounded = Math.round(Math.abs(n) * 100) / 100;
+  const int = numberFormatter(0, 0).format(Math.floor(rounded));
+  const cents = String(Math.round((rounded - Math.floor(rounded)) * 100)).padStart(2, '0');
+  return { int, cents, negative: n < 0 };
+}
+
 /** Recibe un porcentaje ya expresado en 0..100: `37.5` → `"37,5%"`. */
 export function formatPercent(value: NumericInput, maxDecimals = 1): string {
   const n = toNumber(value);
@@ -188,6 +200,13 @@ export function formatDate(value: DateInput): string {
   const parts = calendarParts(value);
   if (!parts) return EMPTY_VALUE;
   return `${pad(parts.day)}/${pad(parts.month)}/${parts.year}`;
+}
+
+/** Fecha corta para chips y tickets: `"2026-09-25"` → `"25/09/26"` (SPEC §9.5, chips en mono). */
+export function formatDateCompact(value: DateInput): string {
+  const parts = calendarParts(value);
+  if (!parts) return EMPTY_VALUE;
+  return `${pad(parts.day)}/${pad(parts.month)}/${String(parts.year).slice(-2)}`;
 }
 
 /** Instante → `"25/09/2026 14:30"` (zona del negocio). */

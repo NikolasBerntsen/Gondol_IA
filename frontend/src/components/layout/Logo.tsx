@@ -1,46 +1,44 @@
-import { useId } from 'react';
 import { cn } from '@/lib/cn';
 
 export interface LogoMarkProps {
   className?: string;
+  size?: number;
+  /** Con texto, el isotipo deja de ser decorativo y se anuncia. */
   title?: string;
 }
 
-/** Isotipo: carrito de compras con el destello de la IA (mismo diseño que el favicon). */
-export function LogoMark({ className, title }: LogoMarkProps) {
-  const gradientId = `logo-gradient-${useId().replace(/:/g, '')}`;
+/**
+ * Isotipo: etiqueta de góndola amarilla con el agujero perforado y las líneas del precio
+ * (mismo lenguaje que `PriceTag`).
+ */
+export function LogoMark({ className, size = 28, title }: LogoMarkProps) {
   return (
     <svg
-      viewBox="0 0 64 64"
-      className={cn('h-10 w-10 shrink-0', className)}
+      width={size}
+      height={size}
+      viewBox="0 0 32 32"
+      className={cn('shrink-0', className)}
       role={title ? 'img' : undefined}
       aria-hidden={title ? undefined : true}
       aria-label={title}
     >
-      <defs>
-        <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#2f8753" />
-          <stop offset="1" stopColor="#17452c" />
-        </linearGradient>
-      </defs>
-      <rect width="64" height="64" rx="15" fill={`url(#${gradientId})`} />
       <path
-        d="M10 18h6l5.2 22H45l5-16H17.9"
-        fill="none"
-        stroke="#fff"
-        strokeWidth="4.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
+        d="M4 7.5 A3.5 3.5 0 0 1 7.5 4 H24.5 A3.5 3.5 0 0 1 28 7.5 V24.5 A3.5 3.5 0 0 1 24.5 28 H7.5 A3.5 3.5 0 0 1 4 24.5 Z"
+        fill="hsl(var(--accent))"
       />
-      <circle cx="24" cy="48" r="3.6" fill="#fff" />
-      <circle cx="42" cy="48" r="3.6" fill="#fff" />
-      <path d="M47 4c1 5 2 6 7 7-5 1-6 2-7 7-1-5-2-6-7-7 5-1 6-2 7-7z" fill="#bef264" />
+      <circle cx="9.5" cy="16" r="2.4" fill="hsl(var(--rail))" />
+      <path
+        d="M15 11.5 h9 M15 16 h7 M15 20.5 h9"
+        stroke="hsl(var(--accent-foreground))"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
 
 export interface LogoProps {
-  /** `light`: texto claro para fondos oscuros (sidebar). `dark`: texto oscuro para fondos claros. */
+  /** `light`: texto claro para el riel. `dark`: texto oscuro para fondos claros (login, barra superior). */
   variant?: 'light' | 'dark';
   size?: 'sm' | 'md' | 'lg';
   /** Muestra "Tu negocio siempre a tiempo" debajo del nombre. */
@@ -48,22 +46,28 @@ export interface LogoProps {
   className?: string;
 }
 
-const MARK_SIZES = { sm: 'h-8 w-8', md: 'h-10 w-10', lg: 'h-12 w-12' } as const;
-const TEXT_SIZES = { sm: 'text-lg', md: 'text-xl', lg: 'text-2xl' } as const;
+const MARK_SIZES = { sm: 24, md: 28, lg: 36 } as const;
+const TEXT_SIZES = { sm: 'text-[17px]', md: 'text-[19px]', lg: 'text-[24px]' } as const;
 
 export function Logo({ variant = 'light', size = 'md', showTagline = false, className }: LogoProps) {
   const light = variant === 'light';
   return (
-    <div className={cn('flex items-center gap-3', className)}>
-      <LogoMark className={MARK_SIZES[size]} />
-      <div className="min-w-0 leading-tight">
-        <p className={cn('font-bold tracking-tight', TEXT_SIZES[size], light ? 'text-white' : 'text-slate-900')}>
-          Gondol<span className={light ? 'text-lime-300' : 'text-brand-600'}>IA</span>
-        </p>
+    <div className={cn('flex items-center gap-2.5', className)}>
+      <LogoMark size={MARK_SIZES[size]} />
+      <div className="min-w-0 leading-none">
+        <div
+          className={cn(
+            'font-display font-bold tracking-[-0.02em]',
+            TEXT_SIZES[size],
+            light ? 'text-rail-strong' : 'text-foreground',
+          )}
+        >
+          Gondol<span className={light ? 'text-accent' : 'text-primary'}>IA</span>
+        </div>
         {showTagline && (
-          <p className={cn('truncate text-xs font-medium', light ? 'text-brand-200/80' : 'text-slate-500')}>
+          <div className={cn('mt-1 truncate text-[11px] font-medium', light ? 'text-rail-muted' : 'text-muted-foreground')}>
             Tu negocio siempre a tiempo
-          </p>
+          </div>
         )}
       </div>
     </div>

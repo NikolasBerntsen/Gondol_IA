@@ -373,7 +373,7 @@ Reglas rápidas (detalle en `docs/design-system.md`):
 | `Kbd` | Tecla de atajo (`F2`, `F4`, `Esc`). Se oculta en pantallas táctiles. |
 | `Modal` | `open`, `onClose`, `title`, `description`, `footer`, `size: sm \| md \| lg \| xl \| full`, `preventClose`, `closeOnOverlayClick`, `hideCloseButton`, `initialFocusRef`. Radix Dialog: foco atrapado, ESC y scroll bloqueado. En móvil se ancla abajo. `data-autofocus` marca el control inicial. |
 | `Dialog*` | Primitivas de Radix (`Dialog`, `DialogContent`, `DialogHeader`…) para diálogos a medida (p. ej. la hoja de cobro). |
-| `ConfirmDialog` | `open`, `onClose`, `onConfirm` (puede devolver promesa), `title`, `description`, `confirmLabel` (verbo exacto), `tone: primary \| danger`, `children` (p. ej. campo "motivo"). |
+| `ConfirmDialog` | `open`, `onClose`, `onConfirm` (puede devolver promesa), `title`, `description`, `confirmLabel` (verbo exacto), `tone: primary \| danger`, `children` (p. ej. campo "motivo"). Con `tone="danger"` el foco arranca en "Cancelar": Enter no dispara la acción destructiva. |
 | `Table<T>` | `columns: TableColumn<T>[]` (`id`, `header`, `cell(row)`, `align`, `className`, `headerClassName`, `hideBelow: lg \| xl`, `mobile: title \| subtitle \| aside \| field \| actions \| hidden`, `mobileLabel`), `data`, `rowKey`, `loading`, `error`, `onRetry`, `empty`, `onRowClick`, `rowClassName`, **`rowSeverity`** (franja de 4 px), `mobileLayout: cards \| scroll`, `renderMobileCard`, `dense`, `footer`, `caption`. |
 | `TableRoot`, `TableHeader`, `TableBody`, `TableRow`, `TableHead`, `TableCell`, `TableFooter`, `TableCaption` | Primitivas para tablas a medida (con `SeverityRow`). |
 | `Pagination` | `page` (0-based), `totalPages`, `totalElements`, `size`, `onPageChange`, `disabled`. `pageInfo(data)` arma las props desde un `PageResponse`. |
@@ -457,7 +457,9 @@ useBarcodeWedge({ onScan: (code) => addToCart(code) });
   su contenido: `PageHeader` + secciones. **No agreguen** `min-h-screen`, fondos de página ni otro contenedor centrado.
 - **Variante compacta**: en `/app/pos` el riel arranca colapsado y el shell **no** pone padding ni ancho máximo
   (la terminal maneja su layout de dos paneles y su propio scroll). Si tu pantalla puede aparecer en las dos
-  variantes, leé `useShellLayout()` de `@/components/layout/AppShell` y agregá tu padding cuando `compact` sea `true`.
+  variantes, leé `useShellLayout()` de `@/components/layout/shellLayout` (también se re-exporta desde `AppShell`):
+  devuelve `{ compact, inShell }` y el padding lo ponés vos cuando `compact` o `!inShell`
+  (`inShell` es `false` fuera del AppShell, p. ej. en la ruta del ticket).
 - Rutas que comparten página (`/support` y `/support/tickets/:id`, `/app/support` y `/app/support/:id`) no se remontan
   al navegar entre ellas: el estado de la lista se conserva y el detalle se decide con `useParams()`.
 - El menú lateral se arma en `src/config/navigation.ts` (lo mantiene la fundación). El buscador de la barra superior
@@ -499,7 +501,8 @@ Diseñá **mobile first**: los empleados cargan mercadería con el celular y el 
 
 - Funciona de 375 px para arriba **sin scroll horizontal de página**; las tablas scrollean solas.
 - Riel → drawer debajo de `lg` (1024 px). `Table` pasa a tarjetas debajo de `md`: definí `mobile: 'title'` en la
-  columna principal y `mobile: 'aside'` en el estado.
+  columna principal y `mobile: 'aside'` en el estado. Los chips que no cortan línea (`ExpiryChip`, `LotRankChip`,
+  píldoras) van en `aside`: en `field` la grilla es de dos columnas y se recortan contra el borde de la tarjeta.
 - Grillas de KPI: `grid gap-4 sm:grid-cols-2 xl:grid-cols-4`.
 - Acciones de formulario: `flex flex-col-reverse gap-2 sm:flex-row sm:justify-end`. En la carga con cámara y en el POS
   la acción principal va abajo, `size="xl"` y `fullWidth` (56 px, al alcance del pulgar, con `env(safe-area-inset-bottom)`).

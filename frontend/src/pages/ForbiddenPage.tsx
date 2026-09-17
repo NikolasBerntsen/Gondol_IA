@@ -2,23 +2,35 @@ import { Home, ShieldX } from 'lucide-react';
 import { ROLE_LABELS } from '@/api/types';
 import { useAuth } from '@/auth/AuthContext';
 import { roleHome } from '@/auth/roleHome';
+import { useShellLayout } from '@/components/layout/shellLayout';
 import { ButtonLink } from '@/components/ui/Button';
+import { cn } from '@/lib/cn';
 
 export default function ForbiddenPage() {
   const { me } = useAuth();
   const isTenantUser = me?.tenant != null;
+  // Fuera del AppShell (ruta del ticket) o en la variante compacta nadie puso el padding de página.
+  const { compact, inShell } = useShellLayout();
 
   return (
-    <div role="alert" className="flex min-h-[60vh] flex-col items-center justify-center px-4 text-center">
-      <span className="flex h-16 w-16 items-center justify-center rounded-3xl bg-red-50 text-red-600">
-        <ShieldX className="h-8 w-8" aria-hidden="true" />
+    <div
+      role="alert"
+      className={cn(
+        'flex min-h-[60vh] flex-col items-start justify-center gap-3',
+        (compact || !inShell) && 'mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8',
+      )}
+    >
+      <span className="grid h-12 w-12 place-items-center rounded-control bg-crit-soft text-crit-ink">
+        <ShieldX className="h-6 w-6" aria-hidden="true" />
       </span>
-      <p className="mt-6 text-sm font-semibold uppercase tracking-widest text-red-600">Acceso denegado</p>
-      <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">No tenés acceso a esta sección</h1>
-      <p className="mt-2 max-w-md text-sm text-slate-500 sm:text-base">
+      <p className="gd-eyebrow text-crit-ink">Acceso denegado</p>
+      <h1 className="font-display text-xl font-bold tracking-[-0.015em] text-foreground sm:text-2xl">
+        No tenés acceso a esta sección
+      </h1>
+      <p className="max-w-[52ch] text-read text-muted-foreground">
         {me ? (
           <>
-            Tu rol <span className="font-semibold text-slate-700">{ROLE_LABELS[me.role]}</span> no tiene permisos para ver
+            Tu rol <span className="font-semibold text-foreground">{ROLE_LABELS[me.role]}</span> no tiene permisos para ver
             esta pantalla.{' '}
             {isTenantUser
               ? 'Si necesitás usarla, pedíselo al administrador de tu comercio.'
@@ -30,8 +42,8 @@ export default function ForbiddenPage() {
       </p>
       <ButtonLink
         to={me ? roleHome(me.role) : '/login'}
-        className="mt-6"
-        leftIcon={<Home className="h-4 w-4" aria-hidden="true" />}
+        className="mt-1"
+        leftIcon={<Home aria-hidden="true" />}
       >
         {me ? 'Ir a mi inicio' : 'Iniciar sesión'}
       </ButtonLink>

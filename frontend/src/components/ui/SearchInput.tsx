@@ -40,7 +40,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(functi
             <button
               type="button"
               onClick={() => onValueChange('')}
-              className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+              className="grid h-7 w-7 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Limpiar búsqueda"
             >
               <X className="h-4 w-4" aria-hidden="true" />

@@ -5,7 +5,13 @@
 // Roles
 // ---------------------------------------------------------------------------
 
-export type Role = 'PLATFORM_OWNER' | 'SUPPORT_AGENT' | 'TENANT_BOSS' | 'TENANT_ADMIN' | 'TENANT_EMPLOYEE';
+export type Role =
+  | 'PLATFORM_OWNER'
+  | 'SUPPORT_AGENT'
+  | 'TENANT_BOSS'
+  | 'TENANT_ADMIN'
+  | 'TENANT_EMPLOYEE'
+  | 'TENANT_CASHIER';
 
 export const ROLES: readonly Role[] = [
   'PLATFORM_OWNER',
@@ -13,10 +19,11 @@ export const ROLES: readonly Role[] = [
   'TENANT_BOSS',
   'TENANT_ADMIN',
   'TENANT_EMPLOYEE',
+  'TENANT_CASHIER',
 ];
 
 export const PLATFORM_ROLES: readonly Role[] = ['PLATFORM_OWNER', 'SUPPORT_AGENT'];
-export const TENANT_ROLES: readonly Role[] = ['TENANT_BOSS', 'TENANT_ADMIN', 'TENANT_EMPLOYEE'];
+export const TENANT_ROLES: readonly Role[] = ['TENANT_BOSS', 'TENANT_ADMIN', 'TENANT_EMPLOYEE', 'TENANT_CASHIER'];
 
 export const ROLE_LABELS: Record<Role, string> = {
   PLATFORM_OWNER: 'Dueño GondolIA',
@@ -24,6 +31,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   TENANT_BOSS: 'Jefe',
   TENANT_ADMIN: 'Administrador',
   TENANT_EMPLOYEE: 'Empleado',
+  TENANT_CASHIER: 'Cajero',
 };
 
 export function isTenantRole(role: Role | null | undefined): boolean {
@@ -69,6 +77,47 @@ export const PLAN_MAX_BRANCHES: Record<TenantPlan, number> = {
   BASICO: 3,
   PROFESIONAL: 10,
 };
+
+// ---------------------------------------------------------------------------
+// Módulos por tenant (SPEC §14)
+// ---------------------------------------------------------------------------
+
+/** Módulos que los dueños de GondolIA habilitan por cliente (`ModuleCatalog`, SPEC §14.1). */
+export type TenantModule = 'POS_GONDOLIA' | 'POS_INTEGRATION' | 'MULTI_BRANCH';
+
+export const TENANT_MODULES: readonly TenantModule[] = ['POS_GONDOLIA', 'POS_INTEGRATION', 'MULTI_BRANCH'];
+
+export const TENANT_MODULE_LABELS: Record<TenantModule, string> = {
+  POS_GONDOLIA: 'Punto de venta GondolIA',
+  POS_INTEGRATION: 'Integración con POS propio',
+  MULTI_BRANCH: 'Multi-sucursal',
+};
+
+export const TENANT_MODULE_DESCRIPTIONS: Record<TenantModule, string> = {
+  POS_GONDOLIA:
+    'Cajas por sucursal, cobro con escáner, medios de pago, tickets, anulaciones y cierre de caja.',
+  POS_INTEGRATION:
+    'API key por sucursal (webhook de ventas), importación CSV de ventas y simulador para probar la integración.',
+  MULTI_BRANCH: 'Más de una sucursal (hasta el límite del plan), transferencias y vista consolidada.',
+};
+
+/** Adicional mensual en ARS **por sucursal activa** (SPEC §14.1). */
+export const TENANT_MODULE_MONTHLY_PRICE: Record<TenantModule, number> = {
+  POS_GONDOLIA: 12000,
+  POS_INTEGRATION: 8000,
+  MULTI_BRANCH: 0,
+};
+
+/** Estado de un módulo para un cliente (`TenantModuleStatus`, consola de dueños). */
+export interface TenantModuleStatus {
+  module: TenantModule;
+  name: string;
+  description: string;
+  monthlyPricePerBranch: number;
+  enabled: boolean;
+  updatedAt: string | null;
+  updatedByName: string | null;
+}
 
 export type BusinessType = 'KIOSCO' | 'ALMACEN' | 'DIETETICA' | 'MINIMERCADO' | 'FARMACIA' | 'OTRO';
 
@@ -186,9 +235,10 @@ export const MOVEMENT_SOURCE_LABELS: Record<MovementSource, string> = {
 /** Estado de stock de un producto (SPEC §4.2). */
 export type StockStatus = 'OK' | 'LOW' | 'OUT';
 
+/** Glosario fijo de docs/design-system.md §9: Sin stock / Crítico / Bajo / OK. */
 export const STOCK_STATUS_LABELS: Record<StockStatus, string> = {
-  OK: 'Normal',
-  LOW: 'Stock bajo',
+  OK: 'OK',
+  LOW: 'Bajo',
   OUT: 'Sin stock',
 };
 
@@ -454,7 +504,10 @@ export interface TenantInfo {
   businessType: BusinessType;
   currency: string;
   stockRotation: StockRotation;
+  /** Máximo **efectivo** de sucursales: sin `MULTI_BRANCH` es 1 (SPEC §14.1). */
   maxBranches: number;
+  /** Módulos habilitados por los dueños de GondolIA (SPEC §14). */
+  modules: TenantModule[];
 }
 
 export interface MeDto {
@@ -488,11 +541,15 @@ export interface ChangePasswordRequest {
   newPassword: string;
 }
 
-/** Mensaje de `/user/queue/session` (SPEC §5.3, §7). */
+/**
+ * Mensaje de `/user/queue/session` (SPEC §5.3, §7, §14.1):
+ * - `FORCE_LOGOUT`: cierra la sesión mostrando `message`.
+ * - `MODULES_CHANGED`: cambiaron los módulos del comercio → `refreshMe()`.
+ */
 export interface SessionEventMessage {
-  type: 'FORCE_LOGOUT';
-  code: string;
-  message: string;
+  type: 'FORCE_LOGOUT' | 'MODULES_CHANGED';
+  code?: string;
+  message?: string;
 }
 
 // ---------------------------------------------------------------------------

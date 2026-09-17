@@ -18,8 +18,8 @@ export function branchColumn<T extends { branchName?: string | null }>(options: 
     mobile,
     hideBelow,
     cell: (row) => (
-      <span className="inline-flex max-w-full items-center gap-1.5 whitespace-nowrap text-slate-600">
-        <Store className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
+      <span className="inline-flex max-w-full items-center gap-1.5 whitespace-nowrap text-muted-foreground">
+        <Store className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
         <span className="truncate">{row.branchName ?? '—'}</span>
       </span>
     ),

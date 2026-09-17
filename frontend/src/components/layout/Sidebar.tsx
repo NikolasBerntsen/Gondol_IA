@@ -1,151 +1,183 @@
-import { X } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthContext';
-import { getNavigation, isNavItemActive, type NavSection } from '@/config/navigation';
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/Sheet';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/Tooltip';
+import { getNavigation, isNavItemActive, type NavItem, type NavSection } from '@/config/navigation';
 import { cn } from '@/lib/cn';
-import { getFocusableElements, trapTabKey } from '@/lib/focus';
-import { lockBodyScroll } from '@/lib/scrollLock';
-import { Logo } from './Logo';
+import { useModules } from '@/modules/useModules';
+import { Logo, LogoMark } from './Logo';
 
 export interface SidebarProps {
-  /** Drawer abierto (solo aplica debajo de `lg`). */
+  /** Drawer abierto (solo debajo de `lg`). */
   open: boolean;
   onClose: () => void;
+  /** Riel angosto con tooltips (variante compacta del POS o preferencia del usuario). */
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
-/** Menú lateral verde oscuro: fijo desde `lg`, drawer en pantallas chicas (SPEC §9.4, §9.5). */
-export function Sidebar({ open, onClose }: SidebarProps) {
+/**
+ * Riel de navegación verde profundo: fijo desde `lg` (256 px, 68 px colapsado) y drawer en
+ * pantallas chicas (SPEC §9.4, docs/design-system.md §7.1).
+ */
+export function Sidebar({ open, onClose, collapsed = false, onToggleCollapse }: SidebarProps) {
   const { me } = useAuth();
-  const sections = me ? getNavigation(me.role) : [];
+  const { modules, isTenant } = useModules();
+  const sections = me ? getNavigation(me.role, isTenant ? modules : undefined) : [];
 
   return (
     <>
       <aside
-        className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-brand-900 lg:flex"
-        aria-label="Menú principal"
+        className={cn(
+          // El borde derecho separa el riel del lienzo: en tema oscuro el verde profundo (#09100C)
+          // queda a un paso del fondo (#0D1410) y sin él la columna se pierde.
+          'fixed inset-y-0 left-0 z-30 hidden border-r border-border transition-[width] duration-200 lg:block',
+          collapsed ? 'w-[68px]' : 'w-64',
+        )}
       >
-        <SidebarContent sections={sections} />
+        <Rail sections={sections} collapsed={collapsed} onToggleCollapse={onToggleCollapse} />
       </aside>
-      {open && <MobileDrawer sections={sections} onClose={onClose} />}
+
+      <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
+        <SheetContent
+          side="left"
+          className="w-[284px] max-w-[86%] border-r-0 bg-rail p-0 text-rail-foreground shadow-pop sm:max-w-[284px] [&>button]:text-rail-foreground"
+          aria-describedby={undefined}
+        >
+          <SheetTitle className="sr-only">Menú principal</SheetTitle>
+          <Rail sections={sections} collapsed={false} onNavigate={onClose} inDrawer />
+        </SheetContent>
+      </Sheet>
     </>
   );
 }
 
-function MobileDrawer({ sections, onClose }: { sections: NavSection[]; onClose: () => void }) {
-  const panelRef = useRef<HTMLDivElement>(null);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-
-  useEffect(() => {
-    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const unlock = lockBodyScroll();
-    getFocusableElements(panelRef.current)[0]?.focus({ preventScroll: true });
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onCloseRef.current();
-      else trapTabKey(event, panelRef.current);
-    };
-    const onResize = () => {
-      if (window.matchMedia('(min-width: 1024px)').matches) onCloseRef.current();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    window.addEventListener('resize', onResize);
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('resize', onResize);
-      unlock();
-      if (previouslyFocused?.isConnected) previouslyFocused.focus({ preventScroll: true });
-    };
-  }, []);
-
-  return (
-    <div className="fixed inset-0 z-50 lg:hidden" role="presentation">
-      <div className="absolute inset-0 animate-fade-in bg-slate-950/50 backdrop-blur-[2px]" aria-hidden="true" onClick={onClose} />
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Menú principal"
-        className="relative flex h-full w-72 max-w-[85vw] animate-slide-in-left flex-col bg-brand-900 shadow-2xl"
-      >
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute right-3 top-5 rounded-lg p-2 text-brand-100/80 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300"
-          aria-label="Cerrar menú"
-        >
-          <X className="h-5 w-5" aria-hidden="true" />
-        </button>
-        <SidebarContent sections={sections} onNavigate={onClose} />
-      </div>
-    </div>
-  );
-}
-
-function SidebarContent({ sections, onNavigate }: { sections: NavSection[]; onNavigate?: () => void }) {
+function Rail({
+  sections,
+  collapsed,
+  onNavigate,
+  onToggleCollapse,
+  inDrawer,
+}: {
+  sections: NavSection[];
+  collapsed: boolean;
+  onNavigate?: () => void;
+  onToggleCollapse?: () => void;
+  inDrawer?: boolean;
+}) {
   const { pathname } = useLocation();
 
   return (
-    <>
-      <div className="px-5 pb-5 pt-5">
-        <Link
-          to="/"
-          onClick={onNavigate}
-          className="inline-flex rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300"
-          aria-label="GondolIA, ir al inicio"
+    <TooltipProvider delayDuration={200}>
+      <nav aria-label="Menú principal" className="gd-rail flex h-full min-h-0 flex-col bg-rail text-rail-foreground">
+        <div
+          className={cn(
+            'flex h-14 shrink-0 items-center border-b border-rail-strong/[0.07]',
+            collapsed ? 'justify-center px-2' : 'px-4',
+          )}
         >
-          <Logo variant="light" showTagline />
-        </Link>
-      </div>
-
-      <nav className="flex-1 overflow-y-auto px-3 pb-4 [scrollbar-color:rgb(255_255_255/0.2)_transparent] [scrollbar-width:thin]">
-        {sections.map((section, index) => (
-          <div key={section.title ?? index} className={cn(index > 0 && 'mt-3 border-t border-white/10 pt-3')}>
-            <ul className="space-y-0.5" aria-label={section.title}>
-              {section.items.map((item) => {
-                const active = isNavItemActive(item, pathname);
-                const Icon = item.icon;
-                return (
-                  <li key={item.to}>
-                    <Link
-                      to={item.to}
-                      onClick={onNavigate}
-                      aria-current={active ? 'page' : undefined}
-                      className={cn(
-                        'group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
-                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300',
-                        active
-                          ? 'bg-white/[0.12] text-white shadow-sm'
-                          : 'text-brand-100/75 hover:bg-white/[0.06] hover:text-white',
-                      )}
-                    >
-                      {active && (
-                        <span className="absolute inset-y-2 left-0 w-1 rounded-r-full bg-lime-300" aria-hidden="true" />
-                      )}
-                      <Icon
-                        className={cn(
-                          'h-5 w-5 shrink-0 transition-colors',
-                          active ? 'text-lime-300' : 'text-brand-300/80 group-hover:text-brand-100',
-                        )}
-                        aria-hidden="true"
-                      />
-                      <span className="truncate">{item.label}</span>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ))}
-      </nav>
-
-      <div className="hidden px-4 pb-5 pt-1 [@media(min-height:720px)]:block">
-        <div className="rounded-2xl bg-gradient-to-br from-brand-700/80 to-brand-800 p-4 ring-1 ring-inset ring-white/5">
-          <p className="text-sm font-semibold leading-snug text-white">Productos de hoy, clientes de siempre</p>
-          <p className="mt-1 text-xs text-brand-200/80">GondolIA cuida tu stock por vos.</p>
+          <Link
+            to="/"
+            onClick={onNavigate}
+            className="inline-flex rounded-control focus-visible:outline-none"
+            aria-label="GondolIA, ir al inicio"
+          >
+            {collapsed ? <LogoMark /> : <Logo />}
+          </Link>
         </div>
-      </div>
-    </>
+
+        <div
+          className="gd-scroll min-h-0 flex-1 overflow-y-auto px-2.5 pb-3 pt-2"
+          style={{ scrollbarColor: 'hsl(var(--rail-hover)) transparent' }}
+        >
+          {sections.map((section, index) => (
+            <div key={section.title ?? index} className={cn(index > 0 && 'mt-3')}>
+              {section.title &&
+                (collapsed ? (
+                  <div aria-hidden="true" className="mx-3 mb-2 mt-1 h-px bg-rail-strong/10" />
+                ) : (
+                  <div className="mb-1 px-3 pt-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-rail-muted">
+                    {section.title}
+                  </div>
+                ))}
+              <ul className="space-y-0.5" aria-label={section.title}>
+                {section.items.map((navItem) => (
+                  <li key={navItem.to}>
+                    <RailItem
+                      item={navItem}
+                      active={isNavItemActive(navItem, pathname)}
+                      collapsed={collapsed}
+                      onNavigate={onNavigate}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        <div className={cn('shrink-0 border-t border-rail-strong/[0.07]', collapsed ? 'px-2 py-2' : 'px-4 py-3')}>
+          {!collapsed && <p className="mb-2 text-xs text-rail-muted">Productos de hoy, clientes de siempre.</p>}
+          {!inDrawer && onToggleCollapse && (
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              className={cn(
+                'flex h-8 items-center gap-2 rounded-control text-sm font-medium text-rail-muted transition-colors hover:bg-rail-hover hover:text-rail-foreground',
+                collapsed ? 'w-full justify-center' : '-mx-2 px-2',
+              )}
+              aria-label={collapsed ? 'Expandir menú' : 'Colapsar menú'}
+            >
+              {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+              {!collapsed && 'Colapsar menú'}
+            </button>
+          )}
+        </div>
+      </nav>
+    </TooltipProvider>
+  );
+}
+
+function RailItem({
+  item,
+  active,
+  collapsed,
+  onNavigate,
+}: {
+  item: NavItem;
+  active: boolean;
+  collapsed: boolean;
+  onNavigate?: () => void;
+}) {
+  const Icon = item.icon;
+  const link = (
+    <Link
+      to={item.to}
+      onClick={onNavigate}
+      aria-current={active ? 'page' : undefined}
+      className={cn(
+        'group relative flex h-9 w-full items-center gap-3 rounded-control text-left text-base font-medium transition-colors',
+        collapsed ? 'justify-center px-0' : 'px-3',
+        active ? 'bg-rail-active text-rail-strong' : 'text-rail-foreground hover:bg-rail-hover hover:text-rail-strong',
+      )}
+    >
+      <Icon
+        className={cn(
+          'h-[18px] w-[18px] shrink-0',
+          active ? 'text-rail-strong' : 'text-rail-muted group-hover:text-rail-foreground',
+        )}
+        aria-hidden="true"
+      />
+      {collapsed ? <span className="sr-only">{item.label}</span> : <span className="min-w-0 flex-1 truncate">{item.label}</span>}
+    </Link>
+  );
+
+  if (!collapsed) return link;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{link}</TooltipTrigger>
+      <TooltipContent side="right">{item.label}</TooltipContent>
+    </Tooltip>
   );
 }

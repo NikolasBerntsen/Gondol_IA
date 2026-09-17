@@ -1,10 +1,16 @@
-import { Building2, Eye, EyeOff, KeyRound, LogOut, ShieldCheck, Store, UserRound } from 'lucide-react';
+import { Blocks, Building2, Eye, EyeOff, KeyRound, LogOut, ShieldCheck, Store, UserRound } from 'lucide-react';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { authApi } from '@/api/auth';
 import { ApiError, getErrorMessage } from '@/api/client';
-import { BUSINESS_TYPE_LABELS, PLAN_LABELS, ROLE_LABELS, STOCK_ROTATION_LABELS } from '@/api/types';
+import {
+  BUSINESS_TYPE_LABELS,
+  PLAN_LABELS,
+  ROLE_LABELS,
+  STOCK_ROTATION_LABELS,
+  TENANT_MODULE_LABELS,
+} from '@/api/types';
 import { useAuth, useCurrentUser } from '@/auth/AuthContext';
 import { roleHome } from '@/auth/roleHome';
 import { Alert } from '@/components/ui/Alert';
@@ -15,6 +21,7 @@ import { Card, CardHeader } from '@/components/ui/Card';
 import { Field } from '@/components/ui/Field';
 import { Input } from '@/components/ui/Input';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { useModules } from '@/modules/useModules';
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -41,7 +48,7 @@ function passwordStrength(password: string): { score: 0 | 1 | 2 | 3; label: stri
   return { score: 3, label: 'Fuerte' };
 }
 
-const STRENGTH_COLORS = ['bg-slate-200', 'bg-red-500', 'bg-amber-500', 'bg-emerald-500'] as const;
+const STRENGTH_COLORS = ['bg-border', 'bg-crit', 'bg-warn', 'bg-ok'] as const;
 
 export default function ProfilePage() {
   const me = useCurrentUser();
@@ -56,7 +63,7 @@ export default function ProfilePage() {
         icon={forced ? KeyRound : UserRound}
         actions={
           forced ? (
-            <Button variant="outline" onClick={() => logout()} leftIcon={<LogOut className="h-4 w-4" aria-hidden="true" />}>
+            <Button variant="outline" onClick={() => logout()} leftIcon={<LogOut aria-hidden="true" />}>
               Cerrar sesión
             </Button>
           ) : undefined
@@ -64,7 +71,7 @@ export default function ProfilePage() {
       />
 
       {forced && (
-        <Alert tone="warning" title="Por seguridad, elegí una contraseña nueva" className="mb-6">
+        <Alert tone="warn" title="Por seguridad, elegí una contraseña nueva" className="mb-6">
           Tu contraseña fue creada o restablecida por un administrador. Cambiala ahora para acceder al resto de las secciones.
         </Alert>
       )}
@@ -80,8 +87,8 @@ export default function ProfilePage() {
 function InfoRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-0.5 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-      <dt className="text-sm text-slate-500">{label}</dt>
-      <dd className="text-sm font-medium text-slate-800 sm:text-right">{children}</dd>
+      <dt className="text-base text-muted-foreground">{label}</dt>
+      <dd className="text-base font-medium text-foreground sm:text-right">{children}</dd>
     </div>
   );
 }
@@ -95,24 +102,25 @@ function AccountCard() {
     <Card className="lg:col-span-2">
       <div className="flex flex-col items-center text-center">
         <Avatar name={me.fullName} size="xl" />
-        <h2 className="mt-3 text-lg font-semibold text-slate-900">{me.fullName}</h2>
-        <p className="break-all text-sm text-slate-500">{me.email}</p>
-        <Badge tone="brand" className="mt-2" icon={ShieldCheck}>
+        <h2 className="mt-3 font-display text-lg font-semibold text-foreground">{me.fullName}</h2>
+        <p className="break-all text-base text-muted-foreground">{me.email}</p>
+        <Badge tone="primary" className="mt-2" icon={ShieldCheck}>
           {ROLE_LABELS[me.role]}
         </Badge>
       </div>
 
       {tenant && (
         <>
-          <dl className="mt-6 divide-y divide-slate-100 border-t border-slate-100">
+          <dl className="mt-6 divide-y divide-border border-t border-border">
             <InfoRow label="Comercio">{tenant.name}</InfoRow>
             <InfoRow label="Rubro">{BUSINESS_TYPE_LABELS[tenant.businessType] ?? tenant.businessType}</InfoRow>
             <InfoRow label="Plan">{PLAN_LABELS[tenant.plan] ?? tenant.plan}</InfoRow>
             <InfoRow label="Rotación de stock">{STOCK_ROTATION_LABELS[tenant.stockRotation] ?? tenant.stockRotation}</InfoRow>
           </dl>
-          <div className="mt-4 border-t border-slate-100 pt-4">
-            <p className="flex items-center gap-2 text-sm font-medium text-slate-700">
-              <Building2 className="h-4 w-4 text-slate-400" aria-hidden="true" />
+          <ModulesRow />
+          <div className="mt-4 border-t border-border pt-4">
+            <p className="flex items-center gap-2 text-base font-semibold text-foreground">
+              <Building2 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
               {seesAllBranches ? 'Acceso a todas las sucursales' : 'Tus sucursales asignadas'}
             </p>
             {me.branches.length > 0 ? (
@@ -126,7 +134,7 @@ function AccountCard() {
                 ))}
               </ul>
             ) : (
-              <p className="mt-2 text-sm text-slate-500">
+              <p className="mt-2 text-base text-muted-foreground">
                 Todavía no tenés sucursales asignadas. Pedile al administrador de tu comercio que te asigne una.
               </p>
             )}
@@ -134,6 +142,32 @@ function AccountCard() {
         </>
       )}
     </Card>
+  );
+}
+
+/** Funciones que los dueños de GondolIA habilitaron para el comercio (SPEC §14). */
+function ModulesRow() {
+  const { modules } = useModules();
+  return (
+    <div className="mt-4 border-t border-border pt-4">
+      <p className="flex items-center gap-2 text-base font-semibold text-foreground">
+        <Blocks className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+        Funciones habilitadas
+      </p>
+      {modules.length > 0 ? (
+        <ul className="mt-2 flex flex-wrap gap-1.5">
+          {modules.map((module) => (
+            <li key={module}>
+              <Badge tone="primary">{TENANT_MODULE_LABELS[module]}</Badge>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-base text-muted-foreground">
+          Tu comercio usa GondolIA con las funciones incluidas. Escribinos si querés sumar el punto de venta.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -213,7 +247,7 @@ function ChangePasswordCard({ className }: { className?: string }) {
     <button
       type="button"
       onClick={() => setVisible((value) => !value)}
-      className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+      className="grid h-8 w-8 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       aria-label={visible ? 'Ocultar contraseñas' : 'Mostrar contraseñas'}
       aria-pressed={visible}
     >
@@ -229,7 +263,7 @@ function ChangePasswordCard({ className }: { className?: string }) {
         description={`Usá al menos ${MIN_PASSWORD_LENGTH} caracteres. Te recomendamos combinar letras, números y símbolos.`}
       />
       <form onSubmit={onSubmit} noValidate className="mt-5 space-y-4">
-        {submitError && <Alert tone="danger">{submitError}</Alert>}
+        {submitError && <Alert tone="crit">{submitError}</Alert>}
 
         {/* Ayuda a los gestores de contraseñas a asociar la contraseña nueva a la cuenta. */}
         <input type="email" name="username" autoComplete="username" value={me.email} readOnly hidden />
@@ -258,11 +292,11 @@ function ChangePasswordCard({ className }: { className?: string }) {
               {[1, 2, 3].map((step) => (
                 <span
                   key={step}
-                  className={`h-1.5 flex-1 rounded-full ${strength.score >= step ? STRENGTH_COLORS[strength.score] : 'bg-slate-200'}`}
+                  className={`h-1.5 flex-1 rounded-full ${strength.score >= step ? STRENGTH_COLORS[strength.score] : 'bg-border'}`}
                 />
               ))}
             </div>
-            <span className="w-20 text-right text-xs font-medium text-slate-500">{strength.label}</span>
+            <span className="w-20 text-right text-xs font-medium text-muted-foreground">{strength.label}</span>
           </div>
         )}
 

@@ -1,9 +1,7 @@
+import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
-import { useEffect, useId, useRef, type ReactNode, type RefObject } from 'react';
-import { createPortal } from 'react-dom';
+import { type ReactNode, type RefObject } from 'react';
 import { cn } from '@/lib/cn';
-import { getFocusableElements, trapTabKey } from '@/lib/focus';
-import { lockBodyScroll } from '@/lib/scrollLock';
 
 export type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
 
@@ -29,27 +27,23 @@ export interface ModalProps {
   /** Impide cerrar (ESC, fondo, botón) mientras hay una operación en curso. */
   preventClose?: boolean;
   hideCloseButton?: boolean;
-  /** Id del elemento que da nombre al diálogo cuando no se usa `title` (p. ej. el título propio del contenido). */
+  /** Id del elemento que da nombre al diálogo cuando no se usa `title`. */
   ariaLabelledBy?: string;
-  /** Elemento que recibe el foco al abrir. Por defecto: `[data-autofocus]` o el primer control del contenido. */
+  /** Elemento que recibe el foco al abrir. Por defecto: `[data-autofocus]` o el primer control. */
   initialFocusRef?: RefObject<HTMLElement | null>;
   className?: string;
   bodyClassName?: string;
 }
 
-/** Pila de modales abiertos: ESC y Tab solo afectan al de arriba. */
-const modalStack: string[] = [];
-
 /**
- * Diálogo modal accesible: portal a `body`, ESC, foco atrapado y restaurado al cerrar, bloqueo de scroll.
- * En mobile se muestra como hoja inferior.
+ * Diálogo modal (Radix Dialog): foco atrapado y restaurado, ESC, bloqueo de scroll y velo `scrim/60`.
+ * Radio de diálogo (16 px) y `shadow-pop`. En mobile se ancla abajo como hoja.
+ *
+ * El control que debe recibir el foco al abrir se marca con `data-autofocus`
+ * (o se pasa `initialFocusRef`).
  */
-export function Modal(props: ModalProps) {
-  if (!props.open) return null;
-  return createPortal(<ModalPanel {...props} />, document.body);
-}
-
-function ModalPanel({
+export function Modal({
+  open,
   onClose,
   title,
   description,
@@ -64,110 +58,81 @@ function ModalPanel({
   className,
   bodyClassName,
 }: ModalProps) {
-  const modalId = useId();
-  const titleId = `${modalId}-title`;
-  const descriptionId = `${modalId}-description`;
-  const panelRef = useRef<HTMLDivElement>(null);
-  const bodyRef = useRef<HTMLDivElement>(null);
-
-  const closeRef = useRef({ onClose, preventClose });
-  closeRef.current = { onClose, preventClose };
-
-  const requestClose = () => {
-    if (!closeRef.current.preventClose) closeRef.current.onClose();
+  const blockOutside = (event: Event) => {
+    if (preventClose || !closeOnOverlayClick) event.preventDefault();
   };
 
-  useEffect(() => {
-    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    modalStack.push(modalId);
-    const unlock = lockBodyScroll();
-
-    const panel = panelRef.current;
-    const target =
-      initialFocusRef?.current ??
-      panel?.querySelector<HTMLElement>('[data-autofocus]') ??
-      getFocusableElements(bodyRef.current)[0] ??
-      panel;
-    target?.focus({ preventScroll: true });
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (modalStack[modalStack.length - 1] !== modalId) return;
-      if (event.key === 'Escape') {
-        event.stopPropagation();
-        if (!closeRef.current.preventClose) closeRef.current.onClose();
-      } else if (event.key === 'Tab') {
-        trapTabKey(event, panelRef.current);
-      }
-    };
-    document.addEventListener('keydown', onKeyDown);
-
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      const index = modalStack.lastIndexOf(modalId);
-      if (index >= 0) modalStack.splice(index, 1);
-      unlock();
-      if (previouslyFocused?.isConnected) previouslyFocused.focus({ preventScroll: true });
-    };
-    // Solo al montar/desmontar: el foco inicial no debe moverse en cada render.
-  }, []);
-
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4" role="presentation">
-      <div
-        className="fixed inset-0 animate-fade-in bg-slate-900/50 backdrop-blur-[2px]"
-        aria-hidden="true"
-        onClick={closeOnOverlayClick ? requestClose : undefined}
-      />
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={title ? titleId : ariaLabelledBy}
-        aria-describedby={description ? descriptionId : undefined}
-        tabIndex={-1}
-        className={cn(
-          'relative flex max-h-[92dvh] w-full flex-col rounded-t-2xl bg-white shadow-popover outline-none',
-          'animate-slide-up sm:animate-scale-in sm:rounded-2xl',
-          SIZE_CLASSES[size],
-          className,
-        )}
-      >
-        {(title || !hideCloseButton) && (
-          <div className="flex items-start gap-3 border-b border-slate-100 px-5 py-4">
-            <div className="min-w-0 flex-1">
-              {title && (
-                <h2 id={titleId} className="text-lg font-semibold leading-snug text-slate-900">
-                  {title}
-                </h2>
-              )}
-              {description && (
-                <p id={descriptionId} className="mt-1 text-sm text-slate-500">
-                  {description}
-                </p>
-              )}
-            </div>
-            {!hideCloseButton && (
-              <button
-                type="button"
-                onClick={requestClose}
-                disabled={preventClose}
-                className="-mr-2 -mt-1 rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:opacity-40"
-                aria-label="Cerrar"
-              >
-                <X className="h-5 w-5" aria-hidden="true" />
-              </button>
+    <DialogPrimitive.Root
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && !preventClose) onClose();
+      }}
+    >
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-scrim/60 data-[state=closed]:animate-out data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <DialogPrimitive.Content
+          // Con `ariaLabelledBy` el nombre lo da el contenido; sin descripción se quita el `aria-describedby`
+          // que Radix agrega por defecto (si no, avisa por consola).
+          {...(ariaLabelledBy ? { 'aria-labelledby': ariaLabelledBy } : null)}
+          {...(description ? null : { 'aria-describedby': undefined })}
+          onEscapeKeyDown={(event) => {
+            if (preventClose) event.preventDefault();
+          }}
+          onPointerDownOutside={blockOutside}
+          onInteractOutside={blockOutside}
+          onOpenAutoFocus={(event) => {
+            const target =
+              initialFocusRef?.current ??
+              (event.currentTarget as HTMLElement).querySelector<HTMLElement>('[data-autofocus]');
+            if (!target) return;
+            event.preventDefault();
+            target.focus({ preventScroll: true });
+          }}
+          className={cn(
+            'fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] flex-col border bg-card text-foreground shadow-pop outline-none',
+            'rounded-t-dialog data-[state=closed]:animate-out data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom',
+            'sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:w-[calc(100%-24px)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-dialog',
+            'sm:data-[state=closed]:slide-out-to-bottom-0 sm:data-[state=open]:slide-in-from-bottom-0 sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95',
+            SIZE_CLASSES[size],
+            className,
+          )}
+        >
+          <DialogPrimitive.Title
+            className={cn(
+              title
+                ? 'border-b border-border px-5 pb-3 pt-4 font-display text-lg font-semibold leading-tight tracking-[-0.01em] text-foreground'
+                : 'sr-only',
+              title && description && 'pb-1',
             )}
-          </div>
-        )}
-        <div ref={bodyRef} className={cn('flex-1 overflow-y-auto px-5 py-4', bodyClassName)}>
-          {children}
-        </div>
-        {footer && (
-          <div className="flex flex-col-reverse gap-2 border-t border-slate-100 px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:flex-row sm:justify-end sm:pb-4">
-            {footer}
-          </div>
-        )}
-      </div>
-    </div>
+          >
+            {title ?? 'Diálogo'}
+          </DialogPrimitive.Title>
+          {description && (
+            <DialogPrimitive.Description className="border-b border-border px-5 pb-3 text-base text-muted-foreground">
+              {description}
+            </DialogPrimitive.Description>
+          )}
+
+          <div className={cn('gd-scroll min-h-0 flex-1 overflow-y-auto px-5 py-4', bodyClassName)}>{children}</div>
+
+          {footer && (
+            <div className="flex flex-col-reverse gap-2 border-t border-border px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:flex-row sm:justify-end sm:pb-4">
+              {footer}
+            </div>
+          )}
+
+          {!hideCloseButton && (
+            <DialogPrimitive.Close
+              disabled={preventClose}
+              className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+              <span className="sr-only">Cerrar</span>
+            </DialogPrimitive.Close>
+          )}
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }

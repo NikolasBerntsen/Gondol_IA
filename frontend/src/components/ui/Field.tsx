@@ -17,6 +17,7 @@ export interface FieldProps {
   hint?: ReactNode;
   /** Mensaje de error; marca el control como inválido. */
   error?: ReactNode;
+  /** Solo accesibilidad (`aria-required`): Góndola UI marca lo **opcional**, no lo obligatorio. */
   required?: boolean;
   /** Muestra "(opcional)" junto a la etiqueta. */
   optional?: boolean;
@@ -27,7 +28,12 @@ export interface FieldProps {
   children: ReactElement | ((props: FieldControlProps) => ReactNode);
 }
 
-/** Etiqueta + control + ayuda + error, con `id`/`aria-*` conectados automáticamente. */
+/** `aria-describedby` para controles que no usan `Field` (p. ej. un grupo de radios). */
+export function fieldDescribedBy(id: string, opts: { hint?: unknown; error?: unknown }): string | undefined {
+  return [opts.error ? `${id}-error` : null, opts.hint ? `${id}-hint` : null].filter(Boolean).join(' ') || undefined;
+}
+
+/** Etiqueta + control + error + ayuda, con `id`/`aria-*` conectados automáticamente. */
 export function Field({ label, htmlFor, hint, error, required, optional, labelAction, className, children }: FieldProps) {
   const autoId = useId();
   const childId =
@@ -35,7 +41,7 @@ export function Field({ label, htmlFor, hint, error, required, optional, labelAc
   const id = htmlFor ?? childId ?? `field-${autoId}`;
   const hintId = hint ? `${id}-hint` : undefined;
   const errorId = error ? `${id}-error` : undefined;
-  const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined;
+  const describedBy = [errorId, hintId].filter(Boolean).join(' ') || undefined;
 
   const controlProps: FieldControlProps = {
     id,
@@ -52,33 +58,28 @@ export function Field({ label, htmlFor, hint, error, required, optional, labelAc
         : children;
 
   return (
-    <div className={cn('space-y-1.5', className)}>
+    <div className={cn('flex min-w-0 flex-col gap-1.5', className)}>
       {(label || labelAction) && (
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-baseline justify-between gap-2">
           {label && (
-            <label htmlFor={id} className="block text-sm font-medium text-slate-700">
+            <label htmlFor={id} className="flex items-baseline gap-1.5 text-sm font-semibold text-foreground">
               {label}
-              {required && (
-                <span className="ml-0.5 text-red-500" aria-hidden="true">
-                  *
-                </span>
-              )}
-              {optional && <span className="ml-1 font-normal text-slate-400">(opcional)</span>}
+              {optional && <span className="text-xs font-normal text-muted-foreground">(opcional)</span>}
             </label>
           )}
           {labelAction}
         </div>
       )}
       {control}
-      {hint && (
-        <p id={hintId} className="text-xs text-slate-500">
-          {hint}
+      {error && (
+        <p id={errorId} className="flex items-start gap-1.5 text-sm text-crit-ink">
+          <AlertCircle className="mt-px h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>{error}</span>
         </p>
       )}
-      {error && (
-        <p id={errorId} className="flex items-start gap-1.5 text-sm text-red-600">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <span>{error}</span>
+      {hint && (
+        <p id={hintId} className="text-sm text-muted-foreground">
+          {hint}
         </p>
       )}
     </div>

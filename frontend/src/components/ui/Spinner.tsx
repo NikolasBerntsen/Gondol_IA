@@ -18,7 +18,7 @@ export interface SpinnerProps {
 export function Spinner({ size = 'md', label = 'Cargando…', className }: SpinnerProps) {
   return (
     <span role="status" className="inline-flex items-center">
-      <Loader2 className={cn('animate-spin text-brand-600', SIZE_CLASSES[size], className)} aria-hidden="true" />
+      <Loader2 className={cn('animate-spin text-primary', SIZE_CLASSES[size], className)} aria-hidden="true" />
       <span className="sr-only">{label}</span>
     </span>
   );
@@ -34,9 +34,9 @@ export function PageSpinner({ label = 'Cargando…', className }: PageSpinnerPro
   return (
     <div
       role="status"
-      className={cn('flex min-h-[40vh] flex-col items-center justify-center gap-3 text-sm text-slate-500', className)}
+      className={cn('flex min-h-[40vh] flex-col items-center justify-center gap-3 text-base text-muted-foreground', className)}
     >
-      <Loader2 className="h-8 w-8 animate-spin text-brand-600" aria-hidden="true" />
+      <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
       <span>{label}</span>
     </div>
   );
