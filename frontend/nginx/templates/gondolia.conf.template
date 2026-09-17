@@ -1,0 +1,100 @@
+# GondolIA - configuración de nginx (plantilla).
+# Al iniciar el contenedor, /docker-entrypoint.d/20-envsubst-on-templates.sh genera
+# /etc/nginx/conf.d/gondolia.conf reemplazando solo HTTPS_PORT (puerto HTTPS publicado en el host)
+# y NGINX_LOCAL_RESOLVERS (DNS interno de Docker). Ver NGINX_ENVSUBST_FILTER en el Dockerfile.
+
+server_tokens off;
+absolute_redirect off;
+charset utf-8;
+
+# "backend" se resuelve en cada request (con caché corta): si el contenedor del backend se recrea
+# y cambia de IP, nginx lo sigue encontrando sin reiniciarse.
+resolver ${NGINX_LOCAL_RESOLVERS} valid=10s ipv6=off;
+resolver_timeout 5s;
+
+gzip on;
+gzip_vary on;
+gzip_proxied any;
+gzip_comp_level 5;
+gzip_min_length 1024;
+gzip_types text/plain text/css text/xml text/javascript application/javascript application/json
+           application/xml application/manifest+json image/svg+xml font/ttf font/otf;
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+# En la propia PC (localhost) se puede usar HTTP. Desde la red se redirige a HTTPS (la cámara del
+# celular solo funciona en un contexto seguro), salvo la descarga de la CA y el healthcheck.
+map $host $gondolia_is_local_host {
+    default     0;
+    localhost   1;
+    127.0.0.1   1;
+    "[::1]"     1;
+}
+
+map $uri $gondolia_http_allowed {
+    default           0;
+    /gondolia-ca.crt  1;
+    /nginx-health     1;
+}
+
+map "$gondolia_is_local_host$gondolia_http_allowed" $gondolia_redirect_to_https {
+    default 0;
+    00      1;
+}
+
+# Puerto visto por el navegador (el publicado en el host, no el 80/443 interno del contenedor).
+map $scheme $gondolia_default_port {
+    https   443;
+    default 80;
+}
+
+map $http_host $gondolia_forwarded_port {
+    "~:([0-9]+)$" $1;
+    default       $gondolia_default_port;
+}
+
+map $http_host $gondolia_proxy_host {
+    ""      $host;
+    default $http_host;
+}
+
+# Los requests del propio frontend (mismo origen) no son CORS. Detrás del proxy TLS el backend podría
+# confundirlos con cross-origin (ve http://backend:8080), así que se quita el Origin cuando coincide con
+# el host pedido. Los orígenes externos se envían tal cual y el backend aplica su política CORS.
+map "$http_origin|$scheme://$http_host" $gondolia_upstream_origin {
+    default             $http_origin;
+    "~*^([^|]+)\|\1$"   "";
+}
+
+server {
+    listen 80 default_server;
+    server_name _;
+
+    if ($gondolia_redirect_to_https) {
+        return 307 https://$host:${HTTPS_PORT}$request_uri;
+    }
+
+    include /etc/nginx/snippets/gondolia-app.conf;
+}
+
+server {
+    listen 443 ssl default_server;
+    http2 on;
+    server_name _;
+
+    ssl_certificate           /etc/nginx/certs/server.crt;
+    ssl_certificate_key       /etc/nginx/certs/server.key;
+    ssl_protocols             TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache         shared:GondoliaTLS:10m;
+    ssl_session_timeout       1d;
+    ssl_session_tickets       off;
+
+    # http:// contra el puerto HTTPS: redirigir a https://
+    error_page 497 =307 https://$host:${HTTPS_PORT}$request_uri;
+
+    include /etc/nginx/snippets/gondolia-app.conf;
+}

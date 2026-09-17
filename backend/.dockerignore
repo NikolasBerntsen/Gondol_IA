@@ -1,0 +1,19 @@
+# Solo pom.xml y src/ entran a la imagen: todo lo demás se ignora para que el build sea rápido y reproducible.
+target
+data
+*.log
+.env
+.env.*
+.mvn/wrapper/maven-wrapper.jar
+.idea
+.vscode
+*.iml
+.classpath
+.project
+.settings
+.factorypath
+.DS_Store
+Thumbs.db
+HELP.md
+Dockerfile
+.dockerignore

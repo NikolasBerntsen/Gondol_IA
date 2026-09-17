@@ -1,0 +1,133 @@
+# GondolIA - entorno completo con Docker Compose.
+# Usá ./start.sh: crea .env, detecta las IPs de la red (LAN_IPS), construye, levanta y espera a que todo esté sano.
+#
+#   navegador / celular ──► web (nginx :80/:443) ──► backend (Spring Boot :8080) ──► db (PostgreSQL :5432)
+#                                                                              └──► ai (FastAPI :8000)
+
+name: gondolia
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-gondolia}
+      POSTGRES_USER: ${POSTGRES_USER:-gondolia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gondolia}
+      TZ: ${APP_TIMEZONE:-America/Argentina/Buenos_Aires}
+      PGTZ: ${APP_TIMEZONE:-America/Argentina/Buenos_Aires}
+    ports:
+      # Solo desde esta PC (DBeaver, psql, backend local): la base no queda expuesta a la red WiFi.
+      - "127.0.0.1:${DB_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # Por TCP: durante la inicialización Postgres solo escucha por socket, así no da "sano" antes de tiempo.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  ai:
+    build:
+      context: ./ai-service
+    restart: unless-stopped
+    environment:
+      TZ: ${APP_TIMEZONE:-America/Argentina/Buenos_Aires}
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status == 200 else 1)"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 90s
+    logging: *default-logging
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
+    environment:
+      TZ: ${APP_TIMEZONE:-America/Argentina/Buenos_Aires}
+      SERVER_PORT: "8080"
+      # nginx termina TLS: el backend respeta X-Forwarded-Proto/Host/Port para armar URLs y validar orígenes.
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      DB_HOST: db
+      DB_PORT_INTERNAL: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-gondolia}
+      POSTGRES_USER: ${POSTGRES_USER:-gondolia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gondolia}
+      JWT_SECRET: ${JWT_SECRET:?Falta JWT_SECRET en .env. Ejecutá ./start.sh para generarlo.}
+      JWT_EXPIRATION_HOURS: ${JWT_EXPIRATION_HOURS:-12}
+      AI_SERVICE_URL: http://ai:8000
+      APP_STORAGE_DIR: /data/uploads
+      APP_SEED_DEMO: ${APP_SEED_DEMO:-true}
+      APP_DEV_FIXTURE: ${APP_DEV_FIXTURE:-false}
+      APP_BOOTSTRAP_OWNER_EMAIL: ${APP_BOOTSTRAP_OWNER_EMAIL:-dueno@gondolia.app}
+      APP_BOOTSTRAP_OWNER_PASSWORD: ${APP_BOOTSTRAP_OWNER_PASSWORD:-Gondolia2026!}
+      APP_OPENFOODFACTS_ENABLED: ${APP_OPENFOODFACTS_ENABLED:-true}
+      APP_TIMEZONE: ${APP_TIMEZONE:-America/Argentina/Buenos_Aires}
+      # Heap máximo = 40% de la memoria asignada a Docker (se comparte con db, ai y web).
+      JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=40.0 -XX:+ExitOnOutOfMemoryError}
+    expose:
+      - "8080"
+    volumes:
+      - uploads:/data/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 4 -O /dev/null http://127.0.0.1:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      # El primer arranque migra la base y siembra los datos demo (suele tardar 1-2 minutos).
+      start_period: 240s
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  web:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      TZ: ${APP_TIMEZONE:-America/Argentina/Buenos_Aires}
+      HTTPS_PORT: ${HTTPS_PORT:-8443}
+      LAN_IPS: ${LAN_IPS:-}
+      CERT_HOSTNAMES: ${CERT_HOSTNAMES:-}
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+      - "${HTTPS_PORT:-8443}:443"
+    volumes:
+      # CA local + certificado del servidor (los genera el contenedor; la CA se conserva entre reinicios).
+      - ./certs:/etc/nginx/certs
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 4 -O /dev/null http://127.0.0.1/nginx-health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    logging: *default-logging
+
+volumes:
+  pgdata:
+  uploads:

@@ -1,0 +1,23 @@
+# API
+fastapi==0.116.1
+uvicorn==0.35.0
+pydantic==2.11.7
+python-multipart==0.0.20
+
+# Análisis de series y machine learning
+numpy==2.2.6
+pandas==2.3.1
+scipy==1.15.3
+statsmodels==0.14.5
+scikit-learn==1.7.1
+python-dateutil==2.9.0.post0
+
+# Imágenes, OCR y códigos de barras
+pillow==11.3.0
+opencv-python-headless==4.11.0.86
+pytesseract==0.3.13
+zxing-cpp==2.3.0
+
+# Tests (se ejecutan dentro de la imagen)
+pytest==8.4.1
+httpx==0.28.1
