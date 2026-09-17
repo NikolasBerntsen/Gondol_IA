@@ -102,9 +102,10 @@ Backend (Spring) las lee como: `spring.datasource.url=jdbc:postgresql://${DB_HOS
 | `SUPPORT_AGENT` | plataforma | Soporte | Atiende tickets y chat en vivo de todos los tenants. Ve solo lo que el cliente envía en el ticket (texto e imágenes) + nombre de comercio/usuario. |
 | `TENANT_BOSS` | tenant | Jefe | Toma de decisiones: **solo dashboards** (Inicio, Estadísticas, Inteligencia IA, Alertas) en modo lectura + Avisos, Seguridad alimentaria, Soporte. |
 | `TENANT_ADMIN` | tenant | Administrador | Máximo nivel dentro del tenant: todo. |
-| `TENANT_EMPLOYEE` | tenant | Empleado | Solo carga de inventario y productos con vencimiento/lote (escáner y OCR), vencimientos + Avisos, Seguridad alimentaria, Soporte. |
+| `TENANT_EMPLOYEE` | tenant | Empleado | Carga de inventario y productos con vencimiento/lote (escáner y OCR), vencimientos y **cobro en el POS GondolIA** (si el módulo está activo) + Avisos, Seguridad alimentaria, Soporte. |
+| `TENANT_CASHIER` | tenant | Cajero | **Solo el POS GondolIA** (abrir/cerrar su caja, cobrar, anular ventas de su turno) + Avisos, Seguridad alimentaria, Soporte. |
 
-Un tenant se crea con (al menos) un jefe, un administrador y un empleado. El admin puede crear más usuarios.
+Un tenant se crea con (al menos) un jefe, un administrador y un empleado. El admin puede crear más usuarios (incluidos cajeros).
 
 ### 3.2 Estados de tenant (`TenantStatus`)
 - `ACTIVE`: acceso normal.
@@ -114,23 +115,28 @@ Un tenant se crea con (al menos) un jefe, un administrador y un empleado. El adm
   (reactivar) o eliminable definitivamente.
 
 ### 3.3 Matriz de permisos (tenant)
-| Funcionalidad | BOSS | ADMIN | EMPLOYEE |
-|---|:-:|:-:|:-:|
-| Inicio / Estadísticas / Inteligencia IA / Alertas (ver) | ✔ | ✔ | ✘ |
-| Aceptar/descartar recomendaciones, gestionar alertas, recalcular IA | ✘ | ✔ | ✘ |
-| Inventario (listar/ver productos), crear/editar productos, categorías inline | ✘ | ✔ | ✔ |
-| Eliminar productos, CRUD categorías/proveedores | ✘ | ✔ | ✘ |
-| Carga de mercadería (lotes, escáner, OCR) — en sus sucursales | ✘ | ✔ | ✔ |
-| Ver consolidado de todas las sucursales / cambiar de sucursal | ✔ | ✔ | solo entre las asignadas |
-| Gestionar sucursales (alta, edición, baja) y asignar empleados | ✘ | ✔ | ✘ |
-| Transferencias de stock entre sucursales | ✘ | ✔ | ✘ |
-| Vencimientos (ver) y descartar vencidos/dañados | ✘ | ✔ | ✔ |
-| Ventas, importación CSV, integración POS, ajustes, historial de movimientos | ✘ | ✔ | ✘ |
-| Usuarios del comercio y Configuración | ✘ | ✔ | ✘ |
-| Avisos (ver), Seguridad alimentaria (ver + "Entendido") | ✔ | ✔ | ✔ |
-| Resolver recall (retirar de stock) | ✘ | ✔ | ✔ |
-| Soporte (tickets + chat en vivo) | ✔ | ✔ | ✔ |
-| Perfil / cambiar contraseña, notificaciones | ✔ | ✔ | ✔ |
+Las filas marcadas con [módulo] además requieren que ese módulo esté habilitado para el tenant (§14).
+| Funcionalidad | BOSS | ADMIN | EMPLOYEE | CASHIER |
+|---|:-:|:-:|:-:|:-:|
+| Inicio / Estadísticas / Inteligencia IA / Alertas (ver) | ✔ | ✔ | ✘ | ✘ |
+| Aceptar/descartar recomendaciones, gestionar alertas, recalcular IA | ✘ | ✔ | ✘ | ✘ |
+| Inventario (listar/ver productos), crear/editar productos, categorías inline | ✘ | ✔ | ✔ | ✘ |
+| Eliminar productos, CRUD categorías/proveedores | ✘ | ✔ | ✘ | ✘ |
+| Carga de mercadería (lotes, escáner, OCR) — en sus sucursales | ✘ | ✔ | ✔ | ✘ |
+| **Importación masiva Excel/CSV y exportación del catálogo** (§16) | ✘ | ✔ | ✘ | ✘ |
+| Ver consolidado de todas las sucursales / cambiar de sucursal | ✔ | ✔ | solo asignadas | solo asignadas |
+| Gestionar sucursales (alta, edición, baja) y asignar empleados/cajeros | ✘ | ✔ | ✘ | ✘ |
+| Transferencias de stock entre sucursales [MULTI_BRANCH] | ✘ | ✔ | ✘ | ✘ |
+| Vencimientos (ver) y descartar vencidos/dañados | ✘ | ✔ | ✔ | ✘ |
+| **POS GondolIA: abrir/cerrar caja, cobrar, anular ventas del propio turno** [POS_GONDOLIA] (§15) | ✘ | ✔ | ✔ | ✔ |
+| POS GondolIA: administrar cajas, ver todos los turnos, anular cualquier venta [POS_GONDOLIA] | ✘ | ✔ | ✘ | ✘ |
+| Integración con POS propio: API keys, importación CSV de ventas, simulador [POS_INTEGRATION] | ✘ | ✔ | ✘ | ✘ |
+| Historial de ventas (todas las fuentes), venta manual, ajustes, historial de movimientos | ✘ | ✔ | ✘ | ✘ |
+| Usuarios del comercio y Configuración | ✘ | ✔ | ✘ | ✘ |
+| Avisos (ver), Seguridad alimentaria (ver + "Entendido") | ✔ | ✔ | ✔ | ✔ |
+| Resolver recall (retirar de stock) | ✘ | ✔ | ✔ | ✘ |
+| Soporte (tickets + chat en vivo) | ✔ | ✔ | ✔ | ✔ |
+| Perfil / cambiar contraseña, notificaciones | ✔ | ✔ | ✔ | ✔ |
 
 ### 3.4 Reglas de aislamiento (obligatorias)
 1. El `tenantId` **siempre** sale del usuario autenticado (`CurrentUser.tenantId()`), **nunca** del request.
@@ -145,8 +151,8 @@ Un tenant se crea con (al menos) un jefe, un administrador y un empleado. El adm
    de sucursales no asignadas (404/403). El catálogo de productos sí es visible para todos los usuarios de inventario del tenant.
 
 ### 3.5 Sucursales y alcance (scope)
-- `TENANT_ADMIN` y `TENANT_BOSS`: acceso a **todas** las sucursales activas del tenant. `TENANT_EMPLOYEE`: solo las de
-  `user_branches` (al menos una; el admin las asigna).
+- `TENANT_ADMIN` y `TENANT_BOSS`: acceso a **todas** las sucursales activas del tenant. `TENANT_EMPLOYEE` y `TENANT_CASHIER`:
+  solo las de `user_branches` (al menos una; el admin las asigna).
 - El frontend envía la sucursal elegida en el header **`X-Branch-Id`** (id numérico) en todos los requests. Sin header
   o con `X-Branch-Id: all` = **todas las sucursales accesibles** (vista consolidada).
 - Lecturas por sucursal (dashboards, stock, vencimientos, ventas, alertas, IA, recalls) operan sobre el scope
@@ -154,8 +160,8 @@ Un tenant se crea con (al menos) un jefe, un administrador y un empleado. El adm
 - Escrituras por sucursal (carga de lotes, ventas, ajustes, descarte, resolución de recall, simulador POS) requieren
   **una** sucursal: se toma de `branchId` del body si existe, si no del header; si el scope es "todas" y el usuario tiene
   más de una sucursal → 400 `BRANCH_REQUIRED` ("Elegí una sucursal para esta operación").
-- Límite de sucursales por plan: FREEMIUM 1, BASICO 3, PROFESIONAL 10 (409 `BRANCH_LIMIT_REACHED`). La suscripción se
-  cobra **por sucursal activa**.
+- Límite de sucursales por plan: FREEMIUM 1, BASICO 3, PROFESIONAL 10 (409 `BRANCH_LIMIT_REACHED`), **y solo si el módulo
+  `MULTI_BRANCH` está habilitado; si no, el máximo efectivo es 1** (§14). La suscripción se cobra **por sucursal activa**.
 - Todo tenant tiene al menos una sucursal activa (se crea "Sucursal Principal" junto con el tenant). No se puede desactivar
   la última sucursal activa ni una con stock físico > 0 (409 `BRANCH_HAS_STOCK`).
 
@@ -168,16 +174,21 @@ Fuente de verdad: `backend/src/main/resources/db/migration/V1__schema.sql`. Hibe
 
 ### 4.1 Enums (valores exactos, persistidos como STRING)
 ```
-Role: PLATFORM_OWNER, SUPPORT_AGENT, TENANT_BOSS, TENANT_ADMIN, TENANT_EMPLOYEE
+Role: PLATFORM_OWNER, SUPPORT_AGENT, TENANT_BOSS, TENANT_ADMIN, TENANT_EMPLOYEE, TENANT_CASHIER
 TenantStatus: ACTIVE, DISABLED, CANCELLED
+TenantModule: POS_GONDOLIA, POS_INTEGRATION, MULTI_BRANCH                         (§14)
+PosSessionStatus: OPEN, CLOSED · PosSaleStatus: COMPLETED, VOIDED                   (§15)
+PaymentMethod: CASH, DEBIT, CREDIT, TRANSFER, QR · CashMovementType: CASH_IN, CASH_OUT (§15)
+ImportType: PRODUCTS · ImportStatus: UPLOADED, VALIDATED, APPLYING, APPLIED, FAILED, CANCELLED (§16)
+ImportFileFormat: XLSX, XLS, CSV · ImportRowStatus: PENDING, VALID, WARNING, ERROR, SKIPPED, IMPORTED, FAILED · ImportRowAction: CREATE, UPDATE, SKIP (§16)
 TenantPlan: FREEMIUM, BASICO, PROFESIONAL            (precio mensual ARS POR SUCURSAL activa: 0, 25000, 55000; máx. sucursales: 1, 3, 10)
 StockRotation: FIFO, FEFO                             (default FIFO)
 BusinessType: KIOSCO, ALMACEN, DIETETICA, MINIMERCADO, FARMACIA, OTRO
-TenantEventType: CREATED, PLAN_CHANGED, DISABLED, ENABLED, CANCELLED, REACTIVATED, DELETED
+TenantEventType: CREATED, PLAN_CHANGED, DISABLED, ENABLED, CANCELLED, REACTIVATED, DELETED, MODULE_ENABLED, MODULE_DISABLED
 ProductUnit: UNIDAD, KG, LITRO, PAQUETE, CAJA
 LotStatus: ACTIVE, DEPLETED, EXPIRED_DISCARDED, RECALLED
-MovementType: ENTRY, SALE, ADJUSTMENT_IN, ADJUSTMENT_OUT, WASTE_EXPIRED, WASTE_DAMAGED, RECALL_REMOVAL, TRANSFER_OUT, TRANSFER_IN
-MovementSource: MANUAL, SCAN, OCR, CSV, POS, SEED, SYSTEM
+MovementType: ENTRY, SALE, SALE_VOID, ADJUSTMENT_IN, ADJUSTMENT_OUT, WASTE_EXPIRED, WASTE_DAMAGED, RECALL_REMOVAL, TRANSFER_OUT, TRANSFER_IN
+MovementSource: MANUAL, SCAN, OCR, CSV, POS, POS_GONDOLIA, IMPORT, SEED, SYSTEM   (POS = POS externo del cliente; POS_GONDOLIA = nuestro POS)
 AlertType: EXPIRING_SOON, EXPIRED, LOW_STOCK, OUT_OF_STOCK, RECALL_MATCH, ANOMALY, STOCKOUT_PREDICTED, SALE_WITHOUT_STOCK
 Severity: INFO, WARNING, CRITICAL
 AlertStatus: OPEN, ACKNOWLEDGED, RESOLVED, DISMISSED
@@ -213,7 +224,11 @@ sucursales son la suma de cada una.
   (los vencidos NUNCA se venden):
   - `FIFO` (default, "primero sale lo que entró antes"): `received_at ASC, id ASC`.
   - `FEFO` ("primero sale lo que vence antes"): `expiry_date ASC NULLS LAST, received_at ASC, id ASC`.
-  El próximo lote a consumir se muestra en la UI con la etiqueta "Se vende primero".
+  - **Lotes en liquidación primero**: los lotes con `discount_pct` activo (recomendación DISCOUNT aceptada) se venden antes que
+    el resto; dentro de cada grupo rige FIFO/FEFO. Orden completo: `(discount_pct IS NULL) ASC, <orden FIFO|FEFO>`. Así el
+    descuento por vencimiento cercano realmente acelera la salida de ese lote. La IA simula el consumo con este mismo orden.
+  El próximo lote a consumir se muestra en la UI con la etiqueta "Se vende primero" (o "En liquidación · sale primero").
+  Las ventas netas descuentan los movimientos `SALE_VOID` (anulaciones del POS, §15).
   Si no alcanza, el faltante se registra como movimiento `SALE` con `lot_id NULL` y alerta `SALE_WITHOUT_STOCK`.
 - Con FIFO, si al cargar un lote su vencimiento es **anterior** al de lotes más viejos con stock en la misma sucursal,
   la respuesta de la carga incluye `rotationWarning` ("Este lote vence antes que mercadería que ingresó antes: con FIFO se
@@ -264,7 +279,8 @@ spring-boot-starter-test, spring-security-test. `artifactId=gondolia-backend`, j
   ```java
   public static final String OWNER = "hasRole('PLATFORM_OWNER')";
   public static final String SUPPORT = "hasRole('SUPPORT_AGENT')";
-  public static final String TENANT_ANY = "hasAnyRole('TENANT_BOSS','TENANT_ADMIN','TENANT_EMPLOYEE')";
+  public static final String TENANT_ANY = "hasAnyRole('TENANT_BOSS','TENANT_ADMIN','TENANT_EMPLOYEE','TENANT_CASHIER')";
+  public static final String TENANT_POS = "hasAnyRole('TENANT_ADMIN','TENANT_EMPLOYEE','TENANT_CASHIER')";
   public static final String TENANT_ADMIN = "hasRole('TENANT_ADMIN')";
   public static final String TENANT_DASHBOARD = "hasAnyRole('TENANT_BOSS','TENANT_ADMIN')";
   public static final String TENANT_INVENTORY = "hasAnyRole('TENANT_ADMIN','TENANT_EMPLOYEE')";
@@ -472,6 +488,10 @@ Dinero y decimales → número JSON. En cada módulo documentá los endpoints fi
   `PageResponse<{lotId,branchId,branchName,productId,productName,barcode,categoryName,lotNumber,expiryDate,daysLeft,quantity,receivedAt,rotationRank,costValue,saleValue,bucket,discountPct,status}>`
   · `GET /api/tenant/expirations/summary` → `{"expired":{lots,units,costValue},"critical":{...},"warning":{...},"upcoming":{...}}`
   · `POST /api/tenant/expirations/{lotId}/discard` `{quantity?,reason?}` → `WASTE_EXPIRED` (todo el remanente si no se indica)
+- **Módulos** (§14): ventas manuales, historial de ventas, movimientos y vencimientos son del núcleo (siempre disponibles).
+  API keys POS, simulador, importación CSV de ventas y el webhook requieren `@RequiresModule(POS_INTEGRATION)` y su UI vive en
+  `/app/integrations` (IntegrationsPage). Transferencias requieren `MULTI_BRANCH`. El historial de ventas muestra la fuente
+  (POS GondolIA con link al ticket vía `pos_sales.batch_ref`, POS externo, CSV, manual, importación) y descuenta `SALE_VOID`.
 - POS por sucursal (ADMIN): `GET /api/tenant/integrations/pos` → `[{branchId,branchName,configured,prefix,createdAt,lastSaleAt,salesLast24h}]` ·
   `POST /api/tenant/integrations/pos/{branchId}/key` → `{branchId,apiKey,prefix,createdAt}` (se muestra una sola vez) ·
   `POST /api/tenant/integrations/pos/{branchId}/simulate` `{sales: 10}` → genera ventas aleatorias realistas por el mismo camino que el POS.
@@ -527,6 +547,8 @@ Roles: lectura TENANT_DASHBOARD; acciones TENANT_ADMIN. Todo respeta el scope de
   · `POST /{id}/disable {reason}` · `POST /{id}/enable` · `POST /{id}/cancel {reason}` · `POST /{id}/reactivate`
     (eventos + `TenantStatusChangedEvent` + `SessionTerminationService.forceLogoutTenant` al bloquear)
   · `DELETE /{id}?confirmName=` (solo CANCELLED; nombre exacto) · `POST /{id}/reset-admin-password` → `{email,temporaryPassword}`
+- **Módulos por cliente** (§14): catálogo, matriz tenants × módulos, activar/desactivar por tenant, presets al crear,
+  `modules` en TenantSummary, filtro `?module=`, adopción y MRR con adicionales en `/metrics`.
 - Equipo: `GET /api/platform/users` → `[{id,fullName,email,role,active,lastLoginAt,createdAt}]` (roles de plataforma) ·
   `POST {fullName,email,password,role}` · `PUT /{id} {fullName,active}` · `POST /{id}/reset-password {newPassword}` (no se puede desactivar a sí mismo).
 
@@ -560,7 +582,7 @@ Roles: lectura TENANT_DASHBOARD; acciones TENANT_ADMIN. Todo respeta el scope de
 
 ### 6.9 Módulo F — Administración del comercio (`com.gondolia.tenantadmin`) · TENANT_ADMIN
 - Usuarios: `GET /api/tenant/users` → `[{id,fullName,email,role,active,lastLoginAt,createdAt,branches:[{id,name}]}]` ·
-  `POST {fullName,email,password,role,branchIds:[]}` (EMPLOYEE requiere ≥1 sucursal; para ADMIN/BOSS se ignora) ·
+  `POST {fullName,email,password,role,branchIds:[]}` (EMPLOYEE y CASHIER requieren ≥1 sucursal; para ADMIN/BOSS se ignora) ·
   `PUT /{id} {fullName,role,active,branchIds}` (no puede desactivarse/degradarse a sí mismo; siempre ≥1 ADMIN activo) ·
   `POST /{id}/reset-password {newPassword}` (incrementa token_version y fuerza logout)
 - Sucursales: `GET /api/tenant/branches` (TENANT_ANY → solo las accesibles; ADMIN con `?includeInactive=true` ve todas) →
@@ -641,8 +663,8 @@ tendencia, ratio finde, % días sin venta); ABC por facturación (80/15/5) y XYZ
 (<0,5 / <1 / ≥1); anomalías por z-score robusto (MAD) sobre residuos del pronóstico in-sample e IsolationForest
 como segunda opinión; punto de pedido = demanda en lead time + stock de seguridad (z(serviceLevel)·σ·√LT);
 cantidad sugerida = cubrir `targetCoverageDays + leadTimeDays` − stock; riesgo por lote simulando el consumo
-pronosticado en el orden de rotación (FIFO/FEFO) — con FIFO detecta lotes nuevos que vencen antes que los viejos y
-quedarían sin vender; descuento mínimo (escalones 10/15/20/25/30/40, tope `maxDiscountPct`) para vender el lote antes del
+pronosticado en el orden de rotación (lotes con `discountPct` primero, luego FIFO/FEFO, §4.2) — con FIFO detecta lotes nuevos
+que vencen antes que los viejos y quedarían sin vender; descuento mínimo (escalones 10/15/20/25/30/40, tope `maxDiscountPct`) para vender el lote antes del
 vencimiento usando elasticidad por categoría (default 2,0 = +2% ventas por 1% de descuento) ajustada con `feedback`
 (promedio ponderado de `(lift-1)/(discountPct/100)`). Recomendaciones: `REORDER` (stock ≤ punto de pedido o quiebre
 previsto antes de LT+2 días), `DISCOUNT` (lote con unitsAtRisk>0 y daysToExpiry>0), `REMOVE_EXPIRED` (lote vencido con
@@ -656,7 +678,7 @@ stock), `REVIEW_ANOMALY` (anomalía en últimos 7 días), `REDUCE_PURCHASE` (per
  "expiryDates":[{"value":"2026-09-25","raw":"VTO 25/09/2026","confidence":0.92}],
  "lotNumbers":[{"value":"L2409A","raw":"LOTE: L2409A","confidence":0.85}],
  "manufactureDates":[{"value":"2026-03-25","raw":"ELAB 25/03/26","confidence":0.8}],
- "barcodes":[{"value":"7791234500012","format":"EAN_13"}],
+ "barcodes":[{"value":"7791234500017","format":"EAN_13"}],
  "productNameCandidates":["SOPA DE TOMATE LA HUERTA"],"processingMs":840}
 ```
 Preprocesado OpenCV (escala de grises, upscaling, CLAHE, umbral adaptativo, variantes rotadas 0/90/180/270 y se queda
@@ -713,27 +735,41 @@ archivos nuevos solo dentro de `features/<modulo>/` (`api.ts`, `types.ts`, `comp
 | Ruta | Página | Roles |
 |---|---|---|
 | `/login` | LoginPage | público |
-| `/` | redirección por rol: OWNER→`/owner`, SUPPORT→`/support`, BOSS/ADMIN→`/app/dashboard`, EMPLOYEE→`/app/intake` | auth |
+| `/` | redirección por rol: OWNER→`/owner`, SUPPORT→`/support`, BOSS/ADMIN→`/app/dashboard`, EMPLOYEE→`/app/intake`, CASHIER→`/app/pos` | auth |
 | `/profile`, `/notifications` | ProfilePage, NotificationsPage | todos |
 | `/owner` · `/owner/tenants` · `/owner/tenants/new` · `/owner/tenants/:id` · `/owner/tenants/:id/edit` · `/owner/announcements` · `/owner/announcements/new` · `/owner/team` | OwnerMetricsPage · TenantsPage · TenantFormPage · TenantDetailPage · TenantFormPage · OwnerAnnouncementsPage · AnnouncementFormPage · PlatformTeamPage | PLATFORM_OWNER |
 | `/support` · `/support/tickets/:id` | SupportConsolePage | SUPPORT_AGENT |
 | `/app/dashboard` · `/app/statistics` · `/app/insights` · `/app/alerts` | Dashboard · Statistics · Insights · Alerts | BOSS, ADMIN |
 | `/app/inventory` · `/app/products/new` · `/app/products/:id` · `/app/products/:id/edit` · `/app/intake` · `/app/expirations` | Inventory · ProductForm · ProductDetail · ProductForm · Intake · Expirations | ADMIN, EMPLOYEE |
 | `/app/categories` · `/app/suppliers` · `/app/sales` · `/app/movements` · `/app/transfers` · `/app/users` · `/app/branches` · `/app/settings` | Categories · Suppliers · Sales · Movements · Transfers · Users · Branches · Settings | ADMIN |
-| `/app/notices` · `/app/recalls` · `/app/support` · `/app/support/:id` | Notices · Recalls · TenantSupport | BOSS, ADMIN, EMPLOYEE |
+| `/app/notices` · `/app/recalls` · `/app/support` · `/app/support/:id` | Notices · Recalls · TenantSupport | BOSS, ADMIN, EMPLOYEE, CASHIER |
+| `/app/pos` · `/app/pos/sessions` | PosTerminalPage · PosSessionsPage (§15) | ADMIN, EMPLOYEE, CASHIER + módulo POS_GONDOLIA |
+| `/app/pos/registers` | PosRegistersPage (§15) | ADMIN + POS_GONDOLIA |
+| `/app/pos/sales/:id/ticket` | PosTicketPage (**fuera del AppShell**, para imprimir) | ADMIN, EMPLOYEE, CASHIER + POS_GONDOLIA |
+| `/app/integrations` | IntegrationsPage (A2: POS propio) | ADMIN + POS_INTEGRATION |
+| `/app/imports` · `/app/imports/:id` | ImportsPage · ImportWizardPage (§16) | ADMIN |
+| `/owner/modules` | ModulesMatrixPage (§14) | PLATFORM_OWNER |
+`/app/transfers` requiere además MULTI_BRANCH. Rutas con módulo deshabilitado → `ModuleDisabledPage` (guard `RequireModule`).
 
 ### 9.4 Navegación (sidebar, íconos lucide)
-- OWNER: Métricas (BarChart3) · Clientes (Store) · Avisos y recalls (Megaphone) · Equipo GondolIA (Users)
+Cada ítem puede declarar `module`; si el tenant no lo tiene habilitado, el ítem no se muestra.
+- OWNER: Métricas (BarChart3) · Clientes (Store) · Módulos por cliente (Blocks) · Avisos y recalls (Megaphone) · Equipo GondolIA (Users)
 - SUPPORT: Bandeja de soporte (Headset)
 - BOSS: Inicio (Home) · Estadísticas (BarChart3) · Inteligencia IA (Sparkles) · Alertas (Bell) ‖ Avisos (Megaphone) · Seguridad alimentaria (ShieldAlert) · Soporte (LifeBuoy)
-- ADMIN: Inicio · Inventario (Package) · Carga de mercadería (ScanBarcode) · Vencimientos (CalendarClock) · Ventas (ShoppingCart) · Transferencias (ArrowLeftRight) · Movimientos (History) · Estadísticas · Inteligencia IA · Alertas · Proveedores (Truck) · Categorías (Tags) ‖ Sucursales (Building2) · Usuarios (UserCog) · Configuración (Settings) ‖ Avisos · Seguridad alimentaria · Soporte
-- EMPLOYEE: Carga de mercadería · Inventario · Vencimientos ‖ Avisos · Seguridad alimentaria · Soporte
+- ADMIN: Inicio · Punto de venta (MonitorSmartphone)[POS_GONDOLIA] · Inventario (Package) · Carga de mercadería (ScanBarcode) · Importar Excel/CSV (FileSpreadsheet) · Vencimientos (CalendarClock) · Ventas (ShoppingCart) · Transferencias (ArrowLeftRight)[MULTI_BRANCH] · Movimientos (History) · Estadísticas · Inteligencia IA · Alertas · Proveedores (Truck) · Categorías (Tags) ‖ Sucursales (Building2) · Usuarios (UserCog) · Cajas y turnos (Calculator)[POS_GONDOLIA] · Integración POS (Plug)[POS_INTEGRATION] · Configuración (Settings) ‖ Avisos · Seguridad alimentaria · Soporte
+- EMPLOYEE: Punto de venta[POS_GONDOLIA] · Mis turnos de caja (Calculator)[POS_GONDOLIA] · Carga de mercadería · Inventario · Vencimientos ‖ Avisos · Seguridad alimentaria · Soporte
+- CASHIER: Punto de venta[POS_GONDOLIA] · Mis turnos de caja[POS_GONDOLIA] ‖ Avisos · Seguridad alimentaria · Soporte
 
-### 9.5 Diseño
-Inspirado en el mockup (§1.1). Tailwind `theme.extend.colors.brand`: 50 `#eef7f1`, 100 `#d6ecdd`, 200 `#aed8bb`,
-300 `#7fbf95`, 400 `#4fa36f`, 500 `#2f8753`, 600 `#226c42`, 700 `#1c5636`, 800 `#17452c`, 900 `#123824`, 950 `#0b2416`.
-Fondo app `#f4f7f5`; sidebar `brand-900`; tarjetas blancas `rounded-2xl border border-slate-200/70 shadow-sm`;
-tipografía Inter. Estados: verde (ok), ámbar/naranja (por vencer/bajo), rojo (crítico/vencido/recall), celeste (info).
+### 9.5 Diseño — "Góndola UI"
+**Fuente de verdad visual: `docs/design-system.md` y el prototipo `design/gondola-ui/`** (hechos con el skill
+web-artifacts-builder: React + shadcn/ui). Resumen: componentes **shadcn/ui** (Radix) en `components/ui/`; tokens CSS
+claro/oscuro (fondo `#F3F5F1`, tinta `#15231A`, verde góndola `#1E6A42`, rail `#0F3A25`, acento amarillo etiqueta de precio
+`#F4C542` usado con moderación, semánticos ok/warn/crit/info); tipografías **Bricolage Grotesque** (display), **Figtree** (UI) y
+**JetBrains Mono** (códigos, lotes, vencimientos, ticket) empaquetadas con `@fontsource-variable` (sin CDN) — **no usar Inter**;
+radios por rol (controles 8px, paneles 12px, diálogos 16px, tablas sin radio, píldoras solo para estados); bordes antes que sombras.
+Componentes firma compartidos en `components/gondola/`: `PriceTag`, `ExpiryChip`, `LotRankChip`, `StockStatusPill`,
+`SeverityRow`, `Ticket80mm`, `BarcodeDigits`. Evitar el look genérico de IA: sin degradados violeta, sin todo centrado, sin emoji
+como marcadores, sin radios uniformes, sin barras de acento en tarjetas redondeadas.
 **Mobile first** para empleados: sidebar como drawer < `lg`, tablas → tarjetas en pantallas chicas, botones grandes
 en la carga con cámara. Estados vacíos, loaders y errores con mensajes en español en todas las pantallas.
 Si `!window.isSecureContext` y no es localhost, mostrar aviso "Para usar la cámara abrí https://…".
@@ -790,9 +826,14 @@ Contraseñas: plataforma `Gondolia2026!`, comercios `Demo2026!`.
     `jefe@vidasana.com`, `admin@vidasana.com`, `empleado@vidasana.com` (solo Nueva Córdoba)
   - **Minimercado El Sol** (MINIMERCADO, PROFESIONAL, Rosario, 3 sucursales "Centro", "Fisherton" y "Echesortu", FIFO):
     `jefe@elsol.com`, `admin@elsol.com`, `empleado@elsol.com` (Centro y Fisherton), `empleado.echesortu@elsol.com` (solo Echesortu)
-- **Kiosco La Esquina** (KIOSCO, FREEMIUM, DISABLED) `admin@laesquina.com` (para demostrar el bloqueo) + ~12 tenants
+- **Módulos y cajeros** (§14, §15): Don Pepe {POS_GONDOLIA} con `cajero@donpepe.com`; Vida Sana {POS_INTEGRATION, MULTI_BRANCH}
+  (ventas históricas con source POS externo, API key por sucursal); El Sol {los 3 módulos} con `cajero@elsol.com` (Centro) y
+  `cajero.fisherton@elsol.com` (Fisherton), POS GondolIA en Centro y Fisherton y POS externo en Echesortu. Cajas "Caja 1"/"Caja 2"
+  por sucursal con POS, turnos históricos cerrados con arqueo (algunos con diferencia), ventas con pagos mixtos, algunas anuladas,
+  y un turno abierto hoy. Una importación histórica APLICADA en El Sol (migración inicial, §16).
+- **Kiosco La Esquina** (KIOSCO, FREEMIUM, DISABLED, {POS_GONDOLIA}) `admin@laesquina.com` (para demostrar el bloqueo) + ~12 tenants
   livianos distribuidos en 12 meses (varios planes/estados, 2 CANCELLED) para métricas de crecimiento.
-- Escenario recall listo para demo en vivo: "Sopa de tomate en lata La Huerta 340 g", EAN `7791234500012`, lote
+- Escenario recall listo para demo en vivo: "Sopa de tomate en lata La Huerta 340 g", EAN `7791234500017`, lote
   `L2409A` presente en stock de Don Pepe y de El Sol **solo en la sucursal Fisherton** (no en Vida Sana). Marcas ficticias en todos los productos.
 - Escenario varios lotes: en cada sucursal, varios productos con 2–4 lotes vivos con distintos `received_at` y vencimientos
   (incluido al menos un caso donde un lote más nuevo vence antes que uno más viejo, para mostrar el aviso de FIFO).
@@ -805,7 +846,7 @@ Contraseñas: plataforma `Gondolia2026!`, comercios `Demo2026!`.
 ## 12. Propiedad de archivos (desarrollo en paralelo)
 | Módulo | Backend | Frontend | Migraciones |
 |---|---|---|---|
-| Fundación | `pom.xml`, `application*.yml`, `GondoliaApplication`, `config`, `security` (incl. `BranchAccessService`), `auth`, `common`, `domain`, `realtime`, `notification`, `stock`, `recall`, `storage`, `ai`, `bootstrap` | todo salvo `features/*/pages/*` y los 2 componentes globales (incl. `branches/`) | V1 |
+| Fundación (+ extensión núcleo) | `pom.xml`, `application*.yml`, `GondoliaApplication`, `config`, `security` (incl. `BranchAccessService`), `auth`, `common`, `domain` (incl. `domain.pos`, `domain.imports`), `realtime`, `notification`, `stock`, `recall`, `storage`, `ai`, `bootstrap`, `modules` | todo salvo `features/*/pages/*` y los 2 componentes globales (incl. `branches/`, `modules/`, `components/ui` shadcn, `components/gondola`, `components/scanner`) | V1, V2 |
 | A1 Catálogo | `catalog` | `features/catalog` | V100–V149 |
 | A2 Movimientos | `movements` | `features/movements` | V150–V199 |
 | B Analítica/IA | `analytics`, `alerts`, `insights` | `features/analytics` | V200–V249 |
@@ -814,6 +855,8 @@ Contraseñas: plataforma `Gondolia2026!`, comercios `Demo2026!`.
 | E Soporte | `support` | `features/support` | V350–V399 |
 | F Admin comercio | `tenantadmin` | `features/tenantadmin` | V400–V449 |
 | G Seed demo | `seed` | — | V450–V499 |
+| H POS GondolIA | `pos` | `features/pos` | V500–V549 |
+| I Importación masiva | `imports` | `features/imports` | V550–V599 |
 | Infra | Dockerfiles, compose, start.sh, nginx, README | `frontend/Dockerfile`, `frontend/nginx/` | — |
 
 No modificar archivos de otro módulo. Si el núcleo tiene un bug o falta algo imprescindible, hacé el cambio mínimo,
@@ -824,3 +867,159 @@ compatible hacia atrás, y reportalo explícitamente. Nuevas dependencias: evita
 2. `cd frontend && npm run build` sin errores de TypeScript.
 3. Probado en ejecución contra Postgres real (endpoints principales con curl, incluidos casos de permiso denegado y aislamiento entre tenants).
 4. Endpoints documentados en `docs/api-<modulo>.md`. Textos de UI en español. Sin TODOs sin resolver en funcionalidades pedidas.
+
+---
+
+## 14. Módulos por tenant (plataforma modular)
+
+Los clientes pueden usar GondolIA **con su propio POS** (integración) **o con el POS GondolIA**, o ambos. Los dueños de
+GondolIA gestionan desde su consola qué módulos tiene habilitados cada tenant. Esquema: `V2__modulos_cajero_pos_importacion.sql`.
+
+### 14.1 Catálogo (`com.gondolia.modules.ModuleCatalog`)
+| `TenantModule` | Nombre UI | Qué habilita | Adicional mensual |
+|---|---|---|---|
+| `POS_GONDOLIA` | Punto de venta GondolIA | Cajas por sucursal, cobro con escáner, medios de pago, tickets, anulaciones, cierre de caja (§15) | ARS 12.000 por sucursal activa |
+| `POS_INTEGRATION` | Integración con POS propio | API key por sucursal (webhook de ventas), importación CSV de ventas, simulador (§6.4) | ARS 8.000 por sucursal activa |
+| `MULTI_BRANCH` | Multi-sucursal | Más de una sucursal (hasta el límite del plan), transferencias, vista consolidada | sin adicional |
+
+**Siempre incluido** (no son módulos): inventario, lotes y vencimientos, carga con escáner/OCR, **importación masiva de
+productos (§16)**, alertas, IA, avisos y recalls, soporte, ventas manuales e historial, usuarios y configuración.
+
+- Presets al crear un tenant (si no se envía `modules`): FREEMIUM {POS_GONDOLIA}; BASICO {POS_GONDOLIA, POS_INTEGRATION, MULTI_BRANCH}; PROFESIONAL {los 3}.
+- Máximo efectivo de sucursales = `MULTI_BRANCH` ? límite del plan : 1.
+- MRR = Σ tenants ACTIVE: sucursales activas × (precio del plan + Σ adicionales de sus módulos habilitados).
+- Deshabilitar `MULTI_BRANCH` con más de 1 sucursal activa → 409 `MODULE_IN_USE` ("El cliente tiene N sucursales activas: debe desactivar las sucursales extra antes").
+- Módulo deshabilitado → 403 `MODULE_DISABLED` ("Esta función no está habilitada para tu comercio. Contactá a GondolIA para activarla.") en endpoints y webhook; el frontend oculta el menú y muestra `ModuleDisabledPage` si se entra por URL.
+- Cambio de módulos → `tenant_events` `MODULE_ENABLED`/`MODULE_DISABLED` (`from_value` = módulo) + push `/user/queue/session`
+  `{"type":"MODULES_CHANGED"}` a todos los usuarios del tenant → el frontend hace `refreshMe()` + toast "Se actualizaron las funciones habilitadas".
+
+### 14.2 Núcleo (extensión de la fundación)
+- `ModuleService`: `Set<TenantModule> enabledModules(Long tenantId)`, `boolean isEnabled(Long tenantId, TenantModule m)`,
+  `void require(TenantModule m)` (tenant del usuario actual; 403 `MODULE_DISABLED`), `int effectiveMaxBranches(Long tenantId)`,
+  `List<TenantModuleStatus> statuses(Long tenantId)`, `TenantModuleStatus setEnabled(Long tenantId, TenantModule m, boolean enabled, Long actorUserId)`
+  (valida, registra evento, hace push), `void applyPlanPreset(Long tenantId, TenantPlan plan)`.
+  `record TenantModuleStatus(TenantModule module, String name, String description, BigDecimal monthlyPricePerBranch, boolean enabled, Instant updatedAt, String updatedByName)`.
+- Anotación `@RequiresModule(TenantModule.X)` en clase o método de controller, aplicada por un `HandlerInterceptor`.
+- `MeDto.tenant` agrega `modules: ["POS_GONDOLIA", ...]` y `maxBranches` pasa a ser el máximo efectivo.
+- Entidad `com.gondolia.domain.tenant.TenantModuleConfig` (tabla `tenant_modules`) y enum `TenantModule`.
+
+### 14.3 Consola de dueños (módulo C)
+- `GET /api/platform/modules` → `[{module,name,description,monthlyPricePerBranch,enabledTenants,adoptionPct}]`
+- `GET /api/platform/tenant-modules?q=&status=&plan=&page=` → `PageResponse<{tenantId,tenantName,plan,status,activeBranchCount,modules:{POS_GONDOLIA:true,POS_INTEGRATION:false,MULTI_BRANCH:true},estimatedMonthlyFee}>` (matriz)
+- `GET /api/platform/tenants/{id}/modules` → `[TenantModuleStatus]` · `PUT /api/platform/tenants/{id}/modules/{module}` `{enabled}` → `TenantModuleStatus`
+- `POST /api/platform/tenants` acepta `modules?: [TenantModule]`; `TenantSummary` agrega `modules`; `GET /api/platform/tenants?module=`.
+- `GET /api/platform/metrics` agrega `modules: {POS_GONDOLIA:{tenants,pct}, ...}` y el MRR incluye adicionales.
+- Frontend: `/owner/modules` **ModulesMatrixPage** "Módulos por cliente": adopción arriba, buscador y filtros, tabla clientes × módulos
+  con switches, plan, estado, sucursales activas y cuota estimada; confirmación al desactivar explicando el efecto; mensaje claro
+  para `MODULE_IN_USE`. Sección "Módulos" con switches en TenantDetailPage y checkboxes (con preset por plan) en TenantFormPage.
+
+## 15. POS GondolIA (módulo H · `com.gondolia.pos` · `features/pos`) — requiere `POS_GONDOLIA`
+
+Lo usan ADMIN, EMPLOYEE y CASHIER (`Roles.TENANT_POS`) en sus sucursales. Comprobante: **ticket no fiscal**
+("Comprobante no válido como factura"; la factura electrónica con ARCA queda para una etapa futura).
+Entidades (extensión núcleo, `com.gondolia.domain.pos`): `PosRegister`, `PosSession`, `PosBranchCounter`, `PosSale`, `PosSaleItem`, `PosPayment`, `PosCashMovement`.
+
+### 15.1 Núcleo: anulación en StockService
+`record VoidSaleCommand(Long tenantId, String batchRef, Long userId, String reason)`;
+`List<StockMovement> voidSale(VoidSaleCommand cmd)`: por cada movimiento `SALE` con `lot_id` del batch crea `SALE_VOID` (misma
+cantidad, lote y precio) y devuelve el stock a ese lote (`DEPLETED` → `ACTIVE`; lotes `RECALLED` o vencidos quedan como están);
+los faltantes (`lot_id NULL`) no devuelven stock; 409 `ALREADY_VOIDED` si el batch ya tiene `SALE_VOID`. Publica `StockChangedEvent`.
+
+### 15.2 API
+- **Cajas**: `GET /api/tenant/pos/registers` (scope; `openSession:{id,openedByName,openedAt}|null`) · `POST` / `PUT /{id}` (ADMIN) `{branchId,name,active}`.
+- **Turnos**: `GET /api/tenant/pos/sessions/current` → turno OPEN del usuario o `null` ·
+  `POST /api/tenant/pos/sessions/open` `{registerId,openingCash}` (409 `REGISTER_BUSY` / `SESSION_ALREADY_OPEN`) ·
+  `POST /api/tenant/pos/sessions/{id}/cash-movements` `{type,amount,reason}` · `POST /api/tenant/pos/sessions/{id}/close` `{countedCash,note}` → reporte ·
+  `GET /api/tenant/pos/sessions?status=&from=&to=&page=` (ADMIN: todos los del scope; EMPLOYEE/CASHIER: los propios) · `GET /api/tenant/pos/sessions/{id}` → reporte
+  `{id,branchId,branchName,registerId,registerName,status,openedByName,closedByName,openedAt,closedAt,openingCash,totalsByMethod:{CASH,DEBIT,CREDIT,TRANSFER,QR},cashIn,cashOut,changeGiven,expectedCash,countedCash,difference,salesCount,salesTotal,voidedCount,voidedTotal,topProducts:[{productName,units,total}],cashMovements:[...]}`.
+  `expectedCash = openingCash + Σ pagos CASH − Σ vuelto + CASH_IN − CASH_OUT − efectivo neto de ventas anuladas`.
+- **Productos para vender** (sucursal del turno): `GET /api/tenant/pos/products/lookup?code=` (código exacto) y
+  `GET /api/tenant/pos/products/search?q=` (top 20) → `{productId,barcode,name,brand,unit,listPrice,sellableStock,nextLot:{lotId,lotNumber,expiryDate,discountPct,unitPrice}|null,hasRecalledStock,hasExpiredStock,outOfStock}`.
+- **Ventas**: `POST /api/tenant/pos/sales` `{sessionId,items:[{productId,quantity}],payments:[{method,amount,reference?}],customerName?,customerDoc?,allowShortage:false}`:
+  valida turno OPEN del usuario (ADMIN puede operar cualquier turno de su scope); stock suficiente o 409 `INSUFFICIENT_STOCK`
+  con `details:[{productId,productName,requested,available}]` salvo `allowShortage`; Σ pagos ≥ total o 400 `PAYMENT_INSUFFICIENT`;
+  vuelto solo si hay pago CASH y no mayor que el efectivo recibido. Registra con `StockService.registerSale` por ítem **ordenado por
+  productId** (source `POS_GONDOLIA`, batchRef `P-...` compartido), numera con `pos_branch_counters` (`SELECT ... FOR UPDATE`),
+  guarda venta/ítems (con lotes consumidos)/pagos y actualiza contadores del turno → `PosSaleDto` completo con `ticketCode`.
+  `GET /api/tenant/pos/sales?sessionId=&status=&from=&to=&q=&page=` · `GET /api/tenant/pos/sales/{id}` ·
+  `GET /api/tenant/pos/sales/{id}/ticket` → datos para imprimir (comercio, sucursal y dirección, caja, cajero, fecha, código, ítems con
+  descuentos por lote, total, pagos, vuelto, leyenda) · `POST /api/tenant/pos/sales/{id}/void` `{reason}`: ADMIN siempre;
+  EMPLOYEE/CASHIER solo ventas de su turno OPEN → `StockService.voidSale`.
+- `GET /api/tenant/pos/stats?days=30` (ADMIN, scope) → ventas por medio de pago, por hora, ticket promedio, por cajero, anulaciones.
+
+### 15.3 Frontend
+- `/app/pos` **PosTerminalPage** (AppShell compacto): sin turno abierto → elegir caja y abrir con efectivo inicial; buscador +
+  lector USB siempre enfocado + botón cámara (`BarcodeScanner` compartido); carrito con +/−, precio con descuento por lote y chip
+  de lote/vencimiento; productos en cuarentena bloqueados y aviso de sin stock; atajos **F2** buscar, **F4** cobrar, **F8** quitar ítem,
+  **Esc** cancelar; modal de cobro con medios combinables, billetes rápidos y vuelto; al confirmar muestra el ticket con Imprimir /
+  Nueva venta; retiros e ingresos de efectivo; cerrar caja con arqueo.
+- `/app/pos/sessions` **PosSessionsPage** (turnos, ventas, reporte de cierre, anulación) · `/app/pos/registers` **PosRegistersPage** (ADMIN) ·
+  `/app/pos/sales/:id/ticket` **PosTicketPage** (sin AppShell, CSS de impresión 80 mm, `window.print()`).
+
+## 16. Importación masiva de productos y stock (módulo I · `com.gondolia.imports` · `features/imports`)
+
+Primera carga rápida / migración desde la planilla o base que el cliente usaba, con revisión y edición antes de confirmar, y
+exportación del catálogo para ajustes masivos posteriores. Rol TENANT_ADMIN. Siempre incluido. Entidades (extensión núcleo,
+`com.gondolia.domain.imports`): `ImportJob`, `ImportJobRow`. Dependencias en el pom: Apache POI `poi` + `poi-ooxml` 5.3.x, Apache Commons CSV 1.12.x.
+
+### 16.1 Campos (`GET /api/tenant/imports/fields` → `[{key,label,required,type,description,synonyms}]`)
+`barcode` (Código de barras), `name`* (Nombre), `brand` (Marca), `category` (Categoría), `supplier` (Proveedor), `unit` (Unidad),
+`costPrice` (Precio de costo), `salePrice` (Precio de venta), `minStock` (Stock mínimo), `perishable` (Perecedero), `description`,
+`quantity` (Cantidad en stock), `lotNumber` (Número de lote), `expiryDate` (Fecha de vencimiento), `receivedAt` (Fecha de ingreso —
+preserva el orden FIFO), `branch` (Sucursal: nombre o código).
+Auto-mapeo por sinónimos de encabezado (sin acentos ni mayúsculas): código/cod/ean/código de barras/barcode/cod_barra;
+nombre/descripción/producto/artículo; marca; categoría/rubro/familia/sección; proveedor/distribuidor; unidad/u. medida;
+costo/precio costo/precio compra; precio/pvp/precio venta/precio público; mínimo/stock mínimo/stock min; perecedero;
+stock/cantidad/existencia/unidades; lote/nro lote/n° lote; vencimiento/vto/fecha venc/fecha de vencimiento;
+fecha ingreso/ingreso/fecha compra; sucursal/local/tienda.
+Una fila = un producto (+ opcionalmente un lote). **Varias filas con el mismo código y distinto lote/vencimiento = un producto con varios lotes.**
+
+### 16.2 Parseo y validación
+- XLSX/XLS con POI (fechas nativas o seriales de Excel, fórmulas evaluadas, primera hoja no vacía o `sheetName`); CSV con detección de
+  separador `;` `,` o tab y de codificación UTF-8 (con/sin BOM) o Windows-1252 (así exporta Excel en español). Máx. 10 MB y 10.000 filas;
+  ignora filas vacías; encabezado = primera fila no vacía.
+- Números es-AR y en ("$ 1.234,50", "1234.5"), booleanos (si/sí/no/true/false/1/0/x), fechas DMY por defecto (dd/mm/aaaa, dd-mm-aa, aaaa-mm-dd, serial).
+- **ERROR**: falta nombre; precio o cantidad no numérico o negativo; cantidad no entera; fecha inválida; sucursal inexistente; cantidad > 0
+  sin sucursal ni sucursal por defecto; categoría/proveedor inexistente con la opción de crear desactivada; texto demasiado largo.
+- **WARNING**: EAN con dígito verificador inválido; precio de venta menor al costo; unidad desconocida (usa UNIDAD); producto existente
+  (por código, o por nombre exacto si no hay código) → UPDATE si `updateExisting`, si no SKIP de los datos del producto; categoría o
+  proveedor nuevo que se va a crear; vencimiento pasado (entra como vencido pendiente de descarte); el producto ya tiene stock en esa
+  sucursal (se suma un lote nuevo); filas duplicadas con datos de producto contradictorios (gana la primera).
+- Opciones: `{updateExisting:true, createCategories:true, createSuppliers:true, importStock:true, defaultBranchId, dateFormat:"DMY"|"MDY"|"YMD"}`.
+
+### 16.3 API (TENANT_ADMIN)
+- `GET /api/tenant/imports/template?format=xlsx|csv` → plantilla con encabezados en español, 4 filas de ejemplo (incluye un producto con 2 lotes) y hoja "Instrucciones".
+- `GET /api/tenant/imports/export?format=xlsx|csv&includeStock=true` → catálogo actual (+ lotes con stock del scope) con **las mismas columnas** de la plantilla, para editar en Excel y reimportar como actualización masiva.
+- `POST /api/tenant/imports` multipart `file` [+ `sheetName`] → `ImportJobDto {id,status,fileName,fileFormat,sheetName,sheetNames,headers,suggestedMapping,options,totalRows,validRows,warningRows,errorRows,skippedRows,processedRows,result,createdAt,createdByName,appliedAt,sampleRows}`
+- `PUT /api/tenant/imports/{id}/mapping` `{columnMapping,options}` → normaliza y valida todas las filas → `ImportJobDto` (VALIDATED) + `preview:{productsToCreate,productsToUpdate,lotsToCreate,unitsToLoad,categoriesToCreate:[],suppliersToCreate:[]}`
+- `GET /api/tenant/imports/{id}` · `GET /api/tenant/imports?page=` (historial) · `DELETE /api/tenant/imports/{id}` (cancela si no se aplicó)
+- `GET /api/tenant/imports/{id}/rows?status=ALL|ERROR|WARNING|VALID|SKIPPED&q=&page=&size=` → `PageResponse<{id,rowNumber,raw,data,status,action,messages,productId,lotId}>`
+- `PATCH /api/tenant/imports/{id}/rows/{rowId}` `{data}` → fila revalidada + contadores del job ·
+  `POST /api/tenant/imports/{id}/rows/bulk` `{rowIds:[]|null (null = todas las del filtro), filterStatus?, action:"SKIP"|"UNSKIP"|"SET_FIELD", field?, value?}`
+- `GET /api/tenant/imports/{id}/errors.csv` → filas con error/advertencia y sus mensajes
+- `POST /api/tenant/imports/{id}/apply` `{ignoreErrors:false}` (409 `IMPORT_HAS_ERRORS` si hay errores sin omitir) → asincrónico (APPLYING,
+  `processedRows` para la barra de progreso, bloques de 200 filas por transacción): crea categorías/proveedores, upsert de productos y, si
+  `importStock` y cantidad > 0, `StockService.receiveLot` (source `IMPORT`, `receivedAt` = columna o instante de aplicación + rowNumber ms
+  para respetar el orden del archivo; el chequeo de recall corre solo). `result = {productsCreated,productsUpdated,lotsCreated,unitsLoaded,categoriesCreated,suppliersCreated,rowsSkipped,rowsFailed,recallMatches}`
+  → APPLIED; notificación SYSTEM al admin al terminar.
+
+### 16.4 Frontend
+- `/app/imports` **ImportsPage**: historial, "Nueva importación", descargar plantilla (xlsx/csv), exportar catálogo actual.
+- `/app/imports/:id` **ImportWizardPage** por pasos: 1 Archivo (arrastrar y soltar, hoja) → 2 Columnas (por cada campo un select de
+  encabezados con sugerencia y valores de muestra; opciones) → 3 Revisión (tarjetas válidas/advertencias/errores; grilla paginada filtrable
+  con **edición inline** y mensajes por celda; acciones masivas omitir / asignar categoría o sucursal; descargar errores) → 4 Confirmar
+  (productos nuevos/actualizados, lotes, unidades, categorías y proveedores nuevos; barra de progreso) → 5 Resultado (contadores, links, aviso de recalls).
+- InventoryPage (A1) y el Inicio vacío de un comercio nuevo (B) enlazan a `/app/imports` ("Hacé tu primera carga importando tu planilla").
+- `docs/examples/importacion-ejemplo.xlsx` y `.csv` con algunos errores intencionales para la demo.
+- Nota para B: las importaciones generan ráfagas de `StockChangedEvent`; el listener del AlertEngine debe agrupar por sucursal (debounce).
+
+## 17. Extensión del núcleo — checklist (antes de los módulos en paralelo)
+Backend: V2 (ya escrita), enums/entidades/repositorios nuevos (§4.1, §15, §16), `Role.TENANT_CASHIER` en `Roles`/`BranchAccessService`
+(como EMPLOYEE) y en `DevFixtureRunner` (`cajero@prueba.com`, Centro; "Comercio de Prueba" con los 3 módulos; "Otro Comercio" solo
+POS_INTEGRATION), `ModuleService` + `@RequiresModule` + interceptor, `MeDto.tenant.modules`/`maxBranches` efectivo,
+`StockService.voidSale` y orden de rotación con lotes en liquidación primero (§4.2), dependencias POI + Commons CSV.
+Frontend: migración del kit a **shadcn/ui** + tokens/tipografías "Góndola UI" (§9.5), componentes firma `components/gondola/`,
+`components/scanner/` (`BarcodeScanner` con zxing y cámara trasera, `useBarcodeWedge` para lectores USB, `CameraCapture` para OCR),
+rol Cajero (tipos, etiqueta, home), `useModules()` + `RequireModule` + `ModuleDisabledPage`, navegación con `module`, rutas y
+placeholders nuevos (§9.3), `MODULES_CHANGED` en `useSessionEvents`, variante compacta del AppShell para `/app/pos` y layout sin shell
+para el ticket.
