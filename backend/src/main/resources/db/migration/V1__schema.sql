@@ -67,20 +67,49 @@ CREATE INDEX idx_users_role ON users(role);
 
 CREATE TABLE tenant_settings (
     tenant_id               BIGINT PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
-    branch_name             VARCHAR(100) NOT NULL DEFAULT 'Sucursal Principal',
     currency                VARCHAR(3)   NOT NULL DEFAULT 'ARS',
+    stock_rotation          VARCHAR(10)  NOT NULL DEFAULT 'FIFO', -- StockRotation: FIFO (entró antes, sale antes) | FEFO
     expiry_warning_days     INT          NOT NULL DEFAULT 15,
     expiry_critical_days    INT          NOT NULL DEFAULT 5,
     default_lead_time_days  INT          NOT NULL DEFAULT 3,
     target_coverage_days    INT          NOT NULL DEFAULT 14,
     service_level           NUMERIC(4,3) NOT NULL DEFAULT 0.950,
     max_discount_pct        INT          NOT NULL DEFAULT 40,
+    updated_at              TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+-- Sucursales (supermercados/locales) de un tenant. El stock, los lotes, las ventas,
+-- las alertas y la IA son por sucursal; el catálogo de productos es compartido por el tenant.
+CREATE TABLE branches (
+    id                      BIGSERIAL PRIMARY KEY,
+    tenant_id               BIGINT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name                    VARCHAR(100) NOT NULL,
+    code                    VARCHAR(20),
+    address                 VARCHAR(200),
+    city                    VARCHAR(100),
+    province                VARCHAR(100),
+    phone                   VARCHAR(50),
+    active                  BOOLEAN NOT NULL DEFAULT TRUE,
     pos_api_key_hash        VARCHAR(64),
     pos_api_key_prefix      VARCHAR(16),
     pos_api_key_created_at  TIMESTAMPTZ,
-    updated_at              TIMESTAMPTZ  NOT NULL DEFAULT now()
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_branches_tenant_name UNIQUE (tenant_id, name)
 );
-CREATE UNIQUE INDEX uq_tenant_settings_pos_key ON tenant_settings(pos_api_key_hash) WHERE pos_api_key_hash IS NOT NULL;
+CREATE INDEX idx_branches_tenant ON branches(tenant_id);
+CREATE UNIQUE INDEX uq_branches_pos_key ON branches(pos_api_key_hash) WHERE pos_api_key_hash IS NOT NULL;
+
+-- Sucursales asignadas a un usuario. Solo aplica a TENANT_EMPLOYEE;
+-- TENANT_ADMIN y TENANT_BOSS acceden a todas las sucursales del tenant.
+CREATE TABLE user_branches (
+    id          BIGSERIAL PRIMARY KEY,
+    user_id     BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    branch_id   BIGINT NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_user_branches UNIQUE (user_id, branch_id)
+);
+CREATE INDEX idx_user_branches_branch ON user_branches(branch_id);
 
 -- ---------------------------------------------------------------------
 -- Inventario (por tenant)
@@ -131,10 +160,14 @@ CREATE UNIQUE INDEX uq_products_tenant_barcode ON products(tenant_id, barcode) W
 CREATE INDEX idx_products_tenant ON products(tenant_id);
 CREATE INDEX idx_products_barcode ON products(barcode);
 
+-- Cada ingreso de mercadería crea su propio lote (aunque repita número de lote o vencimiento),
+-- así un producto puede tener varios lotes/fechas y la rotación FIFO/FEFO es exacta.
 CREATE TABLE lots (
     id                     BIGSERIAL PRIMARY KEY,
     tenant_id              BIGINT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    branch_id              BIGINT NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
     product_id             BIGINT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    origin_lot_id          BIGINT REFERENCES lots(id) ON DELETE SET NULL, -- lote de origen si vino por transferencia
     supplier_id            BIGINT REFERENCES suppliers(id) ON DELETE SET NULL,
     lot_number             VARCHAR(60),
     lot_number_normalized  VARCHAR(60),                    -- LotNumbers.normalize(lot_number)
@@ -142,7 +175,7 @@ CREATE TABLE lots (
     initial_quantity       INT           NOT NULL,
     quantity               INT           NOT NULL,          -- remanente
     cost_price             NUMERIC(12,2),
-    received_at            DATE          NOT NULL DEFAULT CURRENT_DATE,
+    received_at            TIMESTAMPTZ   NOT NULL DEFAULT now(),    -- momento de ingreso (orden FIFO)
     status                 VARCHAR(20)   NOT NULL DEFAULT 'ACTIVE', -- LotStatus
     source                 VARCHAR(20)   NOT NULL DEFAULT 'MANUAL', -- MovementSource
     discount_pct           NUMERIC(5,2),                    -- descuento activo (recomendación aceptada)
@@ -153,12 +186,14 @@ CREATE TABLE lots (
     CONSTRAINT lots_qty_chk CHECK (quantity >= 0 AND initial_quantity >= 0)
 );
 CREATE INDEX idx_lots_tenant_product ON lots(tenant_id, product_id);
+CREATE INDEX idx_lots_branch_product_active ON lots(branch_id, product_id, received_at) WHERE status = 'ACTIVE';
 CREATE INDEX idx_lots_tenant_expiry_active ON lots(tenant_id, expiry_date) WHERE status = 'ACTIVE';
 CREATE INDEX idx_lots_lot_norm ON lots(lot_number_normalized);
 
 CREATE TABLE stock_movements (
     id            BIGSERIAL PRIMARY KEY,
     tenant_id     BIGINT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    branch_id     BIGINT NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
     product_id    BIGINT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
     lot_id        BIGINT REFERENCES lots(id) ON DELETE SET NULL,
     type          VARCHAR(30) NOT NULL,                     -- MovementType
@@ -175,8 +210,10 @@ CREATE TABLE stock_movements (
     CONSTRAINT stock_movements_qty_chk CHECK (quantity > 0)
 );
 CREATE INDEX idx_mov_tenant_time ON stock_movements(tenant_id, occurred_at);
-CREATE INDEX idx_mov_tenant_product_time ON stock_movements(tenant_id, product_id, occurred_at);
+CREATE INDEX idx_mov_branch_time ON stock_movements(branch_id, occurred_at);
+CREATE INDEX idx_mov_branch_product_time ON stock_movements(branch_id, product_id, occurred_at);
 CREATE INDEX idx_mov_tenant_type_time ON stock_movements(tenant_id, type, occurred_at);
+CREATE INDEX idx_mov_batch_ref ON stock_movements(tenant_id, batch_ref);
 
 -- ---------------------------------------------------------------------
 -- Alertas e IA (por tenant)
@@ -184,6 +221,7 @@ CREATE INDEX idx_mov_tenant_type_time ON stock_movements(tenant_id, type, occurr
 CREATE TABLE alerts (
     id               BIGSERIAL PRIMARY KEY,
     tenant_id        BIGINT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    branch_id        BIGINT REFERENCES branches(id) ON DELETE CASCADE, -- NULL = alerta de todo el tenant
     type             VARCHAR(30) NOT NULL,                  -- AlertType
     severity         VARCHAR(10) NOT NULL,                  -- Severity
     status           VARCHAR(20) NOT NULL DEFAULT 'OPEN',   -- AlertStatus
@@ -200,10 +238,13 @@ CREATE TABLE alerts (
 );
 CREATE UNIQUE INDEX uq_alerts_open_dedupe ON alerts(tenant_id, dedupe_key) WHERE status IN ('OPEN', 'ACKNOWLEDGED');
 CREATE INDEX idx_alerts_tenant_status ON alerts(tenant_id, status, created_at DESC);
+CREATE INDEX idx_alerts_branch_status ON alerts(branch_id, status);
 
+-- La IA analiza cada sucursal por separado (cada local tiene su propio patrón de ventas).
 CREATE TABLE ai_runs (
     id                       BIGSERIAL PRIMARY KEY,
     tenant_id                BIGINT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    branch_id                BIGINT NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
     status                   VARCHAR(20) NOT NULL,          -- AiRunStatus
     trigger_type             VARCHAR(20) NOT NULL,          -- AiRunTrigger
     model_version            VARCHAR(40),
@@ -215,10 +256,12 @@ CREATE TABLE ai_runs (
     finished_at              TIMESTAMPTZ
 );
 CREATE INDEX idx_ai_runs_tenant_time ON ai_runs(tenant_id, started_at DESC);
+CREATE INDEX idx_ai_runs_branch_time ON ai_runs(branch_id, started_at DESC);
 
 CREATE TABLE product_insights (
     id                       BIGSERIAL PRIMARY KEY,
     tenant_id                BIGINT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    branch_id                BIGINT NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
     product_id               BIGINT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
     run_id                   BIGINT REFERENCES ai_runs(id) ON DELETE SET NULL,
     pattern                  VARCHAR(40),                   -- SalesPattern
@@ -238,12 +281,14 @@ CREATE TABLE product_insights (
     anomalies                JSONB,                         -- [{date,quantity,expected,score,kind}]
     lot_risks                JSONB,                         -- [{lotId,...}]
     updated_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT uq_product_insights UNIQUE (tenant_id, product_id)
+    CONSTRAINT uq_product_insights UNIQUE (branch_id, product_id)
 );
+CREATE INDEX idx_product_insights_tenant ON product_insights(tenant_id);
 
 CREATE TABLE recommendations (
     id                      BIGSERIAL PRIMARY KEY,
     tenant_id               BIGINT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    branch_id               BIGINT NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
     run_id                  BIGINT REFERENCES ai_runs(id) ON DELETE SET NULL,
     type                    VARCHAR(30) NOT NULL,           -- RecommendationType
     status                  VARCHAR(20) NOT NULL DEFAULT 'PENDING', -- RecommendationStatus
@@ -265,8 +310,9 @@ CREATE TABLE recommendations (
     created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at              TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE UNIQUE INDEX uq_reco_pending_dedupe ON recommendations(tenant_id, dedupe_key) WHERE status = 'PENDING';
+CREATE UNIQUE INDEX uq_reco_pending_dedupe ON recommendations(branch_id, dedupe_key) WHERE status = 'PENDING';
 CREATE INDEX idx_reco_tenant_status ON recommendations(tenant_id, status, priority DESC);
+CREATE INDEX idx_reco_branch_status ON recommendations(branch_id, status, priority DESC);
 
 -- ---------------------------------------------------------------------
 -- Avisos, recalls y notificaciones
@@ -318,6 +364,7 @@ CREATE TABLE recall_matches (
     id                BIGSERIAL PRIMARY KEY,
     announcement_id   BIGINT NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
     tenant_id         BIGINT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    branch_id         BIGINT NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
     product_id        BIGINT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
     lot_id            BIGINT NOT NULL REFERENCES lots(id) ON DELETE CASCADE,
     quantity_at_match INT NOT NULL,
@@ -332,6 +379,7 @@ CREATE TABLE recall_matches (
     CONSTRAINT uq_recall_match UNIQUE (announcement_id, lot_id)
 );
 CREATE INDEX idx_recall_matches_tenant_status ON recall_matches(tenant_id, status);
+CREATE INDEX idx_recall_matches_branch_status ON recall_matches(branch_id, status);
 
 CREATE TABLE notifications (
     id              BIGSERIAL PRIMARY KEY,

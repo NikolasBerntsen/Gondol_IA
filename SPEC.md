@@ -17,10 +17,20 @@ genera alertas y **recomendaciones con IA** (reposición, descuentos por vencimi
 patrones de venta). Los dueños de GondolIA administran los tenants (comercios clientes) sin ver sus
 datos, publican avisos y **alertas de recall**; un equipo de soporte atiende tickets y chat en vivo.
 
+**Multi-sucursal**: un cliente (tenant = empresa) puede tener **varios supermercados/locales (sucursales)**.
+El catálogo (productos, categorías, proveedores, precios) es único por tenant; el **stock, los lotes, las ventas,
+las transferencias, las alertas, la IA y los recalls son por sucursal**. Jefe y administrador ven todas las
+sucursales (consolidado o una por una); cada empleado trabaja solo en las sucursales que tiene asignadas.
+
+**Varios lotes y vencimientos por producto**: cada ingreso de mercadería crea su propio lote con su fecha de
+vencimiento y número de lote, aunque el producto ya tenga stock con otras fechas. Las ventas descuentan
+**primero lo que entró antes (FIFO)**, configurable por comercio a FEFO (primero lo que vence antes).
+Los lotes vencidos nunca se venden.
+
 ### 1.1 Mockup de referencia (Inicio del comercio)
 Sidebar verde oscuro con logo "GondolIA — Tu negocio siempre a tiempo" y frase al pie "Productos de hoy,
-clientes de siempre". Topbar: buscador "Buscar productos, categorías o códigos…", selector con nombre
-del comercio + "Sucursal Principal", campana, avatar. Título "Resumen del negocio", subtítulo
+clientes de siempre". Topbar: buscador "Buscar productos, categorías o códigos…", **selector de sucursal**
+(nombre del comercio + sucursal elegida, desplegable con "Todas las sucursales" y cada sucursal), campana, avatar. Título "Resumen del negocio", subtítulo
 "¡Hola! Aquí tienes un vistazo general de tu negocio.", fecha larga a la derecha.
 4 tarjetas: **Productos** (registrados, verde), **Por vencer** (naranja), **Stock bajo** (rojo),
 **Valor inventario** (verde, `$8.450.000`). Gráfico de líneas "Ventas y stock — Tendencia de ventas e
@@ -110,7 +120,10 @@ Un tenant se crea con (al menos) un jefe, un administrador y un empleado. El adm
 | Aceptar/descartar recomendaciones, gestionar alertas, recalcular IA | ✘ | ✔ | ✘ |
 | Inventario (listar/ver productos), crear/editar productos, categorías inline | ✘ | ✔ | ✔ |
 | Eliminar productos, CRUD categorías/proveedores | ✘ | ✔ | ✘ |
-| Carga de mercadería (lotes, escáner, OCR) | ✘ | ✔ | ✔ |
+| Carga de mercadería (lotes, escáner, OCR) — en sus sucursales | ✘ | ✔ | ✔ |
+| Ver consolidado de todas las sucursales / cambiar de sucursal | ✔ | ✔ | solo entre las asignadas |
+| Gestionar sucursales (alta, edición, baja) y asignar empleados | ✘ | ✔ | ✘ |
+| Transferencias de stock entre sucursales | ✘ | ✔ | ✘ |
 | Vencimientos (ver) y descartar vencidos/dañados | ✘ | ✔ | ✔ |
 | Ventas, importación CSV, integración POS, ajustes, historial de movimientos | ✘ | ✔ | ✘ |
 | Usuarios del comercio y Configuración | ✘ | ✔ | ✘ |
@@ -127,6 +140,24 @@ Un tenant se crea con (al menos) un jefe, un administrador y un empleado. El adm
    chats o qué tenants coinciden con un recall (solo **cantidades**).
 4. `SUPPORT_AGENT` no accede a `/api/tenant/**`. Los tenant users no acceden a `/api/support/**` ni `/api/platform/**`.
 5. Suscripciones STOMP autorizadas por destino (§7).
+6. **Sucursales**: toda operación sobre datos por sucursal valida que la sucursal pertenezca al tenant y que el usuario
+   tenga acceso (`BranchAccessService`, §5.3). Un empleado nunca ve ni modifica stock, lotes, ventas, alertas o recalls
+   de sucursales no asignadas (404/403). El catálogo de productos sí es visible para todos los usuarios de inventario del tenant.
+
+### 3.5 Sucursales y alcance (scope)
+- `TENANT_ADMIN` y `TENANT_BOSS`: acceso a **todas** las sucursales activas del tenant. `TENANT_EMPLOYEE`: solo las de
+  `user_branches` (al menos una; el admin las asigna).
+- El frontend envía la sucursal elegida en el header **`X-Branch-Id`** (id numérico) en todos los requests. Sin header
+  o con `X-Branch-Id: all` = **todas las sucursales accesibles** (vista consolidada).
+- Lecturas por sucursal (dashboards, stock, vencimientos, ventas, alertas, IA, recalls) operan sobre el scope
+  (una o todas las accesibles) y cada fila incluye `branchId` + `branchName`.
+- Escrituras por sucursal (carga de lotes, ventas, ajustes, descarte, resolución de recall, simulador POS) requieren
+  **una** sucursal: se toma de `branchId` del body si existe, si no del header; si el scope es "todas" y el usuario tiene
+  más de una sucursal → 400 `BRANCH_REQUIRED` ("Elegí una sucursal para esta operación").
+- Límite de sucursales por plan: FREEMIUM 1, BASICO 3, PROFESIONAL 10 (409 `BRANCH_LIMIT_REACHED`). La suscripción se
+  cobra **por sucursal activa**.
+- Todo tenant tiene al menos una sucursal activa (se crea "Sucursal Principal" junto con el tenant). No se puede desactivar
+  la última sucursal activa ni una con stock físico > 0 (409 `BRANCH_HAS_STOCK`).
 
 ---
 
@@ -139,12 +170,13 @@ Fuente de verdad: `backend/src/main/resources/db/migration/V1__schema.sql`. Hibe
 ```
 Role: PLATFORM_OWNER, SUPPORT_AGENT, TENANT_BOSS, TENANT_ADMIN, TENANT_EMPLOYEE
 TenantStatus: ACTIVE, DISABLED, CANCELLED
-TenantPlan: FREEMIUM, BASICO, PROFESIONAL            (precio mensual ARS: 0, 25000, 55000)
+TenantPlan: FREEMIUM, BASICO, PROFESIONAL            (precio mensual ARS POR SUCURSAL activa: 0, 25000, 55000; máx. sucursales: 1, 3, 10)
+StockRotation: FIFO, FEFO                             (default FIFO)
 BusinessType: KIOSCO, ALMACEN, DIETETICA, MINIMERCADO, FARMACIA, OTRO
 TenantEventType: CREATED, PLAN_CHANGED, DISABLED, ENABLED, CANCELLED, REACTIVATED, DELETED
 ProductUnit: UNIDAD, KG, LITRO, PAQUETE, CAJA
 LotStatus: ACTIVE, DEPLETED, EXPIRED_DISCARDED, RECALLED
-MovementType: ENTRY, SALE, ADJUSTMENT_IN, ADJUSTMENT_OUT, WASTE_EXPIRED, WASTE_DAMAGED, RECALL_REMOVAL
+MovementType: ENTRY, SALE, ADJUSTMENT_IN, ADJUSTMENT_OUT, WASTE_EXPIRED, WASTE_DAMAGED, RECALL_REMOVAL, TRANSFER_OUT, TRANSFER_IN
 MovementSource: MANUAL, SCAN, OCR, CSV, POS, SEED, SYSTEM
 AlertType: EXPIRING_SOON, EXPIRED, LOW_STOCK, OUT_OF_STOCK, RECALL_MATCH, ANOMALY, STOCKOUT_PREDICTED, SALE_WITHOUT_STOCK
 Severity: INFO, WARNING, CRITICAL
@@ -168,22 +200,39 @@ MessageSenderType: CUSTOMER, AGENT, SYSTEM
 ```
 
 ### 4.2 Reglas de stock
-- **Stock vendible** de un producto = Σ `lots.quantity` con `status='ACTIVE'` y (`expiry_date IS NULL` o `expiry_date >= hoy`).
+Todo el stock es **por sucursal** (`lots.branch_id`, `stock_movements.branch_id`). Los totales de un scope de varias
+sucursales son la suma de cada una.
+- **Stock vendible** de un producto en una sucursal = Σ `lots.quantity` con `status='ACTIVE'` y (`expiry_date IS NULL` o `expiry_date >= hoy`).
 - **Stock vencido pendiente** = lotes `ACTIVE` con `expiry_date < hoy` y `quantity > 0` (se descartan con `WASTE_EXPIRED`).
 - **Stock en cuarentena** = lotes `RECALLED` con `quantity > 0` (no vendible).
 - **Stock físico** (para "Stock total" y valor de inventario) = Σ quantity de lotes `ACTIVE` + `RECALLED`.
-- Toda entrada crea un lote (lot_number puede ser NULL). Ventas consumen **FEFO**: lotes vendibles ordenados
-  por `expiry_date ASC NULLS LAST, received_at ASC, id ASC`. Si no alcanza, el faltante se registra como
-  movimiento `SALE` con `lot_id NULL` y alerta `SALE_WITHOUT_STOCK`.
+- **Cada ingreso crea un lote nuevo** (lot_number y expiry_date pueden ser NULL, y puede repetir número/fecha de un lote
+  existente): así un mismo producto convive con varios lotes y vencimientos, y el orden de salida es exacto.
+  `received_at` = instante del ingreso (TIMESTAMPTZ).
+- **Rotación** (`tenant_settings.stock_rotation`) para ventas y bajas sin lote indicado, siempre sobre lotes vendibles
+  (los vencidos NUNCA se venden):
+  - `FIFO` (default, "primero sale lo que entró antes"): `received_at ASC, id ASC`.
+  - `FEFO` ("primero sale lo que vence antes"): `expiry_date ASC NULLS LAST, received_at ASC, id ASC`.
+  El próximo lote a consumir se muestra en la UI con la etiqueta "Se vende primero".
+  Si no alcanza, el faltante se registra como movimiento `SALE` con `lot_id NULL` y alerta `SALE_WITHOUT_STOCK`.
+- Con FIFO, si al cargar un lote su vencimiento es **anterior** al de lotes más viejos con stock en la misma sucursal,
+  la respuesta de la carga incluye `rotationWarning` ("Este lote vence antes que mercadería que ingresó antes: con FIFO se
+  venderá después. Revisalo o aplicá un descuento.") y la IA lo considera en el riesgo por lote.
+- **Transferencias**: `TRANSFER_OUT` descuenta del lote origen y crea en la sucursal destino un lote nuevo con el mismo
+  `lot_number`, `expiry_date`, `cost_price`, `supplier_id` y **el mismo `received_at` original** (conserva su antigüedad para
+  FIFO), `origin_lot_id` = lote origen, más un movimiento `TRANSFER_IN`. Ambos movimientos comparten `batch_ref` (`T-...`).
+  No se pueden transferir lotes `RECALLED` ni vencidos (409 `LOT_NOT_TRANSFERABLE`). El lote destino pasa por el chequeo de recall.
 - Lote que llega a quantity 0 → `DEPLETED` (salvo `RECALLED`, que queda `RECALLED`; y si el último movimiento
-  fue `WASTE_EXPIRED` → `EXPIRED_DISCARDED`).
+  fue `WASTE_EXPIRED` → `EXPIRED_DISCARDED`). `ADJUSTMENT_IN` sobre un lote `DEPLETED` lo vuelve a `ACTIVE`.
 - Un lote con `discount_pct` aplica ese descuento al precio de las unidades vendidas de ese lote
   (`unit_price = sale_price * (1 - pct/100)`, se guarda `discount_pct` en el movimiento).
 - Valor de inventario (costo) = Σ `quantity * COALESCE(lots.cost_price, products.cost_price)` (stock físico).
 - Buckets de vencimiento (con `tenant_settings`): `EXPIRED` (<0 días), `CRITICAL` (0..critical_days),
   `WARNING` (..warning_days), `UPCOMING` (..30 días), resto `OK`. Etiquetas UI: Vencido / Crítico / Por vencer / Próximo.
-- Estado de stock de producto: `OUT` (vendible = 0), `LOW` (vendible ≤ min_stock), `OK`.
-  En "Artículos a reponer": `SIN_STOCK` (0), `CRITICO` (≤ 50% del mínimo), `BAJO` (≤ mínimo).
+- Estado de stock de producto **por sucursal**: `OUT` (vendible = 0), `LOW` (vendible ≤ min_stock), `OK`. `min_stock` es
+  por producto y aplica a cada sucursal. En un scope de varias sucursales el estado es el **peor** entre ellas y se
+  informa el detalle `stockByBranch`. En "Artículos a reponer" (una fila por producto+sucursal): `SIN_STOCK` (0),
+  `CRITICO` (≤ 50% del mínimo), `BAJO` (≤ mínimo).
 - **Normalización de lote** `LotNumbers.normalize(raw)`: `null` si vacío; mayúsculas; eliminar todo carácter
   que no sea `[A-Z0-9]` ("l-2409/a " → "L2409A"). Se guarda en `lot_number_normalized`.
 - **Código de barras** `Barcodes.normalize(raw)`: trim, eliminar espacios; se aceptan EAN-13/EAN-8/UPC-A/Code128 (alfanumérico ≤ 32).
@@ -201,7 +250,7 @@ spring-boot-starter-test, spring-security-test. `artifactId=gondolia-backend`, j
 (`@EnableScheduling`, `@EnableAsync`).
 
 ### 5.2 Convenciones
-- **Entidades**: `com.gondolia.domain.<area>` (areas: `tenant`, `user`, `inventory`, `alert`, `ai`,
+- **Entidades**: `com.gondolia.domain.<area>` (areas: `tenant` (incluye `Branch`, `TenantSettings`), `user` (incluye `UserBranch`), `inventory`, `alert`, `ai`,
   `announcement`, `notification`, `support`). Lombok `@Getter @Setter @NoArgsConstructor`. **Sin asociaciones JPA**:
   las FK se mapean como `Long` (`private Long categoryId;`). Enums `@Enumerated(EnumType.STRING)`.
   Timestamps `Instant` con `@CreationTimestamp`/`@UpdateTimestamp`. Fechas `LocalDate`. Dinero `BigDecimal`.
@@ -233,13 +282,14 @@ spring-boot-starter-test, spring-security-test. `artifactId=gondolia-backend`, j
    "message":"Revisá los datos ingresados","path":"/api/tenant/products","fieldErrors":[{"field":"name","message":"es obligatorio"}]}
   ```
   Códigos comunes: `VALIDATION_ERROR`, `NOT_FOUND`, `UNAUTHORIZED`, `FORBIDDEN`, `BAD_CREDENTIALS`,
-  `TENANT_DISABLED`, `TENANT_CANCELLED`, `USER_DISABLED`, `CONFLICT`, `INSUFFICIENT_STOCK`, `AI_UNAVAILABLE`, `INTERNAL_ERROR`.
+  `TENANT_DISABLED`, `TENANT_CANCELLED`, `USER_DISABLED`, `CONFLICT`, `INSUFFICIENT_STOCK`, `AI_UNAVAILABLE`,
+  `BRANCH_REQUIRED`, `BRANCH_FORBIDDEN`, `BRANCH_LIMIT_REACHED`, `BRANCH_HAS_STOCK`, `LOT_NOT_TRANSFERABLE`, `INTERNAL_ERROR`.
   401/403 del filtro de seguridad también usan este formato.
 - **Paginación**: `com.gondolia.common.PageResponse<T>` →
   `{"content":[...],"page":0,"size":20,"totalElements":123,"totalPages":7}`; params `page` (0-based), `size` (≤100), `sort` (`campo,asc|desc`).
 - **Tiempo**: bean `java.time.Clock` con zona `app.timezone`. "Hoy" = `LocalDate.now(clock)`. Nunca `LocalDate.now()` sin clock.
 - **Eventos de dominio** (Spring `ApplicationEventPublisher`, paquete `com.gondolia.common.events`), records:
-  `StockChangedEvent(Long tenantId, Long productId)`, `LotReceivedEvent(Long tenantId, Long productId, Long lotId)`,
+  `StockChangedEvent(Long tenantId, Long branchId, Long productId)`, `LotReceivedEvent(Long tenantId, Long branchId, Long productId, Long lotId)`,
   `RecallMatchedEvent(Long tenantId, Long announcementId, List<Long> matchIds)`,
   `TenantStatusChangedEvent(Long tenantId, TenantStatus from, TenantStatus to)`.
   Los listeners usan `@TransactionalEventListener(phase = AFTER_COMMIT)` (+ `@Async` si son costosos).
@@ -256,7 +306,16 @@ spring-boot-starter-test, spring-security-test. `artifactId=gondolia-backend`, j
   y si es de tenant verifica tenant `ACTIVE` (lanza ApiException 401 `USER_DISABLED` / 403 `TENANT_DISABLED` / `TENANT_CANCELLED`). Lo usan el filtro HTTP y el interceptor STOMP.
 - `ApiKeyService`: `GeneratedApiKey generate()` → `record GeneratedApiKey(String rawKey, String prefix, String hash)`
   (formato `gk_` + 40 chars base62; prefix = primeros 10 chars; hash = SHA-256 hex), `String hash(String raw)`,
-  `Optional<Long> resolveTenantId(String rawKey)` (tenant ACTIVE).
+  `Optional<PosBranch> resolveBranch(String rawKey)` → `record PosBranch(Long tenantId, Long branchId)` (la API key es
+  **por sucursal**, en `branches.pos_api_key_hash`; sucursal activa y tenant ACTIVE).
+- `BranchAccessService` (lee el header `X-Branch-Id` del request actual vía `RequestContextHolder`):
+  - `record BranchRef(Long id, String name, String code)`
+  - `List<BranchRef> accessibleBranches()` — sucursales activas accesibles por el usuario actual (ADMIN/BOSS: todas; EMPLOYEE: asignadas), orden por nombre.
+  - `List<Long> scopeBranchIds()` — `[id]` si el header trae un id accesible (si no es accesible → 403 `BRANCH_FORBIDDEN`), o todas las accesibles si falta/`all`.
+  - `Long requireSingleBranch(Long explicitBranchId /* nullable, p.ej. del body */)` — explícito > header > única accesible; si no se puede determinar → 400 `BRANCH_REQUIRED`; valida acceso.
+  - `void assertAccess(Long branchId)` — 404 `NOT_FOUND` si no es del tenant, 403 `BRANCH_FORBIDDEN` si el usuario no tiene acceso.
+  - `boolean canAccess(Long userId, Long branchId)` y `List<Long> userIdsWithAccess(Long tenantId, Long branchId)` (usuarios activos con acceso: admins + jefes + empleados asignados).
+  - `Map<Long,String> branchNames(Long tenantId)`.
 - `PasswordEncoder` = BCrypt.
 
 **Auth** (`com.gondolia.auth`) — ver §6.1.
@@ -274,30 +333,41 @@ spring-boot-starter-test, spring-security-test. `artifactId=gondolia-backend`, j
 - `NotificationService`:
   - `NotificationDto notifyUser(Long userId, NotificationDraft d)`
   - `int notifyTenantUsers(Long tenantId, Set<Role> roles /* null = todos los roles de tenant */, NotificationDraft d)`
+  - `int notifyBranchUsers(Long tenantId, Long branchId, Set<Role> roles /* null = todos */, NotificationDraft d)` (solo usuarios con acceso a esa sucursal)
   - `int notifyAllActiveTenants(NotificationDraft d, Set<BusinessType> businessTypes /* null = todos */)`
   - `int notifyPlatformRole(Role role, NotificationDraft d)`
   Persiste en `notifications` (solo usuarios activos) y hace push `/user/queue/notifications` con `NotificationDto`.
 - `NotificationController` (§6.2).
 
-**Stock** (`com.gondolia.stock`) — `StockService` (transaccional, publica `StockChangedEvent`):
+**Stock** (`com.gondolia.stock`) — `StockService` (transaccional, publica `StockChangedEvent(tenantId, branchId, productId)`).
+Los comandos NO validan permisos de usuario (eso lo hace el controller con `BranchAccessService`), pero sí que
+producto, lote y sucursal pertenezcan al `tenantId`.
 ```java
-record ReceiveLotCommand(Long tenantId, Long productId, String lotNumber, LocalDate expiryDate, int quantity,
-                         BigDecimal costPrice, Long supplierId, LocalDate receivedAt, MovementSource source,
+record ReceiveLotCommand(Long tenantId, Long branchId, Long productId, String lotNumber, LocalDate expiryDate, int quantity,
+                         BigDecimal costPrice, Long supplierId, Instant receivedAt /* null = now */, MovementSource source,
                          Long userId, String reason) {}
-record ReceiveLotResult(Lot lot, StockMovement movement, List<RecallMatch> recallMatches) {}
-ReceiveLotResult receiveLot(ReceiveLotCommand cmd);   // crea lote + ENTRY; llama RecallMatchingService.checkLot → si coincide queda RECALLED
+record ReceiveLotResult(Lot lot, StockMovement movement, List<RecallMatch> recallMatches, String rotationWarning /* null si no aplica */) {}
+ReceiveLotResult receiveLot(ReceiveLotCommand cmd);   // SIEMPRE crea un lote nuevo + ENTRY; llama RecallMatchingService.checkLot → si coincide queda RECALLED
 
-record SaleCommand(Long tenantId, Long productId, int quantity, BigDecimal unitPrice /* null = sale_price */,
+record SaleCommand(Long tenantId, Long branchId, Long productId, int quantity, BigDecimal unitPrice /* null = sale_price */,
                    Instant occurredAt /* null = now */, MovementSource source, Long userId, String batchRef) {}
 record SaleResult(List<StockMovement> movements, int shortageQuantity, BigDecimal totalAmount) {}
-SaleResult registerSale(SaleCommand cmd);             // FEFO, descuentos por lote, faltante → alerta SALE_WITHOUT_STOCK
+SaleResult registerSale(SaleCommand cmd);             // rotación FIFO/FEFO del tenant, descuentos por lote, faltante → alerta SALE_WITHOUT_STOCK
 
 record AdjustCommand(Long tenantId, Long lotId, MovementType type /* ADJUSTMENT_IN|ADJUSTMENT_OUT|WASTE_EXPIRED|WASTE_DAMAGED|RECALL_REMOVAL */,
                      int quantity, String reason, MovementSource source, Long userId) {}
-StockMovement adjust(AdjustCommand cmd);              // valida que no quede negativo → 409 INSUFFICIENT_STOCK
+StockMovement adjust(AdjustCommand cmd);              // la sucursal es la del lote; valida que no quede negativo → 409 INSUFFICIENT_STOCK
 
-int sellableStock(Long tenantId, Long productId);
-Map<Long, Integer> sellableStockByProduct(Long tenantId);
+record TransferItem(Long lotId, int quantity) {}
+record TransferCommand(Long tenantId, Long fromBranchId, Long toBranchId, List<TransferItem> items, String note, Long userId) {}
+record TransferResult(String batchRef, List<StockMovement> outMovements, List<Lot> destinationLots, List<RecallMatch> recallMatches) {}
+TransferResult transfer(TransferCommand cmd);         // reglas §4.2; from != to; lotes deben ser de fromBranchId
+
+List<Lot> lotsInRotationOrder(Long tenantId, Long branchId, Long productId); // lotes vendibles en el orden en que se venderán
+int sellableStock(Long tenantId, Long branchId, Long productId);
+Map<Long, Integer> sellableStockByProduct(Long tenantId, Collection<Long> branchIds);          // suma del scope
+Map<Long, Map<Long, Integer>> sellableStockByBranchAndProduct(Long tenantId, Collection<Long> branchIds); // branchId → (productId → stock)
+StockRotation rotationFor(Long tenantId);
 ```
 **Recall** (`com.gondolia.recall`) — `RecallMatchingService`:
 ```java
@@ -308,10 +378,11 @@ List<RecallMatch> checkLot(Long tenantId, Long lotId);     // contra recalls PUB
 ```
 Coincidencia: `products.barcode = recall_barcode` Y (`recall_all_lots` O `lots.lot_number_normalized IN recall lots`)
 Y (si hay rango) `expiry_date BETWEEN recall_expiry_from AND recall_expiry_to`. Por cada lote nuevo coincidente:
-crea `recall_matches` (idempotente por `(announcement_id, lot_id)`), pone el lote en `RECALLED` (cuarentena),
-crea alerta `RECALL_MATCH` CRITICAL (`dedupe_key = "RECALL:"+announcementId+":"+lotId`), notifica a **todos los usuarios
-del tenant** (`RECALL_ALERT`, CRITICAL, link `/app/recalls`) y hace push `/user/queue/security-alerts` con
-`RecallAlertMessage` (§7), actualiza `announcements.affected_tenants_count` (tenants distintos con matches) y publica `RecallMatchedEvent`.
+crea `recall_matches` (idempotente por `(announcement_id, lot_id)`, con `branch_id` del lote), pone el lote en `RECALLED`
+(cuarentena), crea alerta `RECALL_MATCH` CRITICAL con `branch_id` (`dedupe_key = "RECALL:"+announcementId+":"+lotId`),
+notifica a **todos los usuarios con acceso a esa sucursal** (`notifyBranchUsers`, `RECALL_ALERT`, CRITICAL, link `/app/recalls`)
+y hace push `/user/queue/security-alerts` con `RecallAlertMessage` (§7) a cada uno, actualiza
+`announcements.affected_tenants_count` (tenants distintos con matches) y publica `RecallMatchedEvent`.
 
 **Archivos** (`com.gondolia.storage`) — `AttachmentStorageService`:
 `Attachment store(MultipartFile file, AttachmentPurpose purpose, Long tenantId, Long uploadedBy)` (solo
@@ -327,15 +398,18 @@ que espejan EXACTAMENTE §8. Error de red → `ApiException(503, "AI_UNAVAILABLE
 **Bootstrap** (`com.gondolia.bootstrap`)
 - `BootstrapRunner` (`@Order(10)`): si no existe ningún `PLATFORM_OWNER`, lo crea con `APP_BOOTSTRAP_OWNER_*`.
 - `DevFixtureRunner` (`@Order(20)`, solo si `app.dev-fixture=true`): crea (si no existen) tenant "Comercio de Prueba"
-  (ALMACEN, BASICO) + settings + `jefe@prueba.com`, `admin@prueba.com`, `empleado@prueba.com`, `soporte@gondolia.app`,
-  todos con contraseña `Demo2026!`, y 3 productos con lotes.
+  (ALMACEN, BASICO) + settings + sucursales "Sucursal Centro" y "Sucursal Norte" + `jefe@prueba.com`, `admin@prueba.com`,
+  `empleado@prueba.com` (asignado solo a Centro), `soporte@gondolia.app`, todos con contraseña `Demo2026!`; un segundo
+  tenant "Otro Comercio" con `admin@otro.com` (para probar aislamiento); y 3 productos con 2 lotes cada uno (distintas fechas)
+  en Centro y 1 lote en Norte.
 - El seeder de demo (`com.gondolia.seed.DemoDataSeeder`, `@Order(30)`, `app.seed-demo=true` y 0 tenants) lo implementa el módulo G.
 
 ---
 
 ## 6. API REST
 
-Base `/api`. JSON. Auth: `Authorization: Bearer <jwt>`. Fechas `LocalDate` → `"2026-09-17"`; instantes → ISO-8601 UTC.
+Base `/api`. JSON. Auth: `Authorization: Bearer <jwt>`. Sucursal: header `X-Branch-Id` (§3.5). Toda respuesta con datos
+por sucursal incluye `branchId` y `branchName` en cada fila. Fechas `LocalDate` → `"2026-09-17"`; instantes → ISO-8601 UTC.
 Dinero y decimales → número JSON. En cada módulo documentá los endpoints finales en `docs/api-<modulo>.md`.
 
 ### 6.1 Auth (fundación)
@@ -344,10 +418,11 @@ Dinero y decimales → número JSON. En cada módulo documentá los endpoints fi
   Actualiza `last_login_at`.
 - `GET /api/auth/me` → `MeDto`:
   ```json
-  {"id":5,"email":"admin@donpepe.com","fullName":"Laura Gómez","role":"TENANT_ADMIN","mustChangePassword":false,
-   "tenant":{"id":2,"name":"Almacén Don Pepe","plan":"BASICO","businessType":"ALMACEN","branchName":"Sucursal Principal","currency":"ARS"}}
+  {"id":5,"email":"admin@elsol.com","fullName":"Laura Gómez","role":"TENANT_ADMIN","mustChangePassword":false,
+   "tenant":{"id":2,"name":"Minimercado El Sol","plan":"PROFESIONAL","businessType":"MINIMERCADO","currency":"ARS","stockRotation":"FIFO","maxBranches":10},
+   "branches":[{"id":3,"name":"Sucursal Centro","code":"CEN"},{"id":4,"name":"Sucursal Fisherton","code":"FIS"}]}
   ```
-  (`tenant` = null para roles de plataforma)
+  (`tenant` = null y `branches` = [] para roles de plataforma; `branches` = sucursales accesibles)
 - `POST /api/auth/change-password` `{currentPassword, newPassword}` (min 8) → 204; incrementa `token_version`, devuelve nuevo token: `{"token":"...","expiresAt":"..."}` (200).
 
 ### 6.2 Notificaciones (fundación) — cualquier usuario autenticado
@@ -363,60 +438,67 @@ Dinero y decimales → número JSON. En cada módulo documentá los endpoints fi
 - Proveedores: `GET /api/tenant/suppliers` → `[{id,name,contactName,phone,email,leadTimeDays,notes,active,productCount}]` · `POST|PUT /{id}|DELETE /{id}` (ADMIN).
 - Productos:
   - `GET /api/tenant/products?q=&categoryId=&stockStatus=ALL|OK|LOW|OUT|EXPIRING&active=true&page=&size=&sort=name,asc`
-    → `PageResponse<ProductListItem>`; `ProductListItem = {id,barcode,name,brand,categoryId,categoryName,unit,costPrice,salePrice,minStock,perishable,active,sellableStock,expiredStock,quarantinedStock,nextExpiryDate,stockStatus:"OK|LOW|OUT"}`
-    (`q` busca en nombre, marca y código)
+    → `PageResponse<ProductListItem>`; `ProductListItem = {id,barcode,name,brand,categoryId,categoryName,unit,costPrice,salePrice,minStock,perishable,active,sellableStock,expiredStock,quarantinedStock,nextExpiryDate,lotsCount,stockStatus:"OK|LOW|OUT",stockByBranch:[{branchId,branchName,sellableStock,stockStatus}]}`
+    (stock sumado sobre el scope de sucursales; `q` busca en nombre, marca y código)
   - `GET /api/tenant/products/{id}` → `ProductDetail = ProductListItem + {description,supplierId,supplierName,createdAt,updatedAt,lots:[LotDto]}`
-    `LotDto = {id,productId,lotNumber,expiryDate,daysToExpiry,initialQuantity,quantity,costPrice,receivedAt,status,source,discountPct,supplierId,supplierName,expiryBucket}`
+    (lotes del scope con `quantity > 0` o recientes, ordenados por sucursal y luego en **orden de rotación**)
+    `LotDto = {id,branchId,branchName,productId,lotNumber,expiryDate,daysToExpiry,initialQuantity,quantity,costPrice,receivedAt,status,source,discountPct,supplierId,supplierName,expiryBucket,originLotId,rotationRank /* 1 = se vende primero en su sucursal; null si no vendible */}`
   - `GET /api/tenant/products/by-barcode/{barcode}` → `ProductDetail` | 404
   - `POST /api/tenant/products` `{barcode,name,brand,description,categoryId,categoryName? (crea si no existe),supplierId,unit,costPrice,salePrice,minStock,perishable}` → `ProductDetail` (409 `DUPLICATE_BARCODE`)
   - `PUT /api/tenant/products/{id}` (mismo body) · `DELETE /api/tenant/products/{id}` (ADMIN; si tiene movimientos → `active=false`)
 - `GET /api/tenant/catalog/lookup/{barcode}` → `{"found":true,"source":"OPEN_FOOD_FACTS","barcode":"...","name":"...","brand":"...","quantity":"340 g","categoryHint":"Sopas","imageUrl":"..."}` (timeout 4s; `found:false` si falla o está deshabilitado)
 - Lotes (carga de mercadería):
-  - `POST /api/tenant/lots` `{productId,lotNumber,expiryDate,quantity,costPrice,supplierId,receivedAt,source:"MANUAL|SCAN|OCR"}`
-    → `{"lot":LotDto,"quarantined":false,"recalls":[RecallInfo]}` (usa `StockService.receiveLot`)
+  - `POST /api/tenant/lots` `{branchId?,productId,lotNumber,expiryDate,quantity,costPrice,supplierId,source:"MANUAL|SCAN|OCR"}`
+    → `{"lot":LotDto,"quarantined":false,"recalls":[RecallInfo],"rotationWarning":null,"existingLots":[LotDto]}` (usa `StockService.receiveLot`;
+    `existingLots` = otros lotes vendibles del producto en esa sucursal en orden de rotación, para mostrar "ya tenés X u. con vencimiento …")
   - `PUT /api/tenant/lots/{id}` `{lotNumber,expiryDate}` → `LotDto` (re-chequea recall si cambió)
-  - `GET /api/tenant/lots?productId=` → `[LotDto]`
+  - `GET /api/tenant/lots?productId=&includeEmpty=false` → `[LotDto]` (scope de sucursales, orden de rotación)
 - `GET /api/tenant/recalls/check?barcode=&lotNumber=&expiryDate=` → `{"recalled":true,"recalls":[RecallInfo]}`
 - OCR: `POST /api/tenant/ocr/label` multipart `file` → `OcrResponse` (§8.3) + `"matchedProduct": ProductListItem|null` (si detectó un código existente). No se persiste la imagen.
 - `POST /api/tenant/ocr/barcode` multipart `file` → `{"barcodes":[{"value":"...","format":"EAN_13"}]}`
 
-### 6.4 Módulo A2 — Movimientos, ventas, vencimientos, POS (`com.gondolia.movements`)
-- Ventas (ADMIN): `POST /api/tenant/sales` `{items:[{productId,quantity,unitPrice?}],occurredAt?}` →
-  `{"batchRef":"S-...","occurredAt":"...","lines":[{productId,productName,quantity,unitPrice,discountPct,total,shortage}],"total":1234.5}`
-  · `GET /api/tenant/sales?from=&to=&page=` → `PageResponse<{batchRef,occurredAt,itemsCount,units,total,source,userName}>`
+### 6.4 Módulo A2 — Movimientos, ventas, transferencias, vencimientos, POS (`com.gondolia.movements`)
+- Ventas (ADMIN): `POST /api/tenant/sales` `{branchId?,items:[{productId,quantity,unitPrice?}],occurredAt?}` →
+  `{"batchRef":"S-...","branchId":3,"branchName":"...","occurredAt":"...","lines":[{productId,productName,quantity,unitPrice,discountPct,total,shortage,lots:[{lotId,lotNumber,expiryDate,quantity}]}],"total":1234.5}`
+  (`lots` muestra de qué lotes salió cada unidad según la rotación)
+  · `GET /api/tenant/sales?from=&to=&page=` → `PageResponse<{batchRef,branchId,branchName,occurredAt,itemsCount,units,total,source,userName}>`
   · `GET /api/tenant/sales/{batchRef}` · `POST /api/tenant/sales/import` multipart csv (`fecha,codigo_barras,cantidad,precio_unitario`; fecha `YYYY-MM-DD` o `DD/MM/YYYY`) → `{imported,skipped,errors:[{line,message}]}`
   · `GET /api/tenant/sales/import/template` → CSV
-- Movimientos (ADMIN): `GET /api/tenant/movements?productId=&type=&from=&to=&page=` → `PageResponse<{id,productId,productName,lotId,lotNumber,type,quantity,unitPrice,discountPct,totalAmount,source,reason,userName,occurredAt}>`
-  · `POST /api/tenant/movements/adjustments` `{lotId,type,quantity,reason}` (ADMIN todos los tipos; EMPLOYEE solo `WASTE_EXPIRED|WASTE_DAMAGED`)
+- Movimientos (ADMIN): `GET /api/tenant/movements?productId=&type=&from=&to=&page=` → `PageResponse<{id,branchId,branchName,productId,productName,lotId,lotNumber,type,quantity,unitPrice,discountPct,totalAmount,source,batchRef,reason,userName,occurredAt}>`
+  · `POST /api/tenant/movements/adjustments` `{lotId,type,quantity,reason}` (ADMIN todos los tipos; EMPLOYEE solo `WASTE_EXPIRED|WASTE_DAMAGED` y en sus sucursales)
+- Transferencias (ADMIN): `POST /api/tenant/transfers` `{fromBranchId,toBranchId,items:[{lotId,quantity}],note}` → `{batchRef,fromBranchId,fromBranchName,toBranchId,toBranchName,occurredAt,items:[{lotId,destinationLotId,productId,productName,lotNumber,expiryDate,quantity}],recalls:[RecallInfo]}`
+  · `GET /api/tenant/transfers?page=` → `PageResponse<{batchRef,fromBranchId,fromBranchName,toBranchId,toBranchName,occurredAt,itemsCount,units,userName,note}>` · `GET /api/tenant/transfers/{batchRef}`
 - Vencimientos (TENANT_INVENTORY): `GET /api/tenant/expirations?bucket=ALL|EXPIRED|CRITICAL|WARNING|UPCOMING&q=&page=` →
-  `PageResponse<{lotId,productId,productName,barcode,categoryName,lotNumber,expiryDate,daysLeft,quantity,costValue,saleValue,bucket,discountPct,status}>`
+  `PageResponse<{lotId,branchId,branchName,productId,productName,barcode,categoryName,lotNumber,expiryDate,daysLeft,quantity,receivedAt,rotationRank,costValue,saleValue,bucket,discountPct,status}>`
   · `GET /api/tenant/expirations/summary` → `{"expired":{lots,units,costValue},"critical":{...},"warning":{...},"upcoming":{...}}`
   · `POST /api/tenant/expirations/{lotId}/discard` `{quantity?,reason?}` → `WASTE_EXPIRED` (todo el remanente si no se indica)
-- POS (ADMIN): `GET /api/tenant/integrations/pos` → `{configured,prefix,createdAt,lastSaleAt,salesLast24h}` ·
-  `POST /api/tenant/integrations/pos/key` → `{apiKey,prefix,createdAt}` (se muestra una sola vez) ·
-  `POST /api/tenant/integrations/pos/simulate` `{sales: 10}` → genera ventas aleatorias realistas por el mismo camino que el POS.
-- **Webhook POS** (API key, sin JWT): `POST /api/integrations/pos/sales` header `X-API-Key` body
+- POS por sucursal (ADMIN): `GET /api/tenant/integrations/pos` → `[{branchId,branchName,configured,prefix,createdAt,lastSaleAt,salesLast24h}]` ·
+  `POST /api/tenant/integrations/pos/{branchId}/key` → `{branchId,apiKey,prefix,createdAt}` (se muestra una sola vez) ·
+  `POST /api/tenant/integrations/pos/{branchId}/simulate` `{sales: 10}` → genera ventas aleatorias realistas por el mismo camino que el POS.
+- **Webhook POS** (API key de la sucursal, sin JWT): `POST /api/integrations/pos/sales` header `X-API-Key` body
   `{externalId?,occurredAt?,items:[{barcode,quantity,unitPrice?}]}` → `{batchRef,processed,unknownBarcodes:[],shortages:[{barcode,quantity}]}`. 401 `INVALID_API_KEY`.
 
 ### 6.5 Módulo B — Dashboards, estadísticas, alertas e IA (`com.gondolia.analytics`, `com.gondolia.alerts`, `com.gondolia.insights`)
-Roles: lectura TENANT_DASHBOARD; acciones TENANT_ADMIN.
-- `GET /api/tenant/dashboard/summary` → `{productsCount,expiringSoonCount,expiredCount,lowStockCount,outOfStockCount,inventoryCostValue,inventorySaleValue,openAlertsCount,pendingRecommendationsCount,openRecallMatchesCount,todaySalesUnits,todaySalesAmount,lastAiRunAt,asOf}`
+Roles: lectura TENANT_DASHBOARD; acciones TENANT_ADMIN. Todo respeta el scope de sucursales (§3.5).
+- `GET /api/tenant/dashboard/summary` → `{scope:"ALL|BRANCH",branchCount,productsCount,expiringSoonCount,expiredCount,lowStockCount,outOfStockCount,inventoryCostValue,inventorySaleValue,openAlertsCount,pendingRecommendationsCount,openRecallMatchesCount,todaySalesUnits,todaySalesAmount,lastAiRunAt,asOf}`
 - `GET /api/tenant/dashboard/sales-stock-trend?days=30` → `[{date,salesUnits,salesAmount,stockUnits}]`
-- `GET /api/tenant/dashboard/upcoming-expirations?limit=8` → `[{lotId,productId,productName,lotNumber,expiryDate,daysLeft,quantity,bucket}]`
-- `GET /api/tenant/dashboard/reorder?limit=8` → `[{productId,productName,sellableStock,minStock,suggestedQuantity,status:"SIN_STOCK|CRITICO|BAJO",predictedStockoutDate}]`
-- `GET /api/tenant/statistics/overview?days=90` → ventas por día/semana, por categoría, top/bottom productos, ABC, rotación, merma por mes (valor), ventas perdidas estimadas por faltantes, tasa de aceptación de recomendaciones, ventas recuperadas con descuentos (estructura libre documentada en `docs/api-analytics.md`).
+- `GET /api/tenant/dashboard/branch-comparison?days=30` → `[{branchId,branchName,salesUnits,salesAmount,inventoryCostValue,expiringSoonCount,lowStockCount,wasteValue,openAlertsCount}]` (útil en la vista "Todas las sucursales")
+- `GET /api/tenant/dashboard/upcoming-expirations?limit=8` → `[{lotId,branchId,branchName,productId,productName,lotNumber,expiryDate,daysLeft,quantity,bucket}]`
+- `GET /api/tenant/dashboard/reorder?limit=8` → `[{productId,productName,branchId,branchName,sellableStock,minStock,suggestedQuantity,status:"SIN_STOCK|CRITICO|BAJO",predictedStockoutDate}]`
+- `GET /api/tenant/statistics/overview?days=90` → ventas por día/semana, por categoría, por sucursal, top/bottom productos, ABC, rotación, merma por mes (valor), ventas perdidas estimadas por faltantes, tasa de aceptación de recomendaciones, ventas recuperadas con descuentos (estructura libre documentada en `docs/api-analytics.md`).
 - Alertas: `GET /api/tenant/alerts?status=OPEN&type=&page=` · `POST /api/tenant/alerts/{id}/acknowledge|resolve|dismiss` (ADMIN).
-  Motor: `AlertEngine` programado (cada 10 min + al inicio + listener `StockChangedEvent`) que abre/cierra alertas
-  `EXPIRING_SOON`, `EXPIRED`, `LOW_STOCK`, `OUT_OF_STOCK`, `STOCKOUT_PREDICTED`, `ANOMALY` con `dedupe_key` y
-  notifica a ADMIN (y a EMPLOYEE solo las de vencimiento) cuando se abre una CRITICAL nueva.
-- IA: `GET /api/tenant/insights/summary` · `GET /api/tenant/insights/products?pattern=&abc=&page=` ·
-  `GET /api/tenant/insights/products/{productId}` (incluye historia diaria 90 días + pronóstico) ·
-  `POST /api/tenant/insights/run` (ADMIN, asincrónico → `ai_runs`) · `GET /api/tenant/insights/runs/latest`.
-  `InsightsService` arma `AnalyzeRequest` (§8.2) con 180 días de ventas, persiste `product_insights`,
-  upsert de `recommendations` (dedupe), expira las PENDING que ya no aplican. Programado diario 03:00 y al arrancar
-  (si no hay run OK en 24 h) para todos los tenants ACTIVE, con reintentos si la IA no está lista.
+  Motor: `AlertEngine` programado (cada 10 min + al inicio + listener `StockChangedEvent`) que abre/cierra alertas **por
+  sucursal** `EXPIRING_SOON`, `EXPIRED`, `LOW_STOCK`, `OUT_OF_STOCK`, `STOCKOUT_PREDICTED`, `ANOMALY` con `dedupe_key`
+  (incluye branchId) y notifica a los ADMIN (y a los EMPLOYEE de esa sucursal solo las de vencimiento) cuando se abre una CRITICAL nueva.
+  Filas: `{id,branchId,branchName,type,severity,status,productId,productName,lotId,lotNumber,title,message,createdAt,handledByName,resolvedAt}`.
+- IA (**por sucursal**): `GET /api/tenant/insights/summary` · `GET /api/tenant/insights/products?pattern=&abc=&page=` (filas con branchId/branchName) ·
+  `GET /api/tenant/insights/products/{productId}?branchId=` (incluye historia diaria 90 días + pronóstico de esa sucursal; si falta branchId y el scope es una sola sucursal, usa esa) ·
+  `POST /api/tenant/insights/run` (ADMIN, asincrónico → un `ai_runs` por sucursal del scope) · `GET /api/tenant/insights/runs/latest` → `[{branchId,branchName,status,startedAt,finishedAt,productsAnalyzed,recommendationsCreated,errorMessage}]`.
+  `InsightsService` arma un `AnalyzeRequest` (§8.2) **por sucursal** con 180 días de ventas de esa sucursal, persiste `product_insights`,
+  upsert de `recommendations` (dedupe por sucursal), expira las PENDING que ya no aplican. Programado diario 03:00 y al arrancar
+  (si no hay run OK en 24 h) para todas las sucursales activas de tenants ACTIVE, con reintentos si la IA no está lista.
 - Recomendaciones: `GET /api/tenant/recommendations?status=PENDING&type=&page=` →
-  `PageResponse<{id,type,status,productId,productName,lotId,lotNumber,title,explanation,suggestedQuantity,suggestedDiscountPct,suggestedDate,priority,confidence,expectedImpact,createdAt,decidedAt,decidedByName,decisionNote,outcome}>`
+  `PageResponse<{id,branchId,branchName,type,status,productId,productName,lotId,lotNumber,title,explanation,suggestedQuantity,suggestedDiscountPct,suggestedDate,priority,confidence,expectedImpact,createdAt,decidedAt,decidedByName,decisionNote,outcome}>`
   · `POST /api/tenant/recommendations/{id}/accept` `{note?,quantity?,discountPct?}` (DISCOUNT → setea `lots.discount_pct`; REMOVE_EXPIRED → `WASTE_EXPIRED`)
   · `POST /api/tenant/recommendations/{id}/discard` `{note?}`. Job diario mide `outcome` de DISCOUNT aceptados a los 7 días
   (`{unitsBefore7d,unitsAfter7d,lift,lotUnitsSold,lotUnitsRemaining}`) y lo envía como `feedback` en el próximo análisis.
@@ -425,6 +507,7 @@ Roles: lectura TENANT_DASHBOARD; acciones TENANT_ADMIN.
 - `GET /api/platform/metrics` →
   ```json
   {"tenants":{"total":18,"active":14,"disabled":2,"cancelled":2,"newLast30d":3,"cancelledLast30d":1},
+   "branches":{"total":27,"active":25,"avgPerActiveTenant":1.6,"multiBranchTenants":5},
    "tenantsByPlan":{"FREEMIUM":5,"BASICO":8,"PROFESIONAL":5},"tenantsByBusinessType":{"ALMACEN":6,"...":0},
    "engagement":{"activeTenants7d":11,"activeTenants30d":13,"activeUsers7d":30},
    "users":{"total":60,"byRole":{"TENANT_BOSS":18,"TENANT_ADMIN":20,"TENANT_EMPLOYEE":22}},
@@ -433,12 +516,14 @@ Roles: lectura TENANT_DASHBOARD; acciones TENANT_ADMIN.
    "support":{"openTickets":4,"unassignedTickets":1,"avgFirstResponseMinutes":12.4,"resolvedLast30d":22,"avgRating":4.6},
    "recalls":{"activeRecalls":1,"affectedTenantsTotal":2}}
   ```
-  (MRR con tenants ACTIVE y precios §4.1; "activo 7d" = algún usuario con login en 7 días)
+  (MRR = Σ precio del plan × sucursales activas de tenants ACTIVE, §4.1; "activo 7d" = algún usuario con login en 7 días)
 - Tenants: `GET /api/platform/tenants?q=&status=&plan=&businessType=&page=` → `PageResponse<TenantSummary>`
-  `TenantSummary = {id,name,businessType,plan,status,city,province,contactName,contactEmail,contactPhone,userCount,lastActivityAt,createdAt,statusChangedAt,statusReason}`
-  · `GET /{id}` → `TenantSummary + {legalName,taxId,address,notes,usersByRole:{},events:[{type,fromValue,toValue,reason,createdAt}]}`
-  · `POST /api/platform/tenants` `{name,legalName,taxId,businessType,plan,contactName,contactEmail,contactPhone,address,city,province,notes,boss:{fullName,email,password},admin:{...},employee:{...}}`
-  · `PUT /{id}` (datos y plan; plan distinto → evento PLAN_CHANGED)
+  `TenantSummary = {id,name,businessType,plan,status,city,province,contactName,contactEmail,contactPhone,userCount,branchCount,activeBranchCount,monthlyFee,lastActivityAt,createdAt,statusChangedAt,statusReason}`
+  · `GET /{id}` → `TenantSummary + {legalName,taxId,address,notes,maxBranches,usersByRole:{},branches:[{id,name,city,active,createdAt}],events:[{type,fromValue,toValue,reason,createdAt}]}`
+    (de las sucursales solo datos administrativos: nombre, ciudad, estado — nunca stock ni ventas)
+  · `POST /api/platform/tenants` `{name,legalName,taxId,businessType,plan,contactName,contactEmail,contactPhone,address,city,province,notes,firstBranch:{name,address,city,province},boss:{fullName,email,password},admin:{...},employee:{...}}`
+    (crea tenant + settings + primera sucursal + 3 usuarios; el empleado queda asignado a la primera sucursal)
+  · `PUT /{id}` (datos y plan; plan distinto → evento PLAN_CHANGED; bajar a un plan con menos sucursales que las activas → 409 `BRANCH_LIMIT_REACHED`)
   · `POST /{id}/disable {reason}` · `POST /{id}/enable` · `POST /{id}/cancel {reason}` · `POST /{id}/reactivate`
     (eventos + `TenantStatusChangedEvent` + `SessionTerminationService.forceLogoutTenant` al bloquear)
   · `DELETE /{id}?confirmName=` (solo CANCELLED; nombre exacto) · `POST /{id}/reset-admin-password` → `{email,temporaryPassword}`
@@ -454,8 +539,8 @@ Roles: lectura TENANT_DASHBOARD; acciones TENANT_ADMIN.
   `POST /api/platform/announcements/recall-preview` `{barcode,lotNumbers,allLots,expiryFrom,expiryTo}` → `{affectedTenantsCount,affectedLotsCount}`.
 - Tenant (TENANT_ANY): `GET /api/tenant/announcements?page=` → `PageResponse<{id,kind,severity,title,body,publishedAt,read,affectsMe,recall:{productName,brand,barcode,lotNumbers,allLots,expiryFrom,expiryTo,reason,instructions}|null}>`
   · `POST /api/tenant/announcements/{id}/read` · `GET /api/tenant/announcements/unread-count` → `{count}`
-- Matches (tenant): `GET /api/tenant/recall-matches?status=ACTIVE|OPEN|ACKNOWLEDGED|RESOLVED|ALL` →
-  `[{id,announcementId,title,severity,reason,instructions,productId,productName,barcode,lotId,lotNumber,expiryDate,quantityAtMatch,currentQuantity,status,matchedAt,acknowledgedAt,acknowledgedByName,resolvedAt,resolvedByName,resolution,resolutionNote}]`
+- Matches (tenant, scope de sucursales accesibles): `GET /api/tenant/recall-matches?status=ACTIVE|OPEN|ACKNOWLEDGED|RESOLVED|ALL` →
+  `[{id,announcementId,branchId,branchName,title,severity,reason,instructions,productId,productName,barcode,lotId,lotNumber,expiryDate,quantityAtMatch,currentQuantity,status,matchedAt,acknowledgedAt,acknowledgedByName,resolvedAt,resolvedByName,resolution,resolutionNote}]`
   · `POST /{id}/acknowledge` (TENANT_ANY) · `POST /{id}/resolve {resolution,note}` (TENANT_INVENTORY; retira el remanente con `RECALL_REMOVAL` o `ADJUSTMENT_OUT`).
 
 ### 6.8 Módulo E — Soporte (`com.gondolia.support`)
@@ -474,10 +559,15 @@ Roles: lectura TENANT_DASHBOARD; acciones TENANT_ADMIN.
   Mensaje de agente → notificación al creador del ticket; primer mensaje de agente setea `first_response_at` y status `IN_PROGRESS`.
 
 ### 6.9 Módulo F — Administración del comercio (`com.gondolia.tenantadmin`) · TENANT_ADMIN
-- `GET /api/tenant/users` → `[{id,fullName,email,role,active,lastLoginAt,createdAt}]` · `POST {fullName,email,password,role}` ·
-  `PUT /{id} {fullName,role,active}` (no puede desactivarse/degradarse a sí mismo; siempre ≥1 ADMIN activo) ·
+- Usuarios: `GET /api/tenant/users` → `[{id,fullName,email,role,active,lastLoginAt,createdAt,branches:[{id,name}]}]` ·
+  `POST {fullName,email,password,role,branchIds:[]}` (EMPLOYEE requiere ≥1 sucursal; para ADMIN/BOSS se ignora) ·
+  `PUT /{id} {fullName,role,active,branchIds}` (no puede desactivarse/degradarse a sí mismo; siempre ≥1 ADMIN activo) ·
   `POST /{id}/reset-password {newPassword}` (incrementa token_version y fuerza logout)
-- `GET /api/tenant/settings` → `{branchName,currency,expiryWarningDays,expiryCriticalDays,defaultLeadTimeDays,targetCoverageDays,serviceLevel,maxDiscountPct}` · `PUT` mismo body (validar rangos)
+- Sucursales: `GET /api/tenant/branches` (TENANT_ANY → solo las accesibles; ADMIN con `?includeInactive=true` ve todas) →
+  `[{id,name,code,address,city,province,phone,active,employeeCount,createdAt}]` · `POST {name,code,address,city,province,phone}`
+  (límite por plan → 409 `BRANCH_LIMIT_REACHED`) · `PUT /{id}` (mismo body) · `POST /{id}/deactivate` (409 `BRANCH_HAS_STOCK` / última activa) ·
+  `POST /{id}/activate` (respeta límite) · `GET /api/tenant/branches/limits` → `{plan,maxBranches,activeBranches}`
+- `GET /api/tenant/settings` → `{currency,stockRotation,expiryWarningDays,expiryCriticalDays,defaultLeadTimeDays,targetCoverageDays,serviceLevel,maxDiscountPct}` · `PUT` mismo body (validar rangos)
 - `GET /api/tenant/account` → `{name,legalName,taxId,businessType,plan,status,contactName,contactEmail,contactPhone,address,city,province,createdAt}` (TENANT_DASHBOARD)
 
 ---
@@ -498,7 +588,7 @@ Roles: lectura TENANT_DASHBOARD; acciones TENANT_ADMIN.
 | `/topic/tickets/{ticketId}` | SUPPORT_AGENT o usuario del tenant dueño del ticket | `{event:"MESSAGE",message:MessageDto}` · `{event:"TICKET_UPDATED",ticket:TicketSummary}` · `{event:"TYPING",userId,name,senderType,typing}` · `{event:"READ",senderType,readAt}` |
 | cualquier otro | nadie | — |
 - Envío cliente→servidor: `/app/tickets/{ticketId}/typing` `{typing:true}` (misma autorización; el módulo E implementa el `@MessageMapping`).
-- `RecallAlertMessage = {matchId,announcementId,title,severity,reason,instructions,productId,productName,barcode,lotId,lotNumber,expiryDate,quantity,matchedAt}`
+- `RecallAlertMessage = {matchId,announcementId,branchId,branchName,title,severity,reason,instructions,productId,productName,barcode,lotId,lotNumber,expiryDate,quantity,matchedAt}`
 
 ---
 
@@ -514,16 +604,18 @@ Stateless: todo el contexto llega en el request.
 ### 8.2 `POST /v1/analyze` — reconocimiento de patrones de stock y recomendaciones
 Request:
 ```json
-{"tenantId":2,"asOfDate":"2026-09-17",
- "settings":{"expiryWarningDays":15,"expiryCriticalDays":5,"leadTimeDays":3,"targetCoverageDays":14,"serviceLevel":0.95,"maxDiscountPct":40,"horizonDays":14},
+{"tenantId":2,"branchId":3,"branchName":"Sucursal Centro","asOfDate":"2026-09-17",
+ "settings":{"stockRotation":"FIFO","expiryWarningDays":15,"expiryCriticalDays":5,"leadTimeDays":3,"targetCoverageDays":14,"serviceLevel":0.95,"maxDiscountPct":40,"horizonDays":14},
  "products":[{"productId":10,"name":"Yogur bebible frutilla 1L","category":"Lácteos","salePrice":2100.0,"costPrice":1400.0,
    "minStock":10,"sellableStock":25,"perishable":true,"leadTimeDays":3,"createdAt":"2026-03-01",
    "dailySales":[{"date":"2026-09-16","quantity":4,"discountPct":0}],
-   "lots":[{"lotId":55,"lotNumber":"L2409A","expiryDate":"2026-09-25","quantity":12,"discountPct":null,"status":"ACTIVE"}]}],
+   "lots":[{"lotId":55,"lotNumber":"L2409A","expiryDate":"2026-09-25","receivedAt":"2026-09-02T13:10:00Z","quantity":12,"discountPct":null,"status":"ACTIVE"}]}],
  "feedback":[{"recommendationId":90,"type":"DISCOUNT","productId":10,"category":"Lácteos","status":"ACCEPTED","discountPct":20,
    "outcome":{"unitsBefore7d":10,"unitsAfter7d":18,"lift":1.8}}]}
 ```
-(`dailySales` puede venir esparcido: días faltantes = 0 desde `createdAt`/primera venta hasta `asOfDate`)
+(`dailySales` y `lots` son **de esa sucursal**; `sellableStock` también. `dailySales` puede venir esparcido: días faltantes = 0
+desde `createdAt`/primera venta hasta `asOfDate`. La simulación de consumo por lote usa `settings.stockRotation`: FIFO ordena
+por `receivedAt`, FEFO por `expiryDate`; los lotes vencidos no se consumen.)
 
 Response:
 ```json
@@ -548,8 +640,9 @@ Croston/SBA si intermitente, media móvil ponderada si hay pocos datos; perfil s
 tendencia, ratio finde, % días sin venta); ABC por facturación (80/15/5) y XYZ por coeficiente de variación
 (<0,5 / <1 / ≥1); anomalías por z-score robusto (MAD) sobre residuos del pronóstico in-sample e IsolationForest
 como segunda opinión; punto de pedido = demanda en lead time + stock de seguridad (z(serviceLevel)·σ·√LT);
-cantidad sugerida = cubrir `targetCoverageDays + leadTimeDays` − stock; riesgo por lote FEFO simulando consumo
-pronosticado; descuento mínimo (escalones 10/15/20/25/30/40, tope `maxDiscountPct`) para vender el lote antes del
+cantidad sugerida = cubrir `targetCoverageDays + leadTimeDays` − stock; riesgo por lote simulando el consumo
+pronosticado en el orden de rotación (FIFO/FEFO) — con FIFO detecta lotes nuevos que vencen antes que los viejos y
+quedarían sin vender; descuento mínimo (escalones 10/15/20/25/30/40, tope `maxDiscountPct`) para vender el lote antes del
 vencimiento usando elasticidad por categoría (default 2,0 = +2% ventas por 1% de descuento) ajustada con `feedback`
 (promedio ponderado de `(lift-1)/(discountPct/100)`). Recomendaciones: `REORDER` (stock ≤ punto de pedido o quiebre
 previsto antes de LT+2 días), `DISCOUNT` (lote con unitsAtRisk>0 y daysToExpiry>0), `REMOVE_EXPIRED` (lote vencido con
@@ -590,9 +683,11 @@ Dev: `npm run dev` en :5173 con proxy `/api` → `http://localhost:8080` y `/ws`
 frontend/src/
 ├── main.tsx · App.tsx (router; SOLO fundación) · index.css
 ├── config/navigation.ts            # menú por rol
-├── api/client.ts                   # axios `api`, helpers, ApiError, uploadFile()
-├── api/types.ts                    # Role, MeDto, PageResponse<T>, ErrorResponse, NotificationDto, enums compartidos
+├── api/client.ts                   # axios `api` (agrega Authorization y X-Branch-Id), helpers, ApiError, uploadFile()
+├── api/types.ts                    # Role, MeDto, BranchRef, PageResponse<T>, ErrorResponse, NotificationDto, enums compartidos
 ├── auth/ AuthContext.tsx (useAuth), RequireAuth.tsx, RequireRole.tsx, tokenStorage.ts, roleHome.ts
+├── branches/ BranchContext.tsx (useBranch: branches, selectedBranchId | 'all', setBranch, currentBranch, isAll, canSelectAll),
+│             BranchSelector.tsx (desplegable del topbar), BranchPicker.tsx (selector inline obligatorio para escrituras cuando isAll)
 ├── realtime/ StompProvider.tsx, useStompSubscription.ts, useStompPublish.ts, useSessionEvents.ts
 ├── components/ui/                  # Button, Card, Badge, Input, Select, Textarea, Field, Modal, ConfirmDialog, Table,
 │                                   # Spinner, EmptyState, PageHeader, StatCard, Tabs, Pagination, SearchInput, Toggle, AuthImage + index.ts
@@ -601,14 +696,14 @@ frontend/src/
 ├── pages/ LoginPage.tsx, ProfilePage.tsx, NotificationsPage.tsx, NotFoundPage.tsx, ForbiddenPage.tsx
 └── features/
     ├── catalog/pages/       InventoryPage, ProductFormPage, ProductDetailPage, IntakePage, CategoriesPage, SuppliersPage   (A1)
-    ├── movements/pages/     SalesPage, MovementsPage, ExpirationsPage                                                     (A2)
+    ├── movements/pages/     SalesPage, MovementsPage, ExpirationsPage, TransfersPage                                      (A2)
     ├── analytics/pages/     DashboardPage, StatisticsPage, InsightsPage, AlertsPage                                        (B)
     ├── platform/pages/      OwnerMetricsPage, TenantsPage, TenantFormPage, TenantDetailPage, PlatformTeamPage              (C)
     ├── announcements/pages/ OwnerAnnouncementsPage, AnnouncementFormPage, NoticesPage, RecallsPage                         (D)
     ├── announcements/components/SecurityAlertHost.tsx   (montado globalmente para usuarios de tenant)                      (D)
     ├── support/pages/       SupportConsolePage, TenantSupportPage                                                          (E)
     ├── support/components/SupportWidget.tsx             (botón flotante de chat en páginas de tenant)                      (E)
-    └── tenantadmin/pages/   UsersPage, SettingsPage                                                                        (F)
+    └── tenantadmin/pages/   UsersPage, SettingsPage, BranchesPage                                                          (F)
 ```
 Cada página es `export default function NombrePage()`. App.tsx las carga con `React.lazy`. La fundación crea
 todos estos archivos como placeholders ("Sección en construcción"); cada módulo reemplaza los suyos y agrega
@@ -624,14 +719,14 @@ archivos nuevos solo dentro de `features/<modulo>/` (`api.ts`, `types.ts`, `comp
 | `/support` · `/support/tickets/:id` | SupportConsolePage | SUPPORT_AGENT |
 | `/app/dashboard` · `/app/statistics` · `/app/insights` · `/app/alerts` | Dashboard · Statistics · Insights · Alerts | BOSS, ADMIN |
 | `/app/inventory` · `/app/products/new` · `/app/products/:id` · `/app/products/:id/edit` · `/app/intake` · `/app/expirations` | Inventory · ProductForm · ProductDetail · ProductForm · Intake · Expirations | ADMIN, EMPLOYEE |
-| `/app/categories` · `/app/suppliers` · `/app/sales` · `/app/movements` · `/app/users` · `/app/settings` | … | ADMIN |
+| `/app/categories` · `/app/suppliers` · `/app/sales` · `/app/movements` · `/app/transfers` · `/app/users` · `/app/branches` · `/app/settings` | Categories · Suppliers · Sales · Movements · Transfers · Users · Branches · Settings | ADMIN |
 | `/app/notices` · `/app/recalls` · `/app/support` · `/app/support/:id` | Notices · Recalls · TenantSupport | BOSS, ADMIN, EMPLOYEE |
 
 ### 9.4 Navegación (sidebar, íconos lucide)
 - OWNER: Métricas (BarChart3) · Clientes (Store) · Avisos y recalls (Megaphone) · Equipo GondolIA (Users)
 - SUPPORT: Bandeja de soporte (Headset)
 - BOSS: Inicio (Home) · Estadísticas (BarChart3) · Inteligencia IA (Sparkles) · Alertas (Bell) ‖ Avisos (Megaphone) · Seguridad alimentaria (ShieldAlert) · Soporte (LifeBuoy)
-- ADMIN: Inicio · Inventario (Package) · Carga de mercadería (ScanBarcode) · Vencimientos (CalendarClock) · Ventas (ShoppingCart) · Movimientos (ArrowLeftRight) · Estadísticas · Inteligencia IA · Alertas · Proveedores (Truck) · Categorías (Tags) ‖ Usuarios (UserCog) · Configuración (Settings) ‖ Avisos · Seguridad alimentaria · Soporte
+- ADMIN: Inicio · Inventario (Package) · Carga de mercadería (ScanBarcode) · Vencimientos (CalendarClock) · Ventas (ShoppingCart) · Transferencias (ArrowLeftRight) · Movimientos (History) · Estadísticas · Inteligencia IA · Alertas · Proveedores (Truck) · Categorías (Tags) ‖ Sucursales (Building2) · Usuarios (UserCog) · Configuración (Settings) ‖ Avisos · Seguridad alimentaria · Soporte
 - EMPLOYEE: Carga de mercadería · Inventario · Vencimientos ‖ Avisos · Seguridad alimentaria · Soporte
 
 ### 9.5 Diseño
@@ -651,6 +746,13 @@ Si `!window.isSecureContext` y no es localhost, mostrar aviso "Para usar la cám
 - `NotificationBell`: contador (`/api/notifications/unread-count`), dropdown con últimas 10, push en vivo
   (`/user/queue/notifications`) con toast; severidad CRITICAL con estilo rojo; click → navega a `link`.
 - `AppShell` monta `<SecurityAlertHost/>` y `<SupportWidget/>` solo para roles de tenant.
+- **Sucursal**: `BranchProvider` (dentro de AuthProvider) toma `me.branches`; la selección se guarda en `localStorage`
+  (`gondolia.branch.<userId>`), default: ADMIN/BOSS con >1 sucursal → `'all'`; con una sola (o EMPLOYEE con una) → esa.
+  "Todas las sucursales" solo si hay >1 accesible. El interceptor de axios agrega `X-Branch-Id` (id o `all`).
+  Al cambiar de sucursal se invalidan todas las queries de React Query (`queryClient.invalidateQueries()`) y las query keys
+  de datos por sucursal incluyen `selectedBranchId`. `BranchSelector` en el topbar (oculto para roles de plataforma; solo texto
+  si hay una sola sucursal). `BranchPicker` se usa en formularios de escritura cuando `isAll` (carga, ventas, ajustes).
+  En tablas/listados con `isAll` se muestra la columna "Sucursal".
 - React Query: `staleTime` 30s, invalidación tras mutaciones; `api/client.ts` exporta `api` (axios) y `getErrorMessage(err)`.
 
 ---
@@ -681,14 +783,19 @@ Si `!window.isSecureContext` y no es localhost, mostrar aviso "Para usar la cám
 ## 11. Datos demo (módulo G) y credenciales
 Contraseñas: plataforma `Gondolia2026!`, comercios `Demo2026!`.
 - Dueños: `dueno@gondolia.app`, `socia@gondolia.app` · Soporte: `soporte@gondolia.app`, `soporte2@gondolia.app`
-- Tenants con datos ricos (180 días de historia de ventas simulada día a día con FEFO, reposiciones, mermas):
-  - **Almacén Don Pepe** (ALMACEN, BASICO, CABA): `jefe@donpepe.com`, `admin@donpepe.com`, `empleado@donpepe.com`
-  - **Dietética Vida Sana** (DIETETICA, PROFESIONAL, Córdoba): `jefe@vidasana.com`, `admin@vidasana.com`, `empleado@vidasana.com`
-  - **Minimercado El Sol** (MINIMERCADO, PROFESIONAL, Rosario): `jefe@elsol.com`, `admin@elsol.com`, `empleado@elsol.com`
+- Tenants con datos ricos (180 días de historia de ventas simulada día a día **por sucursal** con la rotación del
+  comercio, reposiciones que generan varios lotes con distintas fechas por producto, transferencias, mermas):
+  - **Almacén Don Pepe** (ALMACEN, BASICO, CABA, 1 sucursal "Sucursal Principal"): `jefe@donpepe.com`, `admin@donpepe.com`, `empleado@donpepe.com`
+  - **Dietética Vida Sana** (DIETETICA, PROFESIONAL, Córdoba, 2 sucursales "Nueva Córdoba" y "Cerro de las Rosas", FEFO):
+    `jefe@vidasana.com`, `admin@vidasana.com`, `empleado@vidasana.com` (solo Nueva Córdoba)
+  - **Minimercado El Sol** (MINIMERCADO, PROFESIONAL, Rosario, 3 sucursales "Centro", "Fisherton" y "Echesortu", FIFO):
+    `jefe@elsol.com`, `admin@elsol.com`, `empleado@elsol.com` (Centro y Fisherton), `empleado.echesortu@elsol.com` (solo Echesortu)
 - **Kiosco La Esquina** (KIOSCO, FREEMIUM, DISABLED) `admin@laesquina.com` (para demostrar el bloqueo) + ~12 tenants
   livianos distribuidos en 12 meses (varios planes/estados, 2 CANCELLED) para métricas de crecimiento.
 - Escenario recall listo para demo en vivo: "Sopa de tomate en lata La Huerta 340 g", EAN `7791234500012`, lote
-  `L2409A` presente en stock de Don Pepe y El Sol (no en Vida Sana). Marcas ficticias en todos los productos.
+  `L2409A` presente en stock de Don Pepe y de El Sol **solo en la sucursal Fisherton** (no en Vida Sana). Marcas ficticias en todos los productos.
+- Escenario varios lotes: en cada sucursal, varios productos con 2–4 lotes vivos con distintos `received_at` y vencimientos
+  (incluido al menos un caso donde un lote más nuevo vence antes que uno más viejo, para mostrar el aviso de FIFO).
 - Patrones sembrados: finde fuerte (bebidas, snacks), estable (leche, pan), intermitente (especias), creciente,
   decreciente, sin movimiento, picos anómalos, lotes por vencer con sobrestock, productos bajo mínimo, algunos
   vencidos pendientes; tickets de soporte con conversación (incluida una imagen), avisos generales y un recall histórico resuelto.
@@ -698,7 +805,7 @@ Contraseñas: plataforma `Gondolia2026!`, comercios `Demo2026!`.
 ## 12. Propiedad de archivos (desarrollo en paralelo)
 | Módulo | Backend | Frontend | Migraciones |
 |---|---|---|---|
-| Fundación | `pom.xml`, `application*.yml`, `GondoliaApplication`, `config`, `security`, `auth`, `common`, `domain`, `realtime`, `notification`, `stock`, `recall`, `storage`, `ai`, `bootstrap` | todo salvo `features/*/pages/*` y los 2 componentes globales | V1 |
+| Fundación | `pom.xml`, `application*.yml`, `GondoliaApplication`, `config`, `security` (incl. `BranchAccessService`), `auth`, `common`, `domain`, `realtime`, `notification`, `stock`, `recall`, `storage`, `ai`, `bootstrap` | todo salvo `features/*/pages/*` y los 2 componentes globales (incl. `branches/`) | V1 |
 | A1 Catálogo | `catalog` | `features/catalog` | V100–V149 |
 | A2 Movimientos | `movements` | `features/movements` | V150–V199 |
 | B Analítica/IA | `analytics`, `alerts`, `insights` | `features/analytics` | V200–V249 |
