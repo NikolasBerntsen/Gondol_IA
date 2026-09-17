@@ -372,7 +372,9 @@ export default function PosTerminalPage() {
   const categories = categoriesQuery.data ?? [];
 
   return (
-    <div className="flex min-h-full flex-col lg:h-full">
+    // El shell compacto envuelve la página en un contenedor con `min-height` (sin alto definido),
+    // así que `h-full` no resuelve: crecemos con `flex-1` para ocupar la pantalla en escritorio.
+    <div className="flex min-h-full flex-col lg:min-h-0 lg:flex-1">
       {/* Franja de caja */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border bg-card px-4 py-2.5 sm:px-5">
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
