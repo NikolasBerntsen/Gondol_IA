@@ -45,8 +45,8 @@ public class TenantSupportController {
             description = "Tickets del comercio, del más reciente al más viejo. `status` acepta un estado, `ACTIVE` "
                     + "(abierto, en curso o esperando respuesta) o `ALL` (por defecto).")
     @GetMapping
-    public List<TicketSummary> list(@RequestParam(required = false) TicketStatusFilter status) {
-        return supportService.listForTenant(CurrentUser.tenantId(), status);
+    public List<TicketSummary> list(@RequestParam(required = false) String status) {
+        return supportService.listForTenant(CurrentUser.tenantId(), TicketStatusFilter.from(status));
     }
 
     @Operation(summary = "Abrir una consulta",

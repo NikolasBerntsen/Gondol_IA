@@ -54,13 +54,14 @@ public class SupportAgentController {
                     + "(`all`, `me`, `unassigned`) y por texto libre en el asunto, el comercio o la persona.")
     @GetMapping("/tickets")
     public PageResponse<TicketSummary> list(
-            @RequestParam(required = false) TicketStatusFilter status,
-            @RequestParam(required = false) AssignedFilter assigned,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String assigned,
             @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "0") @Min(value = 0, message = "no puede ser negativa") int page,
             @RequestParam(defaultValue = "20") @Min(value = 1, message = "tiene que ser al menos 1")
             @Max(value = 100, message = "no puede superar 100") int size) {
-        return supportService.listForAgent(new AgentFilter(status, assigned, q), CurrentUser.id(), page, size);
+        AgentFilter filter = new AgentFilter(TicketStatusFilter.from(status), AssignedFilter.from(assigned), q);
+        return supportService.listForAgent(filter, CurrentUser.id(), page, size);
     }
 
     @Operation(summary = "Ver un ticket con toda la conversación")

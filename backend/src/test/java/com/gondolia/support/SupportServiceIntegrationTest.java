@@ -2,6 +2,11 @@ package com.gondolia.support;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.verify;
 
 import com.gondolia.common.PageResponse;
 import com.gondolia.common.error.BadRequestException;
@@ -22,11 +27,13 @@ import com.gondolia.support.dto.MessageDto;
 import com.gondolia.support.dto.RateTicketRequest;
 import com.gondolia.support.dto.SupportStatsDto;
 import com.gondolia.support.dto.TicketDetail;
+import com.gondolia.support.dto.TicketEvents;
 import com.gondolia.support.dto.TicketSummary;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
@@ -253,6 +260,37 @@ class SupportServiceIntegrationTest extends PostgresIntegrationTest {
         assertThat(supportService.agents()).extracting(a -> a.id())
                 .contains(agent.id())
                 .doesNotContain(otherAgent.id());
+    }
+
+    // ------------------------------------------------------------------ tiempo real
+
+    @Test
+    void publishesTheConversationAndTheQueueInRealTime() {
+        long ticketId = createTicket(admin, "Tiempo real").id();
+        String topic = "/topic/tickets/" + ticketId;
+
+        ArgumentCaptor<String> destinations = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<Object> payloads = ArgumentCaptor.forClass(Object.class);
+        verify(realtimePublisher, atLeastOnce()).toTopic(destinations.capture(), payloads.capture());
+        assertThat(destinations.getAllValues()).contains(topic, "/topic/support/queue");
+        assertThat(payloads.getAllValues()).anySatisfy(payload ->
+                assertThat(payload).isInstanceOf(TicketEvents.MessageEvent.class));
+        assertThat(payloads.getAllValues()).anySatisfy(payload ->
+                assertThat(payload).isInstanceOfSatisfying(TicketEvents.TicketEvent.class,
+                        event -> assertThat(event.event()).isEqualTo(TicketEvents.TICKET_CREATED)));
+
+        clearInvocations(realtimePublisher);
+        supportService.typing(agent, ticketId, true);
+        verify(realtimePublisher).toTopic(eq(topic), argThat(payload ->
+                payload instanceof TicketEvents.TypingEvent event
+                        && event.typing() && event.senderType() == MessageSenderType.AGENT
+                        && event.userId().equals(agent.id())));
+
+        clearInvocations(realtimePublisher);
+        supportService.tenantRead(tenant, ticketId);
+        verify(realtimePublisher).toTopic(eq(topic), argThat(payload ->
+                payload instanceof TicketEvents.ReadEvent event
+                        && event.senderType() == MessageSenderType.CUSTOMER && event.readAt() != null));
     }
 
     // ------------------------------------------------------------------ aislamiento

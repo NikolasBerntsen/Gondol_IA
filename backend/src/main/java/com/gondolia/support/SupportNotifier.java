@@ -92,7 +92,7 @@ public class SupportNotifier {
         notificationService.notifyPlatformRole(Role.SUPPORT_AGENT, new NotificationDraft(
                 NotificationType.TICKET_MESSAGE, severityOf(ticket),
                 "Nuevo ticket · %s".formatted(tenantName),
-                "%s abrió \"%s\"".formatted(createdByName, ticket.getSubject()),
+                "%s abrió «%s»".formatted(createdByName, ticket.getSubject()),
                 AGENT_LINK + ticket.getId(), REFERENCE_TYPE, ticket.getId()));
     }
 
@@ -109,8 +109,8 @@ public class SupportNotifier {
     public void notifyCustomerOfStatus(SupportTicket ticket, TicketStatus status, String actorName) {
         notificationService.notifyUser(ticket.getCreatedBy(), new NotificationDraft(
                 NotificationType.TICKET_STATUS, Severity.INFO,
-                "Tu consulta ahora está %s".formatted(SupportTexts.statusLabel(status).toLowerCase(java.util.Locale.ROOT)),
-                "%s actualizó \"%s\".".formatted(actorName, ticket.getSubject()),
+                "Tu consulta ahora está en «%s»".formatted(SupportTexts.statusLabel(status)),
+                "%s actualizó «%s».".formatted(actorName, ticket.getSubject()),
                 TENANT_LINK + ticket.getId(), REFERENCE_TYPE, ticket.getId()));
     }
 
@@ -119,7 +119,7 @@ public class SupportNotifier {
         notificationService.notifyUser(agentId, new NotificationDraft(
                 NotificationType.TICKET_STATUS, severityOf(ticket),
                 "Te asignaron un ticket · %s".formatted(tenantName),
-                "%s te asignó \"%s\".".formatted(actorName, ticket.getSubject()),
+                "%s te asignó «%s».".formatted(actorName, ticket.getSubject()),
                 AGENT_LINK + ticket.getId(), REFERENCE_TYPE, ticket.getId()));
     }
 

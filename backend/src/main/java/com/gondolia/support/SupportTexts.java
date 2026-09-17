@@ -21,7 +21,7 @@ public final class SupportTexts {
 
     /** Mensaje del sistema que queda en la conversación cuando soporte cambia el estado. */
     public static String statusChanged(String actorName, TicketStatus status) {
-        return "%s marcó la consulta como %s.".formatted(actorName, statusLabel(status).toLowerCase(java.util.Locale.ROOT));
+        return "%s cambió el estado a «%s».".formatted(actorName, statusLabel(status));
     }
 
     public static String assigned(String agentName) {
