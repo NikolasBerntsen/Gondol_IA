@@ -172,7 +172,7 @@ export default function DashboardPage() {
         id: 'recall',
         severity: 'crit',
         icon: ShieldAlert,
-        title: `${summary.openRecallMatchesCount} ${pluralize(summary.openRecallMatchesCount, 'lote')} alcanzado${
+        title: `${pluralize(summary.openRecallMatchesCount, 'lote')} alcanzado${
           summary.openRecallMatchesCount === 1 ? '' : 's'
         } por un recall`,
         detail: 'Están en cuarentena: no se venden hasta que resuelvas el retiro.',
@@ -188,7 +188,7 @@ export default function DashboardPage() {
         id: 'expired',
         severity: 'crit',
         icon: CalendarClock,
-        title: `${summary.expiredCount} ${pluralize(summary.expiredCount, 'lote')} vencido${
+        title: `${pluralize(summary.expiredCount, 'lote')} vencido${
           summary.expiredCount === 1 ? '' : 's'
         } sin descartar`,
         detail: 'Los lotes vencidos no se venden. Descartalos para que el stock refleje la realidad.',
@@ -204,7 +204,7 @@ export default function DashboardPage() {
         id: 'out',
         severity: 'crit',
         icon: PackageX,
-        title: `${summary.outOfStockCount} ${pluralize(summary.outOfStockCount, 'producto')} sin stock`,
+        title: `${pluralize(summary.outOfStockCount, 'producto')} sin stock`,
         detail: 'Cada venta que no podés cobrar es plata que se va. Revisá la reposición.',
         action: (
           <Button size="sm" variant="outline" onClick={() => scrollToId('reponer')}>
@@ -218,7 +218,7 @@ export default function DashboardPage() {
         id: 'expiring',
         severity: 'warn',
         icon: CalendarClock,
-        title: `${summary.expiringSoonCount} ${pluralize(summary.expiringSoonCount, 'lote')} por vencer`,
+        title: `${pluralize(summary.expiringSoonCount, 'lote')} por vencer`,
         detail: 'Se venden primero. Un descuento a tiempo evita la merma.',
         action: (
           <Button size="sm" variant="outline" onClick={() => scrollToId('vencimientos')}>
@@ -232,7 +232,7 @@ export default function DashboardPage() {
         id: 'alerts',
         severity: 'warn',
         icon: Bell,
-        title: `${summary.openAlertsCount} ${pluralize(summary.openAlertsCount, 'alerta')} sin atender`,
+        title: `${pluralize(summary.openAlertsCount, 'alerta')} sin atender`,
         detail: 'Vencimientos, stock bajo, quiebres previstos y anomalías de venta.',
         action: (
           <ButtonLink to="/app/alerts" size="sm" variant="outline">
@@ -246,7 +246,7 @@ export default function DashboardPage() {
         id: 'ia',
         severity: 'info',
         icon: Sparkles,
-        title: `${summary.pendingRecommendationsCount} ${pluralize(
+        title: `${pluralize(
           summary.pendingRecommendationsCount,
           'recomendación',
           'recomendaciones',
@@ -397,7 +397,7 @@ export default function DashboardPage() {
       <PageHeader
         title="Resumen del negocio"
         description={`¡Hola, ${me.fullName.split(' ')[0]}! Esto es lo que pasa hoy en ${
-          isAll ? `tus ${branches.length} ${pluralize(branches.length, 'sucursal', 'sucursales')}` : scopeLabel
+          isAll ? `tus ${pluralize(branches.length, 'sucursal', 'sucursales')}` : scopeLabel
         }.`}
         actions={
           <div className="flex flex-col items-start gap-1 sm:items-end">
@@ -440,7 +440,7 @@ export default function DashboardPage() {
               summaryQuery.isPending
                 ? 'Buscando lo que necesita tu atención…'
                 : attention.length
-                  ? `${attention.length} ${pluralize(attention.length, 'tema')} ${
+                  ? `${pluralize(attention.length, 'tema')} ${
                       attention.length === 1 ? 'necesita' : 'necesitan'
                     } tu atención, por urgencia`
                   : 'No hay nada urgente. Buen día para revisar precios.'
@@ -528,7 +528,7 @@ export default function DashboardPage() {
           icon={Wallet}
           tone="ok"
           hint="a costo · stock físico"
-          sparkline={stockSpark.length > 1 ? <Sparkline data={stockSpark} tone="ok" /> : undefined}
+          sparkline={stockSpark.length > 1 ? <Sparkline data={stockSpark} tone="ok" width={56} height={24} /> : undefined}
           loading={summaryQuery.isPending}
         />
       </div>

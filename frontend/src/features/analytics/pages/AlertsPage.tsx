@@ -4,10 +4,10 @@ import { keepPreviousData } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Bell, BellOff, Check, CheckCheck, RefreshCw } from 'lucide-react';
 import {
+  Alert,
   Badge,
   Button,
   Card,
-  EmptyState,
   PageHeader,
   Pagination,
   SearchInput,
@@ -274,7 +274,7 @@ export default function AlertsPage() {
                 setType(event.target.value);
                 setPage(0);
               }}
-              className="md:max-w-[220px]"
+              className="md:w-[236px]"
             />
             <Select
               aria-label="Severidad"
@@ -284,11 +284,17 @@ export default function AlertsPage() {
                 setSeverity(event.target.value);
                 setPage(0);
               }}
-              className="md:max-w-[220px]"
+              className="md:w-[236px]"
             />
           </div>
         </div>
       </PageHeader>
+
+      {readOnly ? (
+        <Alert tone="info" title="Estás viendo las alertas en modo lectura">
+          El administrador del comercio es quien las marca como vistas, resueltas o descartadas.
+        </Alert>
+      ) : null}
 
       {counts && counts.open + counts.acknowledged > 0 ? (
         <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -330,16 +336,6 @@ export default function AlertsPage() {
           }
         />
       </Card>
-
-      {readOnly ? (
-        <EmptyState
-          size="sm"
-          bordered
-          icon={Bell}
-          title="Estás viendo las alertas en modo lectura"
-          description="El administrador del comercio es quien las marca como vistas, resueltas o descartadas."
-        />
-      ) : null}
     </div>
   );
 }

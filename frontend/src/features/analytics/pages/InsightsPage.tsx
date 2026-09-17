@@ -116,8 +116,8 @@ interface SeriesPoint {
   date: string;
   units: number | null;
   yhat: number | null;
-  lo: number | null;
-  hi: number | null;
+  /** Banda de confianza `[lo, hi]` del pronóstico (recharts dibuja el área entre los dos valores). */
+  band: [number, number] | null;
 }
 
 function DetailTooltip({ active, payload }: TooltipProps<number, string>) {
@@ -190,15 +190,13 @@ function ProductDetail({
       date: point.date,
       units: point.units,
       yhat: null,
-      lo: null,
-      hi: null,
+      band: null,
     }));
     const forecast: SeriesPoint[] = (detail.forecast ?? []).map((point) => ({
       date: point.date,
       units: null,
       yhat: point.yhat,
-      lo: point.lo ?? null,
-      hi: point.hi ?? null,
+      band: point.lo != null && point.hi != null ? [point.lo, point.hi] : null,
     }));
     // El último día real también arranca la línea del pronóstico, así no queda un hueco entre las dos series.
     const bridge = history.length ? history[history.length - 1] : undefined;
@@ -338,7 +336,7 @@ function ProductDetail({
                   <Tooltip content={<DetailTooltip />} cursor={CURSOR} />
                   <Area
                     type="monotone"
-                    dataKey="hi"
+                    dataKey="band"
                     stroke="none"
                     fill="url(#gd-forecast-band)"
                     isAnimationActive={false}
@@ -803,7 +801,7 @@ export default function InsightsPage() {
                   setPattern(event.target.value);
                   setPage(0);
                 }}
-                className="md:max-w-[240px]"
+                className="md:w-[248px]"
               />
               <Select
                 aria-label="Clase ABC"
@@ -813,7 +811,7 @@ export default function InsightsPage() {
                   setAbc(event.target.value);
                   setPage(0);
                 }}
-                className="md:max-w-[180px]"
+                className="md:w-[188px]"
               />
             </div>
             <Table
