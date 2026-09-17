@@ -6,6 +6,7 @@ import type {
   MovementType,
   PageParams,
   ProductUnit,
+  SalesPattern,
   StockStatus,
 } from '@/api/types';
 
@@ -262,4 +263,30 @@ export interface OcrBarcodeResponse {
 /** Respuesta de las bajas del catálogo: `true` cuando quedó desactivado en vez de eliminado. */
 export interface DeleteResult {
   deactivated: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Resumen de IA (lectura opcional del módulo B)
+// ---------------------------------------------------------------------------
+
+/**
+ * Vista mínima y tolerante del análisis de IA de un producto (`GET /api/tenant/insights/products/{id}`,
+ * SPEC §6.5, módulo B). La ficha del producto la muestra **solo si llega**: todos los campos son opcionales
+ * porque el contrato completo lo define ese módulo y acá únicamente lo leemos.
+ */
+export interface ProductInsightPeek {
+  branchId?: number | null;
+  branchName?: string | null;
+  summary?: string | null;
+  explanation?: string | null;
+  salesPattern?: SalesPattern | null;
+  pattern?: SalesPattern | null;
+  abcClass?: string | null;
+  abc?: string | null;
+  confidence?: number | null;
+  avgDailySales?: number | null;
+  daysOfStock?: number | null;
+  predictedStockoutDate?: string | null;
+  suggestedReorderQuantity?: number | null;
+  analyzedAt?: string | null;
 }

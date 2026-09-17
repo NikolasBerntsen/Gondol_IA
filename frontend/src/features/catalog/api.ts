@@ -13,6 +13,7 @@ import type {
   OcrLabelResponse,
   ProductDetail,
   ProductListItem,
+  ProductInsightPeek,
   ProductListParams,
   ProductMovement,
   ProductRequest,
@@ -84,4 +85,13 @@ export const catalogLookupApi = {
 export const ocrApi = {
   label: (photo: Blob) => uploadFile<OcrLabelResponse>('/tenant/ocr/label', photo, { fileName: 'etiqueta.jpg' }),
   barcode: (photo: Blob) => uploadFile<OcrBarcodeResponse>('/tenant/ocr/barcode', photo, { fileName: 'codigo.jpg' }),
+};
+
+/**
+ * Lectura opcional del análisis de IA del producto (endpoint del módulo B, SPEC §6.5). La ficha lo muestra
+ * solo si está disponible: si el análisis todavía no corrió, el rol no lo puede ver o el módulo aún no
+ * respondió, la tarjeta no se dibuja. Por eso el tipo es tolerante y la query no reintenta.
+ */
+export const productInsightApi = {
+  get: (productId: number) => apiGet<ProductInsightPeek>(`/tenant/insights/products/${productId}`),
 };
