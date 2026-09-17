@@ -31,6 +31,9 @@ import { formatDateTime, formatMoney, formatNumber, formatRelative } from '@/lib
 import { movementKeys, posIntegrationApi, salesApi } from '../api';
 import type { PosApiKey, PosIntegration, SalesImportResult, SimulateResult } from '../types';
 
+/** Tope de ventas por simulación que acepta el backend. */
+const MAX_SIMULATED_SALES = 50;
+
 /** Ejemplo de uso del webhook con la key recién generada (o un marcador si todavía no se ve). */
 function curlExample(apiKey: string): string {
   return `curl -X POST ${window.location.origin}/api/integrations/pos/sales \\
@@ -322,7 +325,8 @@ function SimulatorCard({ branches }: { branches: PosIntegration[] }) {
   });
 
   const parsed = Number(sales);
-  const invalid = !Number.isInteger(parsed) || parsed < 1 || parsed > 200;
+  // El backend acepta entre 1 y 50 ventas por simulación (SimulateRequest).
+  const invalid = !Number.isInteger(parsed) || parsed < 1 || parsed > MAX_SIMULATED_SALES;
 
   return (
     <Card padding="none">
@@ -342,13 +346,13 @@ function SimulatorCard({ branches }: { branches: PosIntegration[] }) {
           </Field>
           <Field
             label="Cantidad de ventas"
-            error={invalid ? 'Entre 1 y 200.' : undefined}
+            error={invalid ? `Entre 1 y ${MAX_SIMULATED_SALES}.` : undefined}
             className="sm:w-40"
           >
             <Input
               type="number"
               min={1}
-              max={200}
+              max={MAX_SIMULATED_SALES}
               step={1}
               inputMode="numeric"
               value={sales}
