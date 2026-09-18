@@ -230,24 +230,25 @@ function AnnouncementCard({
           <p className={cn('mt-0.5 text-base text-muted-foreground', !open && 'line-clamp-2')}>{item.body}</p>
         </div>
 
-        <dl className="grid grid-cols-2 gap-3 border-t border-border pt-3 sm:grid-cols-4">
+        <dl className="grid grid-cols-2 gap-3 border-t border-border pt-3 sm:grid-cols-3">
           <Stat label="Destinatarios" value={formatNumber(item.recipientsCount)} />
-          <Stat label="Lo leyeron" value={open && detail.data ? formatNumber(detail.data.readCount) : '—'} />
-          <Stat
-            label="Clientes alcanzados"
-            value={isRecall ? formatNumber(item.affectedTenantsCount) : '—'}
-            tone={isRecall && item.affectedTenantsCount > 0 ? 'crit' : undefined}
-          />
-          <Stat
-            label="Lotes sin retirar"
-            value={
-              !isRecall
-                ? '—'
-                : open && detail.data
-                  ? formatNumber(detail.data.matchesOpen + detail.data.matchesAcknowledged)
-                  : '—'
-            }
-          />
+          {isRecall ? (
+            <Stat
+              label="Clientes alcanzados"
+              value={formatNumber(item.affectedTenantsCount)}
+              tone={item.affectedTenantsCount > 0 ? 'crit' : undefined}
+            />
+          ) : (
+            <Stat
+              label="Rubros"
+              value={
+                item.targetBusinessTypes.length === 0
+                  ? 'Todos'
+                  : item.targetBusinessTypes.map((type) => BUSINESS_TYPE_LABELS[type]).join(', ')
+              }
+            />
+          )}
+          <Stat label="Publicado" value={item.publishedAt ? formatDateTime(item.publishedAt) : '—'} />
         </dl>
 
         {open ? (
@@ -259,13 +260,18 @@ function AnnouncementCard({
             ) : detail.data ? (
               <>
                 {detail.data.recall ? <RecallSummary recall={detail.data.recall} /> : null}
-                {detail.data.kind === 'RECALL' ? (
-                  <div className="grid grid-cols-3 gap-3">
-                    <Stat label="Pendientes" value={formatNumber(detail.data.matchesOpen)} tone="crit" />
-                    <Stat label="Confirmados" value={formatNumber(detail.data.matchesAcknowledged)} tone="warn" />
-                    <Stat label="Resueltos" value={formatNumber(detail.data.matchesResolved)} tone="ok" />
-                  </div>
-                ) : null}
+                <div className={cn('grid gap-3', detail.data.kind === 'RECALL' ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2')}>
+                  <Stat label="Lo leyeron" value={formatNumber(detail.data.readCount)} />
+                  {detail.data.kind === 'RECALL' ? (
+                    <>
+                      <Stat label="Pendientes" value={formatNumber(detail.data.matchesOpen)} tone="crit" />
+                      <Stat label="Confirmados" value={formatNumber(detail.data.matchesAcknowledged)} tone="warn" />
+                      <Stat label="Resueltos" value={formatNumber(detail.data.matchesResolved)} tone="ok" />
+                    </>
+                  ) : (
+                    <Stat label="Destinatarios" value={formatNumber(detail.data.recipientsCount)} />
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   Publicado por {detail.data.createdByName ?? 'GondolIA'} el{' '}
                   {detail.data.publishedAt ? formatDateTime(detail.data.publishedAt) : '—'}
