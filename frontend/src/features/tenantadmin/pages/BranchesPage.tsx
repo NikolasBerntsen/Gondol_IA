@@ -22,13 +22,26 @@ import { branchesApi, tenantAdminKeys } from '../api';
 import { BranchFormDialog } from '../components/BranchFormDialog';
 import type { BranchLimits, TenantBranch } from '../types';
 
+interface Blocker {
+  /** Motivo corto, visible al lado del botón deshabilitado. */
+  short: string;
+  /** Explicación completa, en el tooltip. */
+  full: string;
+}
+
 /** Por qué no se puede desactivar una sucursal (SPEC §3.5). `null` = se puede. */
-function deactivationBlocker(branch: TenantBranch, activeBranches: number): string | null {
+function deactivationBlocker(branch: TenantBranch, activeBranches: number): Blocker | null {
   if (activeBranches <= 1) {
-    return 'Es la única sucursal activa: tu comercio necesita al menos una.';
+    return {
+      short: 'Es tu única sucursal activa',
+      full: 'Es la única sucursal activa: tu comercio necesita al menos una.',
+    };
   }
   if (branch.hasStock) {
-    return 'Todavía tiene stock. Transferilo a otra sucursal o descartalo antes de desactivarla.';
+    return {
+      short: 'Todavía tiene mercadería',
+      full: 'Todavía tiene stock. Transferilo a otra sucursal o descartalo antes de desactivarla.',
+    };
   }
   return null;
 }
@@ -140,45 +153,53 @@ export default function BranchesPage() {
       header: <span className="sr-only">Acciones</span>,
       align: 'right',
       mobile: 'actions',
-      headerClassName: 'w-56',
+      headerClassName: 'w-64',
       cell: (branch) => {
         const blocker = deactivationBlocker(branch, activeBranches);
         return (
-          <div className="flex items-center justify-end gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              leftIcon={<PencilLine aria-hidden="true" />}
-              onClick={() => {
-                setEditing(branch);
-                setFormOpen(true);
-              }}
-            >
-              Editar
-            </Button>
-            {branch.active ? (
+          <div className="flex flex-col items-end gap-0.5">
+            <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
                 size="sm"
-                leftIcon={<PowerOff aria-hidden="true" />}
-                disabled={blocker !== null}
-                title={blocker ?? undefined}
-                onClick={() => setDeactivating(branch)}
+                leftIcon={<PencilLine aria-hidden="true" />}
+                onClick={() => {
+                  setEditing(branch);
+                  setFormOpen(true);
+                }}
               >
-                Desactivar
+                Editar
               </Button>
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                leftIcon={<Power aria-hidden="true" />}
-                loading={activate.isPending && activate.variables?.id === branch.id}
-                disabled={!canCreate}
-                title={canCreate ? undefined : 'Llegaste al máximo de sucursales activas.'}
-                onClick={() => activate.mutate(branch)}
-              >
-                Reactivar
-              </Button>
+              {branch.active ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<PowerOff aria-hidden="true" />}
+                  disabled={blocker !== null}
+                  title={blocker?.full}
+                  onClick={() => setDeactivating(branch)}
+                >
+                  Desactivar
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<Power aria-hidden="true" />}
+                  loading={activate.isPending && activate.variables?.id === branch.id}
+                  disabled={!canCreate}
+                  title={canCreate ? undefined : 'Llegaste al máximo de sucursales activas.'}
+                  onClick={() => activate.mutate(branch)}
+                >
+                  Reactivar
+                </Button>
+              )}
+            </div>
+            {branch.active && blocker && (
+              <span className="text-right text-xs text-muted-foreground">No se puede: {blocker.short.toLowerCase()}</span>
+            )}
+            {!branch.active && !canCreate && (
+              <span className="text-right text-xs text-muted-foreground">No se puede: llegaste al máximo del plan</span>
             )}
           </div>
         );
@@ -316,12 +337,12 @@ function PlanLimitPanel({ limits, loading }: { limits: BranchLimits | undefined;
           sucursal activa.
         </Alert>
       )}
-      <p className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
-        <Badge tone="neutral" size="sm">
+      <div className="mt-4 flex flex-col gap-2 text-sm text-muted-foreground sm:flex-row sm:items-center">
+        <Badge tone="neutral" size="sm" className="self-start">
           Abono por sucursal activa
         </Badge>
-        Desactivar una sucursal la saca del abono del mes siguiente.
-      </p>
+        <span>Desactivar una sucursal la saca del abono del mes siguiente.</span>
+      </div>
     </Card>
   );
 }

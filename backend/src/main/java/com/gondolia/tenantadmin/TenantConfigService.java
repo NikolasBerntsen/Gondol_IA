@@ -68,7 +68,7 @@ public class TenantConfigService {
         settings.setTargetCoverageDays(request.targetCoverageDays());
         settings.setServiceLevel(request.serviceLevel());
         settings.setMaxDiscountPct(request.maxDiscountPct());
-        settingsRepository.save(settings);
+        settingsRepository.saveAndFlush(settings);
 
         if (rotationChanged) {
             log.info("Comercio {}: rotación de stock cambiada a {}", tenantId, request.stockRotation());

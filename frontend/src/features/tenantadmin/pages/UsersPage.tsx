@@ -201,8 +201,9 @@ export default function UsersPage() {
           </Button>
         }
       >
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:justify-between">
           <Segmented<StatusFilter>
+            className="shrink-0"
             value={status}
             onChange={setStatus}
             label="Filtrar usuarios por estado"
@@ -216,7 +217,7 @@ export default function UsersPage() {
             value={search}
             onValueChange={setSearch}
             placeholder="Buscar por nombre, email o rol…"
-            className="md:w-80"
+            className="md:w-72 lg:w-80"
           />
         </div>
       </PageHeader>
