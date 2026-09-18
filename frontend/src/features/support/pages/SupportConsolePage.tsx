@@ -193,14 +193,15 @@ export default function SupportConsolePage() {
         }
       />
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
         <StatCard label="Sin asignar" value={stats.data?.unassigned ?? 0} tone="warn" icon={Inbox} loading={stats.isPending} />
         <StatCard label="Míos activos" value={stats.data?.mine ?? 0} tone="primary" icon={UserCheck} loading={stats.isPending} />
         <StatCard label="En curso" value={stats.data?.inProgress ?? 0} tone="info" icon={Radio} loading={stats.isPending} />
         <StatCard label="Resueltos hoy" value={stats.data?.resolvedToday ?? 0} tone="ok" icon={CircleUserRound} loading={stats.isPending} />
         <StatCard
-          label="1.ª respuesta (30 días)"
+          label="1.ª respuesta"
           value={formatMinutes(stats.data?.avgFirstResponseMinutes)}
+          hint="Promedio de los últimos 30 días"
           tone="neutral"
           icon={Timer}
           loading={stats.isPending}
@@ -276,7 +277,14 @@ export default function SupportConsolePage() {
         </Card>
 
         {/* 2. Conversación */}
-        <Card padding="none" className={cn('flex min-h-[70dvh] flex-col overflow-hidden lg:min-h-0')}>
+        <Card
+          padding="none"
+          className={cn(
+            'flex min-h-[70dvh] flex-col overflow-hidden lg:min-h-0',
+            // En mobile la bandeja ES la pantalla: el panel vacío solo tiene sentido en escritorio.
+            selectedId == null && 'hidden lg:flex',
+          )}
+        >
           {selectedId == null ? (
             <EmptyState
               icon={Headset}

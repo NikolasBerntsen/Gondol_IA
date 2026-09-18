@@ -205,7 +205,6 @@ export function MessageComposer({
           }}
         />
         <Button
-          size={dense ? 'default' : 'lg'}
           aria-label="Enviar mensaje"
           leftIcon={<SendHorizonal className="h-4 w-4" />}
           disabled={disabled || (!text.trim() && !file)}

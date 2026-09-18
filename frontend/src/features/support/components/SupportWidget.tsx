@@ -92,7 +92,7 @@ export default function SupportWidget() {
               </p>
               <p className="flex items-center gap-1.5 text-xs text-rail-muted">
                 <PresenceDot online={presence.isOnline} />
-                {presence.isOnline ? 'Estamos en línea' : 'Fuera de línea: te respondemos apenas volvamos'}
+                <span className="truncate">{presence.isOnline ? 'Estamos en línea' : 'Fuera de línea'}</span>
               </p>
             </div>
             <Link
@@ -115,6 +115,11 @@ export default function SupportWidget() {
 
           {view === 'list' && (
             <>
+              {!presence.isOnline && !presence.isPending && (
+                <p className="border-b border-border bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+                  No hay nadie conectado ahora. Dejanos tu consulta: te respondemos apenas volvamos.
+                </p>
+              )}
               <div className="gd-scroll min-h-0 flex-1 overflow-y-auto">
                 {list.isPending ? (
                   <div className="space-y-3 p-3">

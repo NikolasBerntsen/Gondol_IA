@@ -130,7 +130,14 @@ export default function TenantSupportPage() {
           </div>
         </Card>
 
-        <Card padding="none" className="flex min-h-[70dvh] flex-col overflow-hidden lg:min-h-0">
+        <Card
+          padding="none"
+          className={cn(
+            'flex min-h-[70dvh] flex-col overflow-hidden lg:min-h-0',
+            // En mobile la lista ES la pantalla: el panel vacío solo tiene sentido en escritorio.
+            selectedId == null && 'hidden lg:flex',
+          )}
+        >
           {selectedId == null ? (
             <EmptyState
               icon={LifeBuoy}
