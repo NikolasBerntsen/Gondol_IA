@@ -51,6 +51,23 @@ public class SpreadsheetParser {
 
     private static final DateTimeFormatter DMY = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final char[] CANDIDATE_DELIMITERS = {';', ',', '\t', '|'};
+    /**
+     * {@code true} si Apache Commons CSV puede arrancar. {@code commons-csv 1.12.0} necesita
+     * {@code commons-io 2.17+} y el pom de la fundación trae la 2.16.1 (la que fija Apache POI 5.3.0): mientras
+     * eso no cambie, el CSV se lee con {@link SimpleCsvReader}.
+     */
+    private static final boolean COMMONS_CSV_AVAILABLE = commonsCsvAvailable();
+
+    private static boolean commonsCsvAvailable() {
+        try {
+            Class.forName("org.apache.commons.io.input.UnsynchronizedBufferedReader", false,
+                    SpreadsheetParser.class.getClassLoader());
+            return true;
+        } catch (ClassNotFoundException | LinkageError e) {
+            return false;
+        }
+    }
+
     /** Codificación de los CSV que exporta Excel en español. */
     public static final Charset WINDOWS_1252 = Charset.forName("windows-1252");
 
@@ -191,6 +208,13 @@ public class SpreadsheetParser {
         Charset charset = detectCharset(content);
         String text = new String(stripBom(content, charset), charset);
         char delimiter = detectDelimiter(text);
+        List<List<String>> raw = COMMONS_CSV_AVAILABLE
+                ? readWithCommonsCsv(text, delimiter)
+                : SimpleCsvReader.read(text, delimiter, MAX_ROWS + 50, MAX_COLUMNS);
+        return toSheet(raw, ImportFileFormat.CSV, List.of(), null, String.valueOf(delimiter), charset.name());
+    }
+
+    private List<List<String>> readWithCommonsCsv(String text, char delimiter) {
         CSVFormat format = CSVFormat.Builder.create(CSVFormat.DEFAULT)
                 .setDelimiter(delimiter)
                 .setQuote('"')
@@ -212,11 +236,11 @@ public class SpreadsheetParser {
                     break;
                 }
             }
+            return raw;
         } catch (IOException | RuntimeException e) {
             throw new BadRequestException(ErrorCodes.INVALID_FILE,
                     "No pudimos leer el CSV. Revisá que las columnas estén separadas por «;», «,» o tabulaciones.");
         }
-        return toSheet(raw, ImportFileFormat.CSV, List.of(), null, String.valueOf(delimiter), charset.name());
     }
 
     /** UTF-8 si hay BOM o si el contenido decodifica sin errores; si no, Windows-1252 (Excel en español). */

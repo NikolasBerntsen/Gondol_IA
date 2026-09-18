@@ -35,7 +35,9 @@ public final class HeaderMatching {
                 }
             }
         }
-        candidates.sort((a, b) -> b.score() - a.score());
+        candidates.sort(java.util.Comparator.comparingInt(Candidate::score).reversed()
+                .thenComparing(c -> c.field().required() ? 0 : 1)
+                .thenComparingInt(c -> c.field().ordinal()));
         Map<ImportField, String> mapping = new EnumMap<>(ImportField.class);
         Set<String> usedHeaders = new HashSet<>();
         for (Candidate candidate : candidates) {
@@ -49,34 +51,41 @@ public final class HeaderMatching {
     }
 
     /**
-     * Puntaje de coincidencia entre un encabezado normalizado y un campo: 100 clave o etiqueta exacta,
-     * 90 sinónimo exacto, 60..70 el encabezado contiene o está contenido en un sinónimo, 0 sin coincidencia.
+     * Puntaje de coincidencia entre un encabezado normalizado y un campo:
+     * <ul>
+     *   <li>1001..1010: sinónimo exacto (los primeros de la lista valen más),</li>
+     *   <li>1005: clave o etiqueta exacta,</li>
+     *   <li>700 / 650 / 600: el encabezado empieza con, contiene o está contenido en un sinónimo,</li>
+     *   <li>0: sin coincidencia.</li>
+     * </ul>
+     * Que un sinónimo pese como la etiqueta es a propósito: SPEC §16.1 manda «descripción» al campo
+     * <em>Nombre</em>, aunque «Descripción» también sea la etiqueta de otro campo. Si el archivo trae las dos
+     * columnas, «Nombre» gana por ser el primer sinónimo del campo y «Descripción» queda para el otro.
      */
     static int score(ImportField field, String headerSlug) {
-        String key = ImportValues.slug(field.key());
-        String label = ImportValues.slug(field.label());
-        if (headerSlug.equals(key) || headerSlug.equals(label)) {
-            return 100;
-        }
         int best = 0;
-        for (String synonym : field.synonyms()) {
-            String slug = ImportValues.slug(synonym);
+        List<String> synonyms = field.synonyms();
+        for (int i = 0; i < synonyms.size(); i++) {
+            String slug = ImportValues.slug(synonyms.get(i));
             if (slug.isEmpty()) {
                 continue;
             }
             if (headerSlug.equals(slug)) {
-                return 90;
-            }
-            if (slug.length() >= 4 && headerSlug.startsWith(slug)) {
-                best = Math.max(best, 70);
+                best = Math.max(best, 1000 + Math.max(10 - i, 1));
+            } else if (slug.length() >= 4 && headerSlug.startsWith(slug)) {
+                best = Math.max(best, 700);
             } else if (slug.length() >= 5 && headerSlug.contains(slug)) {
-                best = Math.max(best, 65);
+                best = Math.max(best, 650);
             } else if (headerSlug.length() >= 5 && slug.contains(headerSlug)) {
-                best = Math.max(best, 60);
+                best = Math.max(best, 600);
             }
         }
-        if (best == 0 && label.length() >= 5 && headerSlug.contains(label)) {
-            best = 60;
+        String key = ImportValues.slug(field.key());
+        String label = ImportValues.slug(field.label());
+        if (headerSlug.equals(key) || headerSlug.equals(label)) {
+            best = Math.max(best, 1005);
+        } else if (label.length() >= 5 && headerSlug.contains(label)) {
+            best = Math.max(best, 600);
         }
         return best;
     }
