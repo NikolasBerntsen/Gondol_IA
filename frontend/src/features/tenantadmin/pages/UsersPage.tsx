@@ -217,7 +217,7 @@ export default function UsersPage() {
             value={search}
             onValueChange={setSearch}
             placeholder="Buscar por nombre, email o rol…"
-            className="md:w-72 lg:w-80"
+            containerClassName="md:w-72 lg:w-80"
           />
         </div>
       </PageHeader>
