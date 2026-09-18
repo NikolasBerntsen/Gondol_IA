@@ -24,6 +24,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +39,10 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Transactional
 @AutoConfigureMockMvc
+// MockMvc obliga a un contexto de Spring propio (y por lo tanto a un pool propio). La base de pruebas es
+// compartida con el resto del equipo: con el pool por defecto (20) se agotan las conexiones del servidor.
+@TestPropertySource(properties = {"spring.datasource.hikari.maximum-pool-size=4",
+        "spring.datasource.hikari.minimum-idle=0"})
 class PlatformApiIsolationIntegrationTest extends PostgresIntegrationTest {
 
     /** Endpoints de datos de negocio de un comercio (los implementan otros módulos). */
