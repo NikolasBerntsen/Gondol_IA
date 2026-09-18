@@ -354,9 +354,11 @@ public class ImportValidator {
                 return;
             }
             if (quantity > 0 && branch == null) {
-                messages.add(error(ImportField.BRANCH, parsed.branch() == null
-                        ? "Esta fila carga stock: indicá la sucursal en el archivo o elegí una sucursal por defecto."
-                        : "Esta fila carga stock pero no pudimos resolver la sucursal."));
+                // Si la sucursal vino escrita pero no existe, el error ya lo puso resolveBranch: no lo repetimos.
+                if (parsed.branch() == null) {
+                    messages.add(error(ImportField.BRANCH,
+                            "Esta fila carga stock: indicá la sucursal en el archivo o elegí una sucursal por defecto."));
+                }
                 return;
             }
             if (quantity == 0) {

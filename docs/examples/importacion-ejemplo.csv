@@ -1,20 +1,20 @@
 Cod. Barra;Descripcion;Marca;Rubro;Proveedor;U. Medida;Precio Costo;Precio Venta;Stock Min;Perecedero;Cantidad;Nro Lote;Vto;Fecha Ingreso;Sucursal
 7791234000012;Leche entera La Pradera 1 L;La Pradera;Lacteos;Distribuidora La Pampa;Litro;$ 950,00;$ 1.350,00;12;si;24;L2409A;15/10/2026;01/09/2026;Sucursal Centro
 7791234000012;Leche entera La Pradera 1 L;La Pradera;Lacteos;Distribuidora La Pampa;Litro;$ 950,00;$ 1.390,00;12;si;18;L2410B;28/10/2026;10/09/2026;Sucursal Centro
-7798877000015;Arroz largo fino Gran Espiga 1 kg;Gran Espiga;Almacen;Distribuidora La Pampa;Kg;890,50;1.290,00;8;no;40;;;02/09/2026;Sucursal Centro
-7798877000022;;Sin Marca;Almacen;;Unidad;300;480;5;no;10;;;;Sucursal Centro
-7798877000039;Fideos guiseros Doña Rosa 500 g;Doña Rosa;Almacen;Molinos del Sur;Paquete;540;mil doscientos;6;no;24;;;03/09/2026;Sucursal Centro
+7798877000010;Arroz largo fino Gran Espiga 1 kg;Gran Espiga;Almacen;Distribuidora La Pampa;Kg;890,50;1.290,00;8;no;40;;;02/09/2026;Sucursal Centro
+7798877000027;;Sin Marca;Almacen;;Unidad;300;480;5;no;10;;;;Sucursal Centro
+7798877000034;Fideos guiseros Doña Rosa 500 g;Doña Rosa;Almacen;Molinos del Sur;Paquete;540;mil doscientos;6;no;24;;;03/09/2026;Sucursal Centro
 
-7798877000046;Aceite de girasol Solcito 900 ml;Solcito;Almacen;Molinos del Sur;Litro;1.450;2.190;6;no;12,5;;;03/09/2026;Sucursal Centro
-7798877000053;Yogur firme durazno Vaquita 190 g;Vaquita;Lacteos;Distribuidora La Pampa;Unidad;480;790;10;si;36;Y2501;31/02/2027;04/09/2026;Sucursal Centro
-7798877000060;Galletitas dulces Ronda 300 g;Ronda;Almacen;Molinos del Sur;Paquete;700;1.150;8;no;20;;;04/09/2026;Sucursal Oeste
+7798877000041;Aceite de girasol Solcito 900 ml;Solcito;Almacen;Molinos del Sur;Litro;1.450;2.190;6;no;12,5;;;03/09/2026;Sucursal Centro
+7798877000058;Yogur firme durazno Vaquita 190 g;Vaquita;Lacteos;Distribuidora La Pampa;Unidad;480;790;10;si;36;Y2501;31/02/2027;04/09/2026;Sucursal Centro
+7798877000065;Galletitas dulces Ronda 300 g;Ronda;Almacen;Molinos del Sur;Paquete;700;1.150;8;no;20;;;04/09/2026;Sucursal Oeste
 7798877000078;Mermelada de frutilla Huerta Vieja 420 g;Huerta Vieja;Almacen;Molinos del Sur;Unidad;1.100;1.750;6;si;15;M2408;20/12/2026;05/09/2026;Sucursal Centro
-7798877000085;Cafe molido Aroma del Norte 250 g;Aroma del Norte;Almacen;Cafes del Litoral;Paquete;3.900;3.200;4;no;10;;;05/09/2026;Sucursal Centro
-7798877000092;Hamburguesas de carne Pampa 4 u;Pampa;Congelados;Frigorifico del Oeste;Paquete;2.800;4.200;6;si;18;H2412;30/06/2027;06/09/2026;Sucursal Norte
-7798877000108;Queso cremoso La Tranquera 500 g;La Tranquera;Lacteos;Distribuidora La Pampa;Kg;4.200;6.100;4;si;6;Q2312;10/01/2025;06/09/2026;Sucursal Centro
-7798877000115;Azucar comun Dulce Sol 1 kg;Dulce Sol;Almacen;Molinos del Sur;Kg;820;1.290;10;no;-5;;;07/09/2026;Sucursal Centro
-7798877000122;Agua mineral Vertiente 2 L;Vertiente;Bebidas;Aguas del Valle;bidon;620;980;12;no;48;;;07/09/2026;Sucursal Centro
-7798877000139;Jugo en polvo naranja Solcito 20 g;Solcito;Almacen;Molinos del Sur;Unidad;180;320;20;no;60;;;08/09/2026;
-7798877000146;Fideos tirabuzon Dona Rosa 500 g;Doña Rosa;Almacen;Molinos del Sur;Paquete;540;870;6;no;24;;;08/09/2026;Sucursal Norte
-7798877000153;Manteca La Tranquera 200 g;La Tranquera;Lacteos;Distribuidora La Pampa;Unidad;1.900;2.750;5;si;12;MT2410;12/11/2026;09/09/2026;Sucursal Centro
-7798877000160;Pan rallado Crocantes 500 g;Crocantes;Almacen;Molinos del Sur;Paquete;450;790;8;no;30;;;09/09/2026;Sucursal Norte
+7798877000089;Cafe molido Aroma del Norte 250 g;Aroma del Norte;Almacen;Cafes del Litoral;Paquete;3.900;3.200;4;no;10;;;05/09/2026;Sucursal Centro
+7798877000096;Hamburguesas de carne Pampa 4 u;Pampa;Congelados;Frigorifico del Oeste;Paquete;2.800;4.200;6;si;18;H2412;30/06/2027;06/09/2026;Sucursal Norte
+7798877000102;Queso cremoso La Tranquera 500 g;La Tranquera;Lacteos;Distribuidora La Pampa;Kg;4.200;6.100;4;si;6;Q2312;10/01/2025;06/09/2026;Sucursal Centro
+7798877000119;Azucar comun Dulce Sol 1 kg;Dulce Sol;Almacen;Molinos del Sur;Kg;820;1.290;10;no;-5;;;07/09/2026;Sucursal Centro
+7798877000126;Agua mineral Vertiente 2 L;Vertiente;Bebidas;Aguas del Valle;bidon;620;980;12;no;48;;;07/09/2026;Sucursal Centro
+7798877000133;Jugo en polvo naranja Solcito 20 g;Solcito;Almacen;Molinos del Sur;Unidad;180;320;20;no;60;;;08/09/2026;
+7798877000140;Fideos tirabuzon Dona Rosa 500 g;Doña Rosa;Almacen;Molinos del Sur;Paquete;540;870;6;no;24;;;08/09/2026;Sucursal Norte
+7798877000157;Manteca La Tranquera 200 g;La Tranquera;Lacteos;Distribuidora La Pampa;Unidad;1.900;2.750;5;si;12;MT2410;12/11/2026;09/09/2026;Sucursal Centro
+7798877000164;Pan rallado Crocantes 500 g;Crocantes;Almacen;Molinos del Sur;Paquete;450;790;8;no;30;;;09/09/2026;Sucursal Norte
