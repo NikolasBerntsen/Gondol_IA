@@ -76,7 +76,7 @@ public class ImportChunkProcessor {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void processChunk(Long jobId, Long tenantId, Long userId, List<BranchRef> branches,
-                             List<ImportRowStore.StoredRow> rows, Totals totals) {
+                             List<ImportRowStore.StoredRow> rows, Totals totals, Instant base) {
         ImportJob job = jobRepository.findById(jobId).orElseThrow();
         ImportOptions options = ImportOptions.fromJson(job.getOptions());
         Map<String, Long> branchIdsBySlug = new HashMap<>();
@@ -86,7 +86,6 @@ public class ImportChunkProcessor {
                 branchIdsBySlug.putIfAbsent(ImportValues.slug(branch.code()), branch.id());
             }
         }
-        Instant base = Instant.now(clock);
         for (ImportRowStore.StoredRow row : rows) {
             try {
                 applyRow(jobId, tenantId, userId, options, branchIdsBySlug, row, totals, base);
@@ -107,7 +106,6 @@ public class ImportChunkProcessor {
                           Instant base) {
         ParsedRow parsed = ImportRowParser.parse(row.data(), options.dateFormat());
         if (parsed.name() == null) {
-            totals.rowsSkipped++;
             List<ImportDtos.RowMessageDto> messages = new ArrayList<>(row.messages());
             messages.add(new ImportDtos.RowMessageDto("name", "ERROR", "Falta el nombre del producto."));
             rowStore.markApplied(row.id(), ImportRowStatus.FAILED, null, null, messages);
@@ -292,6 +290,11 @@ public class ImportChunkProcessor {
         job.setStatus(status);
         job.setErrorMessage(message);
         if (result != null) {
+            // Las filas omitidas se cuentan en la base: incluyen las que el usuario omitió y las de error ignoradas.
+            int skipped = rowStore.countsByStatus(jobId).getOrDefault(ImportRowStatus.SKIPPED, 0);
+            result = new ImportDtos.ResultDto(result.productsCreated(), result.productsUpdated(), result.lotsCreated(),
+                    result.unitsLoaded(), result.categoriesCreated(), result.suppliersCreated(), skipped,
+                    result.rowsFailed(), result.recallMatches());
             job.setResult(rowStore.toNode(result));
         }
         if (status == ImportStatus.APPLIED) {

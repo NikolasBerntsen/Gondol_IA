@@ -25,6 +25,7 @@ public class ImportApplyService {
     private final ImportChunkProcessor processor;
     private final ImportJobRepository jobRepository;
     private final ImportRowStore rowStore;
+    private final java.time.Clock clock;
 
     /** Importaciones para las que se pidió cortar la aplicación en curso. */
     private final Set<Long> cancelRequests = ConcurrentHashMap.newKeySet();
@@ -49,6 +50,8 @@ public class ImportApplyService {
 
     void run(Long jobId, Long tenantId, Long userId, List<BranchRef> branches) {
         ImportChunkProcessor.Totals totals = new ImportChunkProcessor.Totals();
+        // Un único instante base para todo el archivo: cada fila suma su número en ms y el orden FIFO queda exacto.
+        java.time.Instant base = java.time.Instant.now(clock);
         int lastRowNumber = 0;
         while (true) {
             if (cancelRequests.remove(jobId)) {
@@ -63,7 +66,7 @@ public class ImportApplyService {
                 break;
             }
             lastRowNumber = chunk.getLast().rowNumber();
-            processor.processChunk(jobId, tenantId, userId, branches, chunk, totals);
+            processor.processChunk(jobId, tenantId, userId, branches, chunk, totals, base);
         }
         processor.finish(jobId, ImportStatus.APPLIED, totals.toResult(), null, userId);
         log.info("Importación {} aplicada: {} productos nuevos, {} actualizados, {} lotes", jobId,
