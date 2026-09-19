@@ -41,6 +41,9 @@ import { productInsightApi, productsApi } from '../api';
 import { movementSign, movementSourceLabel, movementTypeLabel, unitShort } from '../lib';
 import type { LotDto, ProductMovement } from '../types';
 
+/** Días en que un lote vacío sigue en la ficha (ProductService.RECENT_EMPTY_LOT_DAYS, docs/api-a1.md §4). */
+const RECENT_LOT_DAYS = 30;
+
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
   const productId = Number(id);
@@ -70,11 +73,13 @@ export default function ProductDetailPage() {
     enabled: Number.isFinite(productId),
   });
 
-  // Resumen de la IA (módulo B): si no está disponible, la tarjeta simplemente no aparece.
+  // Resumen de la IA (módulo B, por sucursal): una fila por sucursal del alcance. Si todavía no hay análisis o la
+  // lectura falla, la tarjeta simplemente no aparece.
+  const loadedProduct = productQuery.data;
   const insightQuery = useQuery({
     queryKey: useBranchQueryKey('products', 'insight', productId),
-    queryFn: () => productInsightApi.get(productId),
-    enabled: Number.isFinite(productId) && canSeeInsights,
+    queryFn: () => productInsightApi.byBranch(loadedProduct!),
+    enabled: !!loadedProduct && canSeeInsights,
     retry: false,
     meta: { errorToast: false },
   });
@@ -103,10 +108,15 @@ export default function ProductDetailPage() {
   }
 
   const product = productQuery.data;
-  const insight = insightQuery.data;
-  const insightPattern = insight?.salesPattern ?? insight?.pattern ?? null;
-  const insightText = insight?.summary ?? insight?.explanation ?? null;
-  const hasInsight = !!insight && (!!insightText || !!insightPattern);
+  const insights = (insightQuery.data ?? []).filter((row) => !!row.pattern || !!row.patternDescription);
+  const hasInsight = insights.length > 0;
+  const lastAnalysis = insights.reduce<string | null>(
+    (latest, row) => (row.updatedAt && (!latest || row.updatedAt > latest) ? row.updatedAt : latest),
+    null,
+  );
+  // Sin movimientos en el alcance: nunca entró mercadería. Si los hay, el producto tuvo stock y sus lotes se
+  // vendieron, vencieron o se retiraron (la ficha muestra los lotes vacíos que se movieron en los últimos 30 días).
+  const neverHadStock = movementsQuery.isSuccess && movementsQuery.data.length === 0;
 
   const lotColumns: Array<TableColumn<LotDto> | null> = [
     {
@@ -372,10 +382,14 @@ export default function ProductDetailPage() {
             }
             empty={{
               icon: Layers,
-              title: 'Este producto no tiene lotes cargados',
-              description: canIntake
-                ? 'Registrá el primer ingreso para empezar a controlar vencimientos.'
-                : 'Cuando se registre el primer ingreso vas a ver acá sus lotes y vencimientos.',
+              title: neverHadStock ? 'Este producto no tiene lotes cargados' : 'Sin lotes con stock',
+              description: neverHadStock
+                ? canIntake
+                  ? 'Registrá el primer ingreso para empezar a controlar vencimientos.'
+                  : 'Cuando se registre el primer ingreso vas a ver acá sus lotes y vencimientos.'
+                : `No quedan lotes con stock${isAll ? '' : ' en esta sucursal'} ni lotes que se hayan movido en los últimos ${RECENT_LOT_DAYS} días. Lo que pasó con el producto está en Movimientos recientes.${
+                    canIntake ? ' Registrá un ingreso para volver a tener stock.' : ''
+                  }`,
               action: canIntake ? (
                 <ButtonLink to={`/app/intake?productId=${product.id}`} leftIcon={<ScanBarcode className="h-4 w-4" />}>
                   Cargar mercadería
@@ -458,26 +472,43 @@ export default function ProductDetailPage() {
                 <CardHeader
                   title="Lo que ve la IA"
                   icon={Sparkles}
-                  description={insight?.analyzedAt ? `Análisis de ${formatRelative(insight.analyzedAt)}` : undefined}
+                  description={lastAnalysis ? `Análisis de ${formatRelative(lastAnalysis)}` : undefined}
                 />
                 <div className="flex flex-col gap-3">
-                  {insightText && <p className="text-read text-foreground">{insightText}</p>}
-                  <div className="flex flex-wrap gap-2">
-                    {insightPattern && (
-                      <Badge tone="info">{SALES_PATTERN_LABELS[insightPattern] ?? insightPattern}</Badge>
-                    )}
-                    {(insight?.abcClass ?? insight?.abc) && (
-                      <Badge tone="neutral">Clase {insight?.abcClass ?? insight?.abc}</Badge>
-                    )}
-                    {insight?.confidence != null && (
-                      <Badge tone="neutral">Confianza {formatNumber(insight.confidence)}%</Badge>
-                    )}
-                  </div>
-                  {insight?.predictedStockoutDate && (
-                    <p className="text-base text-muted-foreground">
-                      Se quedaría sin stock cerca del {formatDate(insight.predictedStockoutDate)}.
-                    </p>
-                  )}
+                  <ul className="flex flex-col gap-3">
+                    {insights.map((row) => (
+                      <li key={row.branchId} className="flex flex-col gap-2 border-b pb-3 last:border-b-0 last:pb-0">
+                        {insights.length > 1 && <div className="gd-eyebrow">{row.branchName}</div>}
+                        <div className="flex flex-wrap gap-2">
+                          {row.pattern && (
+                            <Badge tone="info">{SALES_PATTERN_LABELS[row.pattern] ?? row.pattern}</Badge>
+                          )}
+                          {row.abcClass && <Badge tone="neutral">Clase {row.abcClass}</Badge>}
+                        </div>
+                        {row.patternDescription && (
+                          <p className="text-read text-foreground">{row.patternDescription}</p>
+                        )}
+                        {row.avgDailySales != null && row.avgDailySales > 0 && (
+                          <p className="text-base text-muted-foreground">
+                            Vende {formatNumber(row.avgDailySales, { decimals: 1 })} {unitShort(product.unit)} por día
+                            {row.daysOfCover != null
+                              ? ` · stock para ${formatNumber(row.daysOfCover, { decimals: 1 })} días`
+                              : ''}
+                            .
+                          </p>
+                        )}
+                        {row.predictedStockoutDate && (
+                          <p className="text-base text-muted-foreground">
+                            Se quedaría sin stock cerca del {formatDate(row.predictedStockoutDate)}
+                            {row.suggestedOrderQty
+                              ? ` · sugiere pedir ${formatNumber(row.suggestedOrderQty)} ${unitShort(product.unit)}`
+                              : ''}
+                            .
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
                   <ButtonLink to="/app/insights" variant="link" className="h-auto self-start px-0">
                     Ver Inteligencia IA
                   </ButtonLink>

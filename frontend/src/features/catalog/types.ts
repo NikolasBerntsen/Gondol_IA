@@ -266,27 +266,25 @@ export interface DeleteResult {
 }
 
 // ---------------------------------------------------------------------------
-// Resumen de IA (lectura opcional del módulo B)
+// Resumen de IA (lectura del módulo B)
 // ---------------------------------------------------------------------------
 
 /**
- * Vista mínima y tolerante del análisis de IA de un producto (`GET /api/tenant/insights/products/{id}`,
- * SPEC §6.5, módulo B). La ficha del producto la muestra **solo si llega**: todos los campos son opcionales
- * porque el contrato completo lo define ese módulo y acá únicamente lo leemos.
+ * Patrón que la IA detectó para el producto en una sucursal: una fila de
+ * `GET /api/tenant/insights/products` (`ProductInsightRow`, SPEC §6.5, docs/api-b.md). La ficha solo lee los campos
+ * que muestra; la IA es **por sucursal**, así que en "Todas las sucursales" llega una fila por cada una.
  */
 export interface ProductInsightPeek {
-  branchId?: number | null;
-  branchName?: string | null;
-  summary?: string | null;
-  explanation?: string | null;
-  salesPattern?: SalesPattern | null;
-  pattern?: SalesPattern | null;
-  abcClass?: string | null;
-  abc?: string | null;
-  confidence?: number | null;
-  avgDailySales?: number | null;
-  daysOfStock?: number | null;
-  predictedStockoutDate?: string | null;
-  suggestedReorderQuantity?: number | null;
-  analyzedAt?: string | null;
+  productId: number;
+  productName: string;
+  branchId: number;
+  branchName: string;
+  pattern: SalesPattern | null;
+  patternDescription: string | null;
+  abcClass: string | null;
+  avgDailySales: number | null;
+  daysOfCover: number | null;
+  predictedStockoutDate: string | null;
+  suggestedOrderQty: number | null;
+  updatedAt: string | null;
 }
