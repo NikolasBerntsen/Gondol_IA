@@ -111,6 +111,10 @@ Errores: 400 `VALIDATION_ERROR` (`newPassword` entre 8 y 72 caracteres), 400 `IN
 El detalle fino se declara en cada controlador con `@PreAuthorize(Roles.X)` (`Roles.OWNER`, `SUPPORT`, `TENANT_ANY`
 —incluye al cajero—, `TENANT_POS` = ADMIN + EMPLOYEE + CASHIER, `TENANT_ADMIN`, `TENANT_DASHBOARD`,
 `TENANT_INVENTORY`). Una denegación por método responde 403 `FORBIDDEN` con el formato estándar.
+`PreAuthorizeBeforeBindingInterceptor` (lo registra `SecurityConfig`) evalúa ese `@PreAuthorize` **antes** de leer y
+validar el cuerpo, así un rol sin permiso recibe 403 sea cual sea el payload (nunca el 400 con `fieldErrors`); la
+seguridad por método sigue como segunda barrera. Solo las expresiones que miran argumentos (`#param`) quedan para la
+seguridad por método.
 
 **Rol `TENANT_CASHIER` (Cajero, SPEC §3.1)**: usuario de comercio que solo usa el POS GondolIA, los avisos, la seguridad
 alimentaria y el soporte. A efectos del núcleo se comporta **igual que `TENANT_EMPLOYEE`**: trabaja en las sucursales
@@ -211,7 +215,10 @@ Parámetros `page` (desde 0), `size` (máximo 100) y `sort` (`campo,asc|desc`). 
 
 Una key por sucursal: `gk_` + 40 caracteres base62. En `branches` se guardan solo `pos_api_key_hash` (SHA-256 hex) y
 `pos_api_key_prefix` (primeros 10 caracteres). `resolveBranch(rawKey)` devuelve `PosBranch(tenantId, branchId)` solo si
-la sucursal está activa y el comercio `ACTIVE`. El encabezado del webhook es `X-API-Key` (`ApiKeyService.HEADER`).
+la sucursal está activa y el comercio `ACTIVE`. `authenticate(rawKey)` es la variante del webhook: devuelve la
+`PosBranch` o lanza 401 `INVALID_API_KEY` (key ausente, mal formada, inexistente o de una sucursal desactivada) o 403
+`TENANT_DISABLED` / `TENANT_CANCELLED` (key válida de un comercio bloqueado, SPEC §3.2). El encabezado del webhook es
+`X-API-Key` (`ApiKeyService.HEADER`).
 
 ---
 
@@ -492,9 +499,9 @@ moduleService.require(tenantId, TenantModule.POS_INTEGRATION);  // comercio expl
   activarla." (`ModuleCatalog.MSG_MODULE_DISABLED`), en el formato de error estándar.
 - **El interceptor no bloquea** requests sin usuario de comercio: usuarios de plataforma y endpoints públicos. El
   **webhook del POS externo** (`POST /api/integrations/pos/sales`) se autentica con API key y no tiene JWT, así que el
-  interceptor no puede resolver el comercio: ese controlador tiene que chequearlo a mano con
-  `moduleService.isEnabled(posBranch.tenantId(), TenantModule.POS_INTEGRATION)` (o `require(tenantId, module)`) después
-  de resolver la sucursal con `ApiKeyService.resolveBranch`.
+  interceptor no puede resolver el comercio: lo chequea `PosApiKeyInterceptor` con
+  `moduleService.require(posBranch.tenantId(), TenantModule.POS_INTEGRATION)` después de autenticar la key con
+  `ApiKeyService.authenticate`, antes de leer el cuerpo.
 - API de `ModuleService` (SPEC §14.2): `Set<TenantModule> enabledModules(tenantId)`, `boolean isEnabled(tenantId, m)`,
   `void require(m)` / `require(tenantId, m)`, `int effectiveMaxBranches(tenantId)` (límite del plan si `MULTI_BRANCH`,
   si no 1; hay una variante estática `effectiveMaxBranches(plan, multiBranchEnabled)`),

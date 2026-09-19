@@ -24,6 +24,8 @@ import com.gondolia.config.ClockConfig;
 import com.gondolia.config.CorsConfig;
 import com.gondolia.domain.user.Role;
 import com.gondolia.domain.user.User;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +42,9 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -48,7 +53,8 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @WebMvcTest(controllers = AuthController.class)
 @Import({SecurityConfig.class, SecurityErrorHandler.class, JwtService.class, ClockConfig.class, CorsConfig.class,
-        SecurityWebTest.TestConfig.class, SecurityWebTest.ProbeController.class})
+        SecurityWebTest.TestConfig.class, SecurityWebTest.ProbeController.class,
+        SecurityWebTest.AdminProbeController.class})
 class SecurityWebTest {
 
     private static final AuthUser OWNER = new AuthUser(1L, "dueno@gondolia.app", "Dueño", Role.PLATFORM_OWNER, null);
@@ -76,6 +82,19 @@ class SecurityWebTest {
             return Map.of("ok", "true");
         }
 
+        @PreAuthorize(Roles.TENANT_ADMIN)
+        @PostMapping("/api/tenant/admin-write")
+        Map<String, String> adminWrite(@Valid @RequestBody ProbeBody body) {
+            return Map.of("name", body.name());
+        }
+
+        /** Expresión que mira un argumento: la resuelve la seguridad por método, con el valor real. */
+        @PreAuthorize("#id == 7")
+        @PostMapping("/api/tenant/by-arg/{id}")
+        Map<String, Object> byArgument(@PathVariable Long id) {
+            return Map.of("id", id);
+        }
+
         @GetMapping("/api/platform/ping")
         Map<String, String> platformPing() {
             return Map.of("ok", "true");
@@ -89,6 +108,20 @@ class SecurityWebTest {
         @GetMapping("/api/misc/ping")
         Map<String, Object> miscPing() {
             return Map.of("userId", CurrentUser.id());
+        }
+    }
+
+    record ProbeBody(@NotBlank(message = "es obligatorio") String name) {
+    }
+
+    /** {@code @PreAuthorize} en la clase, como la mayoría de los controladores (por ejemplo, la importación). */
+    @RestController
+    @PreAuthorize(Roles.TENANT_ADMIN)
+    static class AdminProbeController {
+
+        @PostMapping("/api/tenant/admin-class/{id}")
+        Map<String, Object> write(@PathVariable Long id, @Valid @RequestBody ProbeBody body) {
+            return Map.of("id", id, "name", body.name());
         }
     }
 
@@ -162,6 +195,57 @@ class SecurityWebTest {
                 .andExpect(jsonPath("$.code").value("FORBIDDEN"));
         mvc.perform(get("/api/tenant/admin-only").header(HttpHeaders.AUTHORIZATION, bearer(ADMIN)))
                 .andExpect(status().isOk());
+    }
+
+    /**
+     * SPEC §3.3: un rol sin permiso recibe 403 sea cual sea el cuerpo; la validación (y el detalle de los campos) solo
+     * le llega a quien puede usar el endpoint. Antes el {@code @Valid} corría antes que el {@code @PreAuthorize}.
+     */
+    @Test
+    void roleIsCheckedBeforeTheBodyIsReadOrValidated() throws Exception {
+        String employee = bearer(EMPLOYEE);
+        for (String body : new String[] {"{}", "{not json", "{\"name\":\"ok\"}"}) {
+            mvc.perform(post("/api/tenant/admin-write").header(HttpHeaders.AUTHORIZATION, employee)
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("FORBIDDEN"))
+                    .andExpect(jsonPath("$.fieldErrors").isEmpty());
+        }
+        mvc.perform(post("/api/tenant/admin-write").header(HttpHeaders.AUTHORIZATION, employee))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/tenant/admin-class/no-es-un-id").header(HttpHeaders.AUTHORIZATION, employee)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+
+        String admin = bearer(ADMIN);
+        mvc.perform(post("/api/tenant/admin-write").header(HttpHeaders.AUTHORIZATION, admin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.fieldErrors[0].field").value("name"));
+        mvc.perform(post("/api/tenant/admin-write").header(HttpHeaders.AUTHORIZATION, admin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"ok\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("ok"));
+        mvc.perform(post("/api/tenant/admin-class/no-es-un-id").header(HttpHeaders.AUTHORIZATION, admin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        mvc.perform(post("/api/tenant/admin-class/5").header(HttpHeaders.AUTHORIZATION, admin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"ok\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(5));
+    }
+
+    @Test
+    void expressionsOnArgumentsAreLeftToMethodSecurity() throws Exception {
+        mvc.perform(post("/api/tenant/by-arg/7").header(HttpHeaders.AUTHORIZATION, bearer(EMPLOYEE)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(7));
+        mvc.perform(post("/api/tenant/by-arg/8").header(HttpHeaders.AUTHORIZATION, bearer(EMPLOYEE)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
     }
 
     @Test
