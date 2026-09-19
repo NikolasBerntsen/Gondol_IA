@@ -20,6 +20,7 @@ import com.gondolia.platform.dto.CreateTenantRequest.BranchRequest;
 import com.gondolia.platform.dto.CreateTenantRequest.NewUserRequest;
 import com.gondolia.platform.dto.TemporaryPasswordResponse;
 import com.gondolia.platform.dto.TenantDetail;
+import com.gondolia.platform.dto.TenantEventDto;
 import com.gondolia.platform.dto.TenantSummary;
 import com.gondolia.platform.dto.UpdateTenantRequest;
 import com.gondolia.security.AuthUser;
@@ -84,8 +85,12 @@ class TenantAdminServiceIntegrationTest extends PostgresIntegrationTest {
         assertThat(detail.maxBranches()).isEqualTo(3);
         // 1 sucursal activa × (25.000 del plan + 12.000 + 8.000 de los módulos)
         assertThat(detail.monthlyFee()).isEqualByComparingTo(new BigDecimal("45000"));
-        assertThat(detail.events()).extracting(event -> event.type())
-                .contains(TenantEventType.CREATED, TenantEventType.MODULE_ENABLED);
+        // El historial arranca con el alta (el más viejo va último) y los módulos del preset quedan a nombre del
+        // dueño que creó el comercio, no del "Sistema".
+        assertThat(detail.events()).extracting(TenantEventDto::type)
+                .containsExactly(TenantEventType.MODULE_ENABLED, TenantEventType.MODULE_ENABLED,
+                        TenantEventType.MODULE_ENABLED, TenantEventType.CREATED);
+        assertThat(detail.events()).extracting(TenantEventDto::actorName).containsOnly(owner.fullName());
 
         // El empleado queda asignado a la primera sucursal; el jefe y el administrador acceden a todas.
         Long branchId = detail.branches().getFirst().id();
@@ -195,10 +200,15 @@ class TenantAdminServiceIntegrationTest extends PostgresIntegrationTest {
         assertThat(jdbc.queryForObject("select count(*) from tenants where id = ?", Long.class, id)).isZero();
         assertThat(jdbc.queryForObject("select count(*) from users where tenant_id = ?", Long.class, id)).isZero();
         assertThat(jdbc.queryForObject("select count(*) from branches where tenant_id = ?", Long.class, id)).isZero();
-        // El historial queda para las métricas, sin comercio asociado.
+        // El historial queda para las métricas, sin comercio asociado pero con su id en deleted_tenant_id.
         assertThat(jdbc.queryForObject("""
                 select count(*) from tenant_events where tenant_id is null and type = 'DELETED' and to_value = ?
                 """, Long.class, detail.name())).isEqualTo(1);
+        assertThat(jdbc.queryForList("""
+                select type from tenant_events where tenant_id is null and deleted_tenant_id = ? order by id
+                """, String.class, id))
+                .startsWith("CREATED")
+                .endsWith("CANCELLED", "DELETED");
     }
 
     // ------------------------------------------------------------------ contraseñas
@@ -254,7 +264,29 @@ class TenantAdminServiceIntegrationTest extends PostgresIntegrationTest {
                 .containsExactly(withPos.id());
     }
 
+    @Test
+    void searchIgnoresAccentsAndCaseAndTakesWildcardsLiterally() {
+        CreateTenantRequest request = new CreateTenantRequest("Almacén Ñandú " + suffix, "Pérez & Hijos 100%", null,
+                BusinessType.ALMACEN, TenantPlan.FREEMIUM, null, null, null, null, "Córdoba", "Córdoba", null, null,
+                user("jefe5"), user("admin5"), user("empleado5"), null, null);
+        Long id = service.create(request, owner.id()).id();
+
+        assertThat(ids("almacen nandu " + suffix)).containsExactly(id);
+        assertThat(ids("ALMACÉN ÑANDÚ " + suffix.toUpperCase())).containsExactly(id);
+        assertThat(ids("perez & hijos 100%")).contains(id);
+        assertThat(ids("cordoba")).contains(id);
+        // % y _ se buscan como texto, no como comodines de LIKE.
+        assertThat(ids("almac_n nandu " + suffix)).isEmpty();
+        assertThat(ids("%" + suffix)).isEmpty();
+        assertThat(ids("almacen%" + suffix)).isEmpty();
+    }
+
     // ------------------------------------------------------------------ helpers
+
+    private List<Long> ids(String q) {
+        return service.list(q, null, null, null, null, null, 0, 100).content().stream().map(TenantSummary::id)
+                .toList();
+    }
 
     private CreateTenantRequest request(TenantPlan plan, List<TenantModule> modules) {
         return new CreateTenantRequest("Almacén " + suffix, "Almacén SRL", "30-1234-9", BusinessType.ALMACEN, plan,

@@ -236,7 +236,11 @@ export default function TenantFormPage() {
         {!isEdit ? <PrivacyNote /> : null}
 
         <Card padding="none">
-          <CardHeader title="Datos del comercio" description="Lo que identifica al cliente y su facturación." />
+          <CardHeader
+            className="px-4 pt-4 sm:px-5 sm:pt-5"
+            title="Datos del comercio"
+            description="Lo que identifica al cliente y su facturación."
+          />
           <div className="grid gap-4 p-4 sm:grid-cols-2 sm:p-5">
             <Field label="Nombre del comercio" error={errors.name} className="sm:col-span-2">
               <Input
@@ -301,7 +305,11 @@ export default function TenantFormPage() {
         </Card>
 
         <Card padding="none">
-          <CardHeader title="Contacto" description="A quién llamar o escribirle por la cuenta." />
+          <CardHeader
+            className="px-4 pt-4 sm:px-5 sm:pt-5"
+            title="Contacto"
+            description="A quién llamar o escribirle por la cuenta."
+          />
           <div className="grid gap-4 p-4 sm:grid-cols-3 sm:p-5">
             <Field label="Nombre" optional error={errors.contactName}>
               <Input
@@ -330,6 +338,7 @@ export default function TenantFormPage() {
 
         <Card padding="none">
           <CardHeader
+            className="px-4 pt-4 sm:px-5 sm:pt-5"
             title="Plan y módulos"
             description="El plan fija el precio por sucursal y el máximo de sucursales; los módulos suman adicionales."
           />
@@ -421,6 +430,7 @@ export default function TenantFormPage() {
           <>
             <Card padding="none">
               <CardHeader
+                className="px-4 pt-4 sm:px-5 sm:pt-5"
                 title="Primera sucursal"
                 description="Todo comercio arranca con una. Si dejás los datos vacíos toma la dirección del comercio."
               />
@@ -470,6 +480,7 @@ export default function TenantFormPage() {
 
             <Card padding="none">
               <CardHeader
+                className="px-4 pt-4 sm:px-5 sm:pt-5"
                 title="Usuarios iniciales"
                 description="Se crean las tres cuentas del comercio. El empleado queda asignado a la primera sucursal."
               />
