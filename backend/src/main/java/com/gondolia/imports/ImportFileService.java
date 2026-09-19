@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import org.apache.poi.ss.SpreadsheetVersion;
 import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
@@ -30,10 +31,13 @@ import org.apache.poi.ss.usermodel.DataFormat;
 import org.apache.poi.ss.usermodel.FillPatternType;
 import org.apache.poi.ss.usermodel.Font;
 import org.apache.poi.ss.usermodel.HorizontalAlignment;
+import org.apache.poi.ss.usermodel.IgnoredErrorType;
 import org.apache.poi.ss.usermodel.IndexedColors;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -388,8 +392,9 @@ public class ImportFileService {
     /**
      * Hoja «Productos» con celdas tipadas: los importes, cantidades y fechas se escriben como números y fechas de
      * Excel (con formato «#,##0.00», entero y dd/mm/aaaa) para que se puedan ordenar, sumar y filtrar antes de
-     * reimportar; el lector de la importación los vuelve a leer igual. El código de barras queda como texto (y la
-     * columna con formato Texto) para no perder ceros a la izquierda ni verlo en notación científica.
+     * reimportar; el lector de la importación los vuelve a leer igual. El código de barras y el número de lote son
+     * identificadores: quedan como texto, con la columna en formato Texto (lo que se tipee abajo no pierde ceros a la
+     * izquierda ni sale en notación científica) y sin el aviso de «número almacenado como texto».
      */
     private void writeProductsSheet(Workbook workbook, Sheet sheet, List<String> headers,
                                     List<? extends List<?>> rows) {
@@ -403,7 +408,14 @@ public class ImportFileService {
             }
         }
         autoSize(sheet, headers.size());
-        sheet.setDefaultColumnStyle(ImportField.BARCODE.ordinal(), styles.text());
+        for (ImportField field : List.of(ImportField.BARCODE, ImportField.LOT_NUMBER)) {
+            int column = field.ordinal();
+            sheet.setDefaultColumnStyle(column, styles.text());
+            if (sheet instanceof XSSFSheet xssf) {
+                xssf.addIgnoredErrors(new CellRangeAddress(0, SpreadsheetVersion.EXCEL2007.getLastRowIndex(),
+                        column, column), IgnoredErrorType.NUMBER_STORED_AS_TEXT);
+            }
+        }
         sheet.createFreezePane(0, 1);
     }
 

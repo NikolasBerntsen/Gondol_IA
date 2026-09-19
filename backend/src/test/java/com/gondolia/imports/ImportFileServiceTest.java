@@ -19,9 +19,12 @@ import java.util.Map;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DateUtil;
+import org.apache.poi.ss.usermodel.IgnoredErrorType;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 
@@ -47,6 +50,11 @@ class ImportFileServiceTest {
             assertThat(barcode.getStringCellValue()).isEqualTo("7791234000012");
             // La columna del código queda con formato Texto: lo que se tipee abajo no pierde ceros ni sale en E+12.
             assertThat(sheet.getColumnStyle(ImportField.BARCODE.ordinal()).getDataFormatString()).isEqualTo("@");
+            assertThat(sheet.getColumnStyle(ImportField.LOT_NUMBER.ordinal()).getDataFormatString()).isEqualTo("@");
+            // Y Excel no los marca como «número almacenado como texto»: son identificadores, no cantidades.
+            assertThat(((XSSFSheet) sheet).getIgnoredErrors().get(IgnoredErrorType.NUMBER_STORED_AS_TEXT))
+                    .extracting(CellRangeAddress::formatAsString)
+                    .containsExactlyInAnyOrder("A1:A1048576", "M1:M1048576");
 
             assertNumeric(first, ImportField.COST_PRICE, 950, "#,##0.00");
             assertNumeric(first, ImportField.SALE_PRICE, 1350, "#,##0.00");
