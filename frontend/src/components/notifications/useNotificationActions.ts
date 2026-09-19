@@ -70,5 +70,12 @@ export function useNotificationActions() {
     [markReadMutate, navigate, role],
   );
 
-  return { openNotification, markRead, markAllRead };
+  /** `true` si la notificación lleva a una pantalla que el rol puede abrir (para mostrar o no el botón "Ver"). */
+  const canOpenNotification = useCallback(
+    (notification: NotificationDto) =>
+      isInternalLink(notification.link) && linkTargetFor(role, notification.link) != null,
+    [role],
+  );
+
+  return { openNotification, canOpenNotification, markRead, markAllRead };
 }

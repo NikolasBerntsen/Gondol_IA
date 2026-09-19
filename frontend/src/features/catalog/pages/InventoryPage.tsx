@@ -45,7 +45,9 @@ export default function InventoryPage() {
   // El buscador de la barra superior navega a /app/inventory?q=<texto> (docs/frontend-guide.md §9).
   const urlQuery = searchParams.get('q') ?? '';
   const [search, setSearch] = useState(urlQuery);
-  const [categoryId, setCategoryId] = useState<string>('');
+  // Categorías abre /app/inventory?categoryId=<id>.
+  const urlCategoryId = searchParams.get('categoryId') ?? '';
+  const [categoryId, setCategoryId] = useState<string>(urlCategoryId);
   // El Inicio abre /app/inventory?stockStatus=LOW desde "Artículos a reponer".
   const urlStockStatus = searchParams.get('stockStatus');
   const [stockStatus, setStockStatus] = useState<ProductStockFilter>(() => parseStockFilter(urlStockStatus));
@@ -58,6 +60,10 @@ export default function InventoryPage() {
   useEffect(() => {
     setStockStatus(parseStockFilter(urlStockStatus));
   }, [urlStockStatus]);
+
+  useEffect(() => {
+    setCategoryId(urlCategoryId);
+  }, [urlCategoryId]);
 
   const debouncedSearch = useDebounce(search, 300);
 
@@ -254,7 +260,13 @@ export default function InventoryPage() {
             <Select
               aria-label="Filtrar por categoría"
               value={categoryId}
-              onChange={(event) => setCategoryId(event.target.value)}
+              onChange={(event) => {
+                setCategoryId(event.target.value);
+                const next = new URLSearchParams(searchParams);
+                if (event.target.value) next.set('categoryId', event.target.value);
+                else next.delete('categoryId');
+                setSearchParams(next, { replace: true });
+              }}
               placeholder="Todas las categorías"
               containerClassName="md:max-w-[220px]"
               options={(categoriesQuery.data ?? []).map((category) => ({
@@ -335,6 +347,7 @@ export default function InventoryPage() {
                     const next = new URLSearchParams(searchParams);
                     next.delete('q');
                     next.delete('stockStatus');
+                    next.delete('categoryId');
                     setSearchParams(next, { replace: true });
                   }}
                 >
