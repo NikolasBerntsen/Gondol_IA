@@ -40,33 +40,47 @@ export function EditableCell({
 
   if (editing) {
     return (
-      <input
-        autoFocus
-        value={draft}
-        list={suggestionsId}
-        aria-label={`${label}, fila ${rowNumber}`}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={() => {
-          setEditing(false);
-          if (draft !== value) onCommit(draft);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') {
-            event.preventDefault();
-            event.currentTarget.blur();
-          } else if (event.key === 'Escape') {
-            event.preventDefault();
-            event.stopPropagation();
-            setDraft(value);
+      <div className="min-w-0">
+        <input
+          autoFocus
+          value={draft}
+          list={suggestionsId}
+          aria-label={`${label}, fila ${rowNumber}`}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={() => {
             setEditing(false);
-          }
-        }}
-        className={cn(
-          'h-8 w-full rounded-tag border border-ring bg-card px-2 text-base text-foreground outline-none ring-2 ring-ring/25',
-          mono && 'font-mono text-sm',
-          align === 'right' && 'text-right tabular-nums',
-        )}
-      />
+            if (draft !== value) onCommit(draft);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              event.currentTarget.blur();
+            } else if (event.key === 'Escape') {
+              event.preventDefault();
+              event.stopPropagation();
+              setDraft(value);
+              setEditing(false);
+            }
+          }}
+          className={cn(
+            'h-8 w-full rounded-tag border border-ring bg-card px-2 text-base text-foreground outline-none ring-2 ring-ring/25',
+            mono && 'font-mono text-sm',
+            align === 'right' && 'text-right tabular-nums',
+          )}
+        />
+        {/* En pantallas táctiles no hay tooltip: mientras se edita, el motivo queda a la vista. */}
+        {messages.map((message, index) => (
+          <p
+            key={index}
+            className={cn(
+              'mt-1 max-w-[260px] whitespace-normal text-xs',
+              message.level === 'ERROR' ? 'text-crit-ink' : 'text-warn-ink',
+            )}
+          >
+            {message.message}
+          </p>
+        ))}
+      </div>
     );
   }
 

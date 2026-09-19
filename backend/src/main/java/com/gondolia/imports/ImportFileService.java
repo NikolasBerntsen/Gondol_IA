@@ -148,6 +148,9 @@ public class ImportFileService {
                 "Podés borrar las columnas que no uses y cambiar el orden: al importar elegís qué columna es cada campo.",
                 "Números: «1.234,50» o «1234.5». Fechas: dd/mm/aaaa. Sí/No: sí, no, 1, 0, x.",
                 "La Fecha de ingreso conserva el orden FIFO: lo que entró antes se vende antes.",
+                "Cada fila con Cantidad en stock suma un lote nuevo. Para actualizar solo precios o datos de un "
+                        + "catálogo exportado, dejá la cantidad vacía o desactivá «Cargar el stock de la planilla» "
+                        + "al importar.",
                 "Máximo 10.000 filas y 10 MB por archivo. Si tenés más, dividilo en varias importaciones.")) {
             Row row = sheet.createRow(index++);
             Cell cell = row.createCell(0);

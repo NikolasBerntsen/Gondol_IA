@@ -128,7 +128,9 @@ export function ReviewStep({ job, fields, onJobChange, readOnly = false }: Revie
   };
 
   const cellAlign = (type: ImportFieldDto['type']) => (type === 'number' || type === 'integer' ? 'right' : undefined);
-  const cellMono = (type: ImportFieldDto['type']) => type === 'date' || type === 'text';
+  // Como en la referencia: monoespaciada solo para códigos, lotes y fechas; los nombres se leen mejor en la sans.
+  const cellMono = (field: ImportFieldDto) =>
+    field.type === 'date' || field.key === 'barcode' || field.key === 'lotNumber';
 
   return (
     <TooltipProvider delayDuration={80}>
@@ -326,7 +328,7 @@ interface ReviewRowProps {
   onCommit: (field: string, value: string) => void;
   onUnskip: () => void;
   cellAlign: (type: ImportFieldDto['type']) => 'right' | undefined;
-  cellMono: (type: ImportFieldDto['type']) => boolean;
+  cellMono: (field: ImportFieldDto) => boolean;
 }
 
 function ReviewRow({
@@ -368,7 +370,7 @@ function ReviewRow({
             label={field.label}
             rowNumber={row.rowNumber}
             messages={row.messages.filter((message) => message.field === field.key)}
-            mono={cellMono(field.type)}
+            mono={cellMono(field)}
             align={cellAlign(field.type)}
             disabled={locked}
             saving={saving}

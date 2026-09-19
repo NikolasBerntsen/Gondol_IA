@@ -401,25 +401,29 @@ export default function ImportWizardPage() {
                 <span className="hidden sm:inline">Descargar errores (CSV)</span>
                 <span className="sm:hidden">Errores (CSV)</span>
               </Button>
-              <div className="flex-1" />
-              {blocked ? (
-                <span id="continue-hint" className="text-sm text-crit-ink">
-                  Corregí {job?.errorRows === 1 ? 'el error' : `los ${formatNumber(job?.errorRows ?? 0)} errores`} u
-                  omitilos para continuar.
-                </span>
-              ) : null}
-              <Button variant="outline" leftIcon={<ArrowLeft aria-hidden="true" />} onClick={() => setStep(COLUMNS)}>
-                <span className="hidden sm:inline">Volver a columnas</span>
-                <span className="sm:hidden">Volver</span>
-              </Button>
-              <Button
-                disabled={blocked || importable === 0 || maxStep < CONFIRM}
-                aria-describedby={blocked ? 'continue-hint' : undefined}
-                rightIcon={<ArrowRight aria-hidden="true" />}
-                onClick={() => setStep(CONFIRM)}
-              >
-                Continuar a confirmar
-              </Button>
+              {/* Si no entra en una línea, el grupo de la derecha baja entero y sigue alineado a la derecha. */}
+              <div className="ml-auto flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+                {blocked ? (
+                  <span id="continue-hint" className="text-sm text-crit-ink">
+                    Corregí u omití {job?.errorRows === 1 ? 'el error' : `los ${formatNumber(job?.errorRows ?? 0)} errores`}{' '}
+                    para seguir.
+                  </span>
+                ) : null}
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" leftIcon={<ArrowLeft aria-hidden="true" />} onClick={() => setStep(COLUMNS)}>
+                    <span className="hidden sm:inline">Volver a columnas</span>
+                    <span className="sm:hidden">Volver</span>
+                  </Button>
+                  <Button
+                    disabled={blocked || importable === 0 || maxStep < CONFIRM}
+                    aria-describedby={blocked ? 'continue-hint' : undefined}
+                    rightIcon={<ArrowRight aria-hidden="true" />}
+                    onClick={() => setStep(CONFIRM)}
+                  >
+                    Continuar a confirmar
+                  </Button>
+                </div>
+              </div>
             </>
           )
         ) : step === CONFIRM ? (

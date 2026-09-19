@@ -11,6 +11,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
   EmptyState,
   ErrorState,
@@ -188,6 +189,11 @@ export default function ImportsPage() {
               <DropdownMenuItem onSelect={() => download.mutate(() => importsApi.downloadCatalog('xlsx', false))}>
                 Excel solo con los productos
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <p className="max-w-64 px-2 py-1.5 text-sm text-muted-foreground">
+                Para cambiar solo precios o datos, exportá «solo con los productos»: cada fila con cantidad que
+                reimportes suma un lote nuevo.
+              </p>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
