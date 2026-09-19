@@ -76,7 +76,7 @@ export function BranchSelector({ className, compact = false }: BranchSelectorPro
           {...dropdown.panelProps}
           align="end"
           aria-label="Elegí una sucursal"
-          className="w-72 max-w-[calc(100vw-1.5rem)]"
+          className="w-72 max-w-[calc(100vw-2rem)]"
         >
           <DropdownLabel>{tenantName}</DropdownLabel>
           {canSelectAll && (

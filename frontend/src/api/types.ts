@@ -220,17 +220,38 @@ export const MOVEMENT_TYPE_LABELS: Record<MovementType, string> = {
   TRANSFER_IN: 'Transferencia recibida',
 };
 
-export type MovementSource = 'MANUAL' | 'SCAN' | 'OCR' | 'CSV' | 'POS' | 'SEED' | 'SYSTEM';
+/**
+ * Origen de un movimiento (SPEC §4.1). `POS` es el POS externo del cliente (webhook, CSV o simulador) y
+ * `POS_GONDOLIA` es nuestro Punto de venta: las etiquetas tienen que distinguirlos siempre.
+ */
+export type MovementSource =
+  | 'MANUAL'
+  | 'SCAN'
+  | 'OCR'
+  | 'CSV'
+  | 'POS'
+  | 'POS_GONDOLIA'
+  | 'IMPORT'
+  | 'SEED'
+  | 'SYSTEM';
 
+/** Espejo exacto de `MovementLabels.source` del backend (el `sourceLabel` de ventas y movimientos). */
 export const MOVEMENT_SOURCE_LABELS: Record<MovementSource, string> = {
   MANUAL: 'Manual',
   SCAN: 'Escáner',
   OCR: 'Lectura de etiqueta',
   CSV: 'Importación CSV',
-  POS: 'Punto de venta',
+  POS: 'POS externo',
+  POS_GONDOLIA: 'POS GondolIA',
+  IMPORT: 'Importación masiva',
   SEED: 'Datos demo',
   SYSTEM: 'Sistema',
 };
+
+/** Etiqueta en español de un origen; si llega uno que el front no conoce, lo muestra tal cual. */
+export function movementSourceLabel(source: string): string {
+  return (MOVEMENT_SOURCE_LABELS as Record<string, string>)[source] ?? source;
+}
 
 /** Estado de stock de un producto (SPEC §4.2). */
 export type StockStatus = 'OK' | 'LOW' | 'OUT';

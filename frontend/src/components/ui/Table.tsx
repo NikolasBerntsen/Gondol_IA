@@ -93,6 +93,13 @@ const HIDE_BELOW_CLASSES = {
   xl: 'hidden xl:table-cell',
 } as const;
 
+/**
+ * Foco de teclado en filas y tarjetas clickeables: anillo de 2 px con `ring` hacia adentro (el contenedor scrollea y
+ * recortaría un anillo por fuera), además del fondo. El fondo solo no alcanza el 3:1 de WCAG 1.4.11.
+ */
+const ROW_FOCUS_CLASSES =
+  'focus-visible:bg-muted/60 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring';
+
 function onActivate(event: KeyboardEvent, action: () => void) {
   if (event.key === 'Enter' || event.key === ' ') {
     event.preventDefault();
@@ -198,7 +205,7 @@ export function Table<T>({
                     tabIndex={onRowClick ? 0 : undefined}
                     className={cn(
                       'transition-colors [&>td:first-child]:pl-4',
-                      onRowClick && 'cursor-pointer hover:bg-muted/45 focus-visible:bg-muted/60 focus-visible:outline-none',
+                      onRowClick && cn('cursor-pointer hover:bg-muted/45', ROW_FOCUS_CLASSES),
                       ROW_SEVERITY_CLASSES[rowSeverity?.(row) ?? 'none'],
                       rowClassName?.(row),
                     )}
@@ -241,7 +248,7 @@ export function Table<T>({
                   tabIndex={onRowClick ? 0 : undefined}
                   className={cn(
                     'p-4',
-                    onRowClick && 'cursor-pointer active:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none',
+                    onRowClick && cn('cursor-pointer active:bg-muted/60', ROW_FOCUS_CLASSES),
                     CARD_SEVERITY_CLASSES[rowSeverity?.(row) ?? 'none'],
                     rowClassName?.(row),
                   )}

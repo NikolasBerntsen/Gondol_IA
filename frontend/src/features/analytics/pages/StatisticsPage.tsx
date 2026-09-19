@@ -31,8 +31,8 @@ import {
 } from '@/components/ui';
 import type { TableColumn } from '@/components/ui';
 import { useBranch, useBranchQueryKey } from '@/branches/BranchContext';
-import { MOVEMENT_SOURCE_LABELS, MOVEMENT_TYPE_LABELS, SALES_PATTERN_LABELS } from '@/api/types';
-import type { MovementSource, MovementType } from '@/api/types';
+import { MOVEMENT_TYPE_LABELS, SALES_PATTERN_LABELS, movementSourceLabel } from '@/api/types';
+import type { MovementType } from '@/api/types';
 import { formatDate, formatMoney, formatNumber, formatPercent, formatShortDate } from '@/lib/format';
 import { statisticsApi } from '../api';
 import type {
@@ -61,18 +61,6 @@ const DAY_OPTIONS = [
   { value: '180', label: 'Últimos 180 días' },
   { value: '365', label: 'Último año' },
 ];
-
-/**
- * Origen de una venta. `MOVEMENT_SOURCE_LABELS` del núcleo todavía no tiene `POS_GONDOLIA` ni `IMPORT`
- * (SPEC §4.1), así que se completan acá.
- */
-const SOURCE_LABELS: Record<string, string> = {
-  ...MOVEMENT_SOURCE_LABELS,
-  POS_GONDOLIA: 'POS GondolIA',
-  IMPORT: 'Importación',
-};
-
-const sourceLabel = (source: string) => SOURCE_LABELS[source as MovementSource] ?? source;
 
 const ABC_DESCRIPTION: Record<string, string> = {
   A: 'Los que hacen el 80% de la facturación',
@@ -317,7 +305,7 @@ function SalesTab({ stats }: { stats: StatisticsOverview }) {
                 <ul className="flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-muted-foreground">
                   {sales.bySource.map((row) => (
                     <li key={row.source}>
-                      {sourceLabel(row.source)}{' '}
+                      {movementSourceLabel(row.source)}{' '}
                       <span className="font-semibold tabular-nums text-foreground">{formatNumber(row.units)} u.</span>
                     </li>
                   ))}

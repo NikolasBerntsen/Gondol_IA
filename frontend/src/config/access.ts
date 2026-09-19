@@ -107,12 +107,15 @@ function pathnameOf(path: string): string {
   return path.split(/[?#]/)[0];
 }
 
+/** Roles que pueden abrir la ruta (vacío si la ruta no existe). */
+export function rolesForPath(path: string): readonly Role[] {
+  const pathname = pathnameOf(path);
+  return PATH_RULES.find(([pattern]) => pattern.test(pathname))?.[1] ?? [];
+}
+
 /** `true` si el rol puede abrir la ruta (links, redirección tras el login, notificaciones). */
 export function canAccessPath(role: Role | null | undefined, path: string): boolean {
-  if (!role) return false;
-  const pathname = pathnameOf(path);
-  const rule = PATH_RULES.find(([pattern]) => pattern.test(pathname));
-  return rule ? rule[1].includes(role) : false;
+  return !!role && rolesForPath(path).includes(role);
 }
 
 /** Módulo necesario para abrir la ruta, o `null` si está siempre incluida. */

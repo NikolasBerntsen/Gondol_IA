@@ -80,7 +80,8 @@ function Rail({
           <Link
             to="/"
             onClick={onNavigate}
-            className="inline-flex rounded-control focus-visible:outline-none"
+            // Sin `outline-none`: toma el anillo de foco del riel (amarillo, `.gd-rail :focus-visible`).
+            className="inline-flex rounded-control"
             aria-label="GondolIA, ir al inicio"
           >
             {collapsed ? <LogoMark /> : <Logo />}

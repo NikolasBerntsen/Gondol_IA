@@ -8,6 +8,7 @@ import { RequireRole } from '@/auth/RequireRole';
 import { roleHome } from '@/auth/roleHome';
 import { BranchProvider } from '@/branches/BranchContext';
 import { AppShell } from '@/components/layout/AppShell';
+import { RouteDocumentTitle } from '@/components/layout/RouteDocumentTitle';
 import { SplashScreen } from '@/components/layout/SplashScreen';
 import { ROLE_GROUPS, rolesWith } from '@/config/access';
 import { createQueryClient } from '@/lib/queryClient';
@@ -273,6 +274,7 @@ export default function App() {
             <BranchProvider>
               <StompProvider>
                 <SessionEventsListener />
+                <RouteDocumentTitle />
                 <Suspense fallback={<SplashScreen />}>
                   <AppRoutes />
                 </Suspense>

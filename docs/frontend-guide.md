@@ -442,15 +442,15 @@ papel claro con tinta oscura (§9.1). No hace falta nada en la página.
 | `TableRoot`, `TableHeader`, `TableBody`, `TableRow`, `TableHead`, `TableCell`, `TableFooter`, `TableCaption` | Primitivas para tablas a medida (con `SeverityRow`). |
 | `Pagination` | `page` (0-based), `totalPages`, `totalElements`, `size`, `onPageChange`, `disabled`. `pageInfo(data)` arma las props desde un `PageResponse`. |
 | `Tabs<V>` | `tabs: {value,label,icon,count,disabled}[]`, `value`, `onChange`, `variant: underline \| pills`, `ariaLabel`, `idPrefix`. |
-| `PageHeader` | `title`, `description`, `eyebrow`, `icon`, `actions`, `back: {to,label}`, `children` (filtros/tabs debajo). |
-| `StatCard` | `label`, `value`, `icon`, `tone: primary \| ok \| warn \| crit \| info \| neutral`, `hint`, `trend: {value,label,invert}`, `sparkline`, `loading`, `to`. |
+| `PageHeader` | `title`, `description`, `eyebrow`, `icon`, `actions`, `back: {to,label}`, `children` (filtros/tabs debajo), `documentTitle` (título de la pestaña "… · GondolIA"; por defecto `title` si es texto, `null` deja el de la ruta). Cada ruta ya tiene un título (`config/routeTitles.ts`); las pantallas sin `PageHeader` lo precisan con `useDocumentTitle` (`lib/documentTitle.ts`). |
+| `StatCard` | `label`, `value`, `icon`, `tone: primary \| ok \| warn \| crit \| info \| neutral`, `hint`, `trend: {value,label,invert}`, `sparkline`, `loading`, `to`. El número va en una línea y, si no entra (montos largos en la grilla de 4 columnas), se achica hasta que entre. |
 | `EmptyState` | `icon`, `title` (qué falta), `description` (próxima acción), `action`, `size`, `bordered`. |
 | `ErrorState` | `error` (se traduce), `message`, `title`, `onRetry`, `retrying`, `size`. |
 | `Spinner`, `PageSpinner`, `Skeleton` | Cargas en línea, de sección y esqueletos (`<Skeleton className="h-4 w-32" />`). |
 | `Progress` | Barra de progreso (Radix) para la aplicación de una importación. |
 | `Tooltip` + `TooltipProvider/Trigger/Content` | Requiere un `TooltipProvider` arriba. |
 | `Popover`, `DropdownMenu*`, `Sheet*`, `Separator`, `Label` | Primitivas de Radix ya adaptadas a los tokens. |
-| `useDropdown`, `DropdownPanel`, `DropdownItem`, `DropdownSeparator`, `DropdownLabel` | Desplegable propio (click afuera, ESC, flechas) para paneles con contenido libre. Al abrir enfoca el ítem marcado (`aria-checked`); `useDropdown({ initialFocus: 'first' })` enfoca siempre el primero (menús de acciones con una opción marcada adentro, como el tema del menú de usuario). |
+| `useDropdown`, `DropdownPanel`, `DropdownItem`, `DropdownSeparator`, `DropdownLabel` | Desplegable propio (click afuera, ESC, flechas) para paneles con contenido libre. El panel se corre solo para quedar dentro de la pantalla con 16 px de margen. Al abrir enfoca el ítem marcado (`aria-checked`); `useDropdown({ initialFocus: 'first' })` enfoca siempre el primero (menús de acciones con una opción marcada adentro, como el tema del menú de usuario). |
 | `AuthImage` | `src` (ruta `/api/...` protegida), `alt`, `fallback`, `placeholderClassName`. |
 | `Avatar` | `name`, `size: sm \| md \| lg \| xl`. |
 | `SecureContextWarning` | Aviso de cámara en HTTP (ver §11). |

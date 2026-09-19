@@ -24,7 +24,7 @@ export default function ModuleDisabledPage({ module }: ModuleDisabledPageProps) 
 
   return (
     <div className={cn((compact || !inShell) && 'mx-auto w-full max-w-7xl px-4 pb-10 pt-5 sm:px-6 lg:px-8 lg:pt-7')}>
-      <PageHeader eyebrow="Función no habilitada" title={name} />
+      <PageHeader eyebrow="Función no habilitada" title={name} documentTitle="Función no habilitada" />
       <Card padding="none">
         <EmptyState
           icon={Blocks}

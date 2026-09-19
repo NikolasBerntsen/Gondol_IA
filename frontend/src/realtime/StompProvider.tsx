@@ -93,10 +93,25 @@ export function StompProvider({ children }: { children: ReactNode }) {
       },
     });
 
+    // Al irse de la página (otro sitio, about:blank, recarga o el back/forward cache) el navegador no siempre cierra
+    // el socket, y el servidor recién lo notaba al vencer el heartbeat (45–60 s): un agente de soporte seguía
+    // "en línea" para los comercios sin estar. Se corta en el acto, igual que al cerrar la pestaña.
+    const onPageHide = () => {
+      void client.deactivate({ force: true });
+    };
+    // Si la página vuelve del back/forward cache, se reconecta (con el token vigente, ver `beforeConnect`).
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted && clientRef.current === client) client.activate();
+    };
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('pageshow', onPageShow);
+
     clientRef.current = client;
     client.activate();
 
     return () => {
+      window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('pageshow', onPageShow);
       clientRef.current = null;
       resetSubscriptions();
       setConnected(false);

@@ -1,7 +1,10 @@
 import { Home, SearchX } from 'lucide-react';
 import { ButtonLink } from '@/components/ui/Button';
+import { useDocumentTitle } from '@/lib/documentTitle';
 
 export default function NotFoundPage() {
+  useDocumentTitle('Página no encontrada');
+
   return (
     <div className="flex min-h-[60vh] flex-col items-start justify-center gap-3">
       <span className="grid h-12 w-12 place-items-center rounded-control border border-dashed border-input bg-muted text-muted-foreground">
