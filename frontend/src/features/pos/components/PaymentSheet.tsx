@@ -48,6 +48,11 @@ export interface PaymentSheetProps {
   /** Cobra la venta. Si falla, el error ya se muestra en el mostrador y la hoja queda abierta. */
   onConfirm: (payments: Array<{ method: PaymentMethod; amount: number }>) => void;
   pending: boolean;
+  /**
+   * El mostrador está volviendo a pedir el carrito al servidor (precios por lote y recalls al día): no se puede
+   * confirmar hasta tener el total que va a cobrar el núcleo.
+   */
+  refreshing?: boolean;
   /** Venta cobrada: la hoja pasa a mostrar el ticket. */
   sale: PosSale | null;
   onNewSale: () => void;
@@ -67,6 +72,7 @@ export function PaymentSheet({
   units,
   onConfirm,
   pending,
+  refreshing = false,
   sale,
   onNewSale,
   onPrint,
@@ -99,7 +105,7 @@ export function PaymentSheet({
     return { paid, cash, nonCash, remaining, nonCashOver, change, invalid };
   }, [lines, total, amountOf]);
 
-  const canConfirm = totals.paid >= total && !totals.nonCashOver && !totals.invalid && !pending;
+  const canConfirm = totals.paid >= total && !totals.nonCashOver && !totals.invalid && !pending && !refreshing;
 
   const focusLine = (id: number) => {
     setActive(id);
@@ -211,7 +217,10 @@ export function PaymentSheet({
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border py-4 pl-5 pr-14 sm:pl-6">
               <div>
                 <DialogTitle>Cobrar</DialogTitle>
-                <p className="text-sm text-muted-foreground">{units} unidades en el ticket</p>
+                <p className="text-sm text-muted-foreground" aria-live="polite">
+                  {units} {units === 1 ? 'unidad' : 'unidades'} en el ticket
+                  {refreshing ? ' · actualizando precios…' : ''}
+                </p>
               </div>
               <PriceTag size="md" price={total} label="Total" />
             </div>

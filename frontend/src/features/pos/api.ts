@@ -46,6 +46,9 @@ export const posApi = {
     apiGet<PosProduct>(`${BASE}/products/lookup`, { code, branchId }),
   search: (params: { q?: string; categoryId?: number | null; branchId?: number | null; limit?: number }) =>
     apiGet<PosProduct[]>(`${BASE}/products/search`, params),
+  /** Productos del carrito al día (stock, tramos de precio y recalls) antes de cobrar. */
+  byIds: (ids: number[], branchId?: number | null) =>
+    apiGet<PosProduct[]>(`${BASE}/products`, { ids: ids.join(','), branchId }),
   categories: (branchId?: number | null) =>
     apiGet<PosCategory[]>(`${BASE}/products/categories`, { branchId }),
 

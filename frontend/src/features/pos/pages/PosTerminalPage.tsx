@@ -38,6 +38,8 @@ import { PaymentSheet } from '../components/PaymentSheet';
 import { PosNotice, type PosNoticeData } from '../components/PosNotice';
 import { PosProductTile } from '../components/PosProductTile';
 import { subtractMoney, sumMoney } from '../money';
+import { priceLine } from '../pricing';
+import { recallCap, recallLotsLabel } from '../recall';
 import type {
   CashMovementType,
   PaymentMethod,
@@ -166,17 +168,20 @@ export default function PosTerminalPage() {
   });
 
   // ----------------------------------------------------------------- carrito
+  // Cada línea se cotiza lote por lote (`priceTiers`), igual que el núcleo: si la cantidad pasa del lote en
+  // liquidación, el resto va al precio del lote siguiente (SPEC §4.2).
   const lines = useMemo(
     () =>
       cart.map((line) => {
-        const unitPrice = line.product.nextLot?.unitPrice ?? line.product.listPrice;
-        const pct = line.product.nextLot?.discountPct ?? 0;
+        const pricing = priceLine(line.product, line.quantity);
+        const first = pricing.parts[0];
         return {
           ...line,
-          unitPrice,
-          pct,
-          listTotal: Math.round(line.product.listPrice * line.quantity * 100) / 100,
-          lineTotal: Math.round(unitPrice * line.quantity * 100) / 100,
+          pricing,
+          unitPrice: first?.unitPrice ?? line.product.listPrice,
+          pct: pricing.discountedUnits > 0 ? (first?.discountPct ?? 0) : 0,
+          listTotal: pricing.listTotal,
+          lineTotal: pricing.lineTotal,
         };
       }),
     [cart],
@@ -197,6 +202,19 @@ export default function PosTerminalPage() {
       }
       const existing = cart.find((line) => line.product.productId === product.productId);
       const next = (existing?.quantity ?? 0) + 1;
+
+      // Recall vigente: solo se venden unidades de lotes cargados (ya verificados). Sin "vender igual".
+      if (product.activeRecall && next > product.sellableStock) {
+        setPendingProduct(null);
+        setNotice({
+          kind: 'recallNoStock',
+          productName: product.name,
+          lots: recallLotsLabel(product.activeRecall),
+          available: Math.max(0, product.sellableStock),
+          branchName: product.branchName,
+        });
+        return;
+      }
 
       if (!options?.force) {
         if (product.outOfStock) {
@@ -259,6 +277,63 @@ export default function PosTerminalPage() {
   });
 
   // ----------------------------------------------------------------- cobro
+  // Al abrir el cobro se vuelve a pedir el carrito al servidor: otra caja pudo vender el lote en liquidación
+  // (cambia el precio de algunas unidades) o pudo publicarse un recall. La hoja no deja confirmar hasta tenerlo.
+  const refreshCart = useMutation({
+    mutationFn: (snapshot: CartLine[]) =>
+      posApi.byIds(
+        snapshot.map((line) => line.product.productId),
+        branchId,
+      ),
+    meta: { errorToast: false },
+    onSuccess: (fresh, snapshot) => {
+      const byId = new Map(fresh.map((product) => [product.productId, product]));
+      const quote = (line: CartLine, product: PosProduct) => priceLine(product, line.quantity).lineTotal;
+      const before = sumMoney(snapshot.map((line) => quote(line, line.product)));
+      const after = sumMoney(snapshot.map((line) => quote(line, byId.get(line.product.productId) ?? line.product)));
+      if (after !== before) {
+        toast.info('Actualizamos los precios del carrito.', {
+          description: `Cambió el stock en liquidación: el total ahora es ${formatMoney(after, { decimals: 2 })}.`,
+        });
+      }
+      setCart((prev) =>
+        prev.map((line) => {
+          const product = byId.get(line.product.productId);
+          return product ? { ...line, product } : line;
+        }),
+      );
+      for (const line of snapshot) {
+        const product = byId.get(line.product.productId);
+        if (!product) continue;
+        if (product.hasRecalledStock) {
+          setPayOpen(false);
+          setSelected(product.productId);
+          setNotice({ kind: 'recall', productName: product.name });
+          return;
+        }
+        if (product.activeRecall && line.quantity > product.sellableStock) {
+          setPayOpen(false);
+          setSelected(product.productId);
+          setNotice({
+            kind: 'recallNoStock',
+            productName: product.name,
+            lots: recallLotsLabel(product.activeRecall),
+            available: Math.max(0, product.sellableStock),
+            branchName: product.branchName,
+          });
+          return;
+        }
+      }
+    },
+  });
+
+  const { mutate: requestFreshCart, isPending: refreshingCart } = refreshCart;
+  const openPayment = useCallback(() => {
+    if (!cart.length) return;
+    setPayOpen(true);
+    requestFreshCart(cart);
+  }, [cart, requestFreshCart]);
+
   const createSale = useMutation({
     mutationFn: (payments: Array<{ method: PaymentMethod; amount: number }>) => {
       if (!session) throw new Error('sin turno');
@@ -283,10 +358,30 @@ export default function PosTerminalPage() {
       if (details.length) {
         // El carrito ya tiene la línea: "vender igual" solo habilita el faltante, no agrega otra unidad.
         const first = details[0];
+        const recall = cart.find((line) => line.product.productId === first.productId)?.product.activeRecall;
         setPayOpen(false);
         setPendingProduct(null);
-        setNotice({ kind: 'limit', productName: first.productName, available: first.available });
+        setNotice(
+          recall
+            ? {
+                kind: 'recallNoStock',
+                productName: first.productName,
+                lots: recallLotsLabel(recall),
+                available: first.available,
+                branchName: session?.branchName ?? null,
+              }
+            : { kind: 'limit', productName: first.productName, available: first.available },
+        );
         return;
+      }
+      if (isApiError(error, 'PRODUCT_RECALLED')) {
+        // Se publicó un recall entre el escaneo y el cobro: volvemos al carrito (con las banderas al día) para
+        // que el cajero lo saque.
+        setPayOpen(false);
+        requestFreshCart(cart);
+      } else if (isApiError(error, 'PAYMENT_INSUFFICIENT')) {
+        // El núcleo cobra otro total que el de la hoja (cambió un lote en liquidación): volvemos a cotizar.
+        requestFreshCart(cart);
       }
       toast.error(getErrorMessage(error));
     },
@@ -319,7 +414,7 @@ export default function PosTerminalPage() {
         }
       } else if (event.key === 'F4') {
         event.preventDefault();
-        if (cart.length && !payOpen) setPayOpen(true);
+        if (cart.length && !payOpen) openPayment();
       } else if (event.key === 'F8') {
         event.preventDefault();
         if (payOpen || !cart.length) return;
@@ -337,7 +432,7 @@ export default function PosTerminalPage() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [cart, payOpen, selected, query, cashMode, closeOpen, scannerOpen, hasSession, removeLine]);
+  }, [cart, payOpen, selected, query, cashMode, closeOpen, scannerOpen, hasSession, removeLine, openPayment]);
 
   useEffect(() => {
     if (hasSession) searchRef.current?.focus({ preventScroll: true });
@@ -622,6 +717,14 @@ export default function PosTerminalPage() {
                 {lines.map((line) => {
                   const lot = line.product.nextLot;
                   const isSelected = selected === line.product.productId;
+                  // Con recall vigente no hay faltante: el tope son las unidades de lotes cargados.
+                  const cap = recallCap(line.product);
+                  const maxQuantity =
+                    cap !== null
+                      ? Math.max(cap, 1)
+                      : allowShortage
+                        ? 9999
+                        : Math.max(line.product.sellableStock, line.quantity);
                   return (
                     <li
                       key={line.product.productId}
@@ -655,6 +758,9 @@ export default function PosTerminalPage() {
                           {line.pct > 0 ? (
                             <span className="inline-flex h-[22px] items-center rounded-tag bg-crit px-1.5 font-mono text-[11px] font-semibold uppercase text-crit-foreground">
                               -{Math.round(line.pct)}% VTO CERCANO
+                              {line.pricing.discountedUnits < line.quantity
+                                ? ` · ${line.pricing.discountedUnits} U.`
+                                : ''}
                             </span>
                           ) : null}
                         </div>
@@ -667,7 +773,7 @@ export default function PosTerminalPage() {
                           size="sm"
                           value={line.quantity}
                           min={1}
-                          max={allowShortage ? 9999 : Math.max(line.product.sellableStock, line.quantity)}
+                          max={maxQuantity}
                           onChange={(value) =>
                             setCart((prev) =>
                               prev.map((item) =>
@@ -679,14 +785,29 @@ export default function PosTerminalPage() {
                           }
                         />
                         <div className="text-right">
-                          <div className="text-xs tabular-nums text-muted-foreground">
-                            {line.pct > 0 ? (
-                              <span className="mr-1 line-through">
-                                {formatMoney(line.product.listPrice, { decimals: 2 })}
-                              </span>
-                            ) : null}
-                            {formatMoney(line.unitPrice, { decimals: 2 })} c/u
-                          </div>
+                          {line.pricing.parts.length > 1 ? (
+                            // La cantidad cruza de lote: cada tramo con su precio, como lo va a cobrar el núcleo.
+                            <ul
+                              className="text-xs tabular-nums text-muted-foreground"
+                              aria-label={`Precio de ${line.product.name} por lote`}
+                            >
+                              {line.pricing.parts.map((part, index) => (
+                                <li key={index}>
+                                  {part.quantity} × {formatMoney(part.unitPrice, { decimals: 2 })}
+                                  {part.discountPct ? ` (−${Math.round(part.discountPct)}%)` : ''}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <div className="text-xs tabular-nums text-muted-foreground">
+                              {line.pct > 0 ? (
+                                <span className="mr-1 line-through">
+                                  {formatMoney(line.product.listPrice, { decimals: 2 })}
+                                </span>
+                              ) : null}
+                              {formatMoney(line.unitPrice, { decimals: 2 })} c/u
+                            </div>
+                          )}
                           <div className="text-md font-semibold tabular-nums text-foreground">
                             {formatMoney(line.lineTotal, { decimals: 2 })}
                           </div>
@@ -729,7 +850,7 @@ export default function PosTerminalPage() {
               size="xl"
               className="mt-3 w-full justify-between"
               disabled={!cart.length}
-              onClick={() => setPayOpen(true)}
+              onClick={openPayment}
             >
               <span>Cobrar</span>
               <Kbd className="border-primary-foreground/30 bg-transparent text-primary-foreground">F4</Kbd>
@@ -753,7 +874,7 @@ export default function PosTerminalPage() {
             {formatMoney(total, { decimals: 2 })}
           </span>
         </button>
-        <Button size="lg" disabled={!cart.length} onClick={() => setPayOpen(true)}>
+        <Button size="lg" disabled={!cart.length} onClick={openPayment}>
           Cobrar
         </Button>
       </div>
@@ -768,6 +889,7 @@ export default function PosTerminalPage() {
         units={units}
         onConfirm={(payments) => createSale.mutate(payments)}
         pending={createSale.isPending}
+        refreshing={refreshingCart}
         sale={lastSale}
         onNewSale={newSale}
         onPrint={printTicket}

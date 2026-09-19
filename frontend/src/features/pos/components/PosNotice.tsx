@@ -4,6 +4,8 @@ import { cn } from '@/lib/cn';
 /** Avisos del mostrador: bloquean (recall) o advierten sin bloquear (sin stock, tope, no encontrado). */
 export type PosNoticeData =
   | { kind: 'recall'; productName: string }
+  /** Recall vigente sin stock verificable: no hay "vender igual" (la unidad puede ser del lote retirado). */
+  | { kind: 'recallNoStock'; productName: string; lots: string; available: number; branchName: string | null }
   | { kind: 'out'; productName: string; branchName: string | null }
   | { kind: 'limit'; productName: string; available: number }
   | { kind: 'notfound'; query: string };
@@ -17,7 +19,7 @@ export interface PosNoticeProps {
 
 /** Aviso en línea del mostrador, siempre a la vista del cajero y con salida clara. */
 export function PosNotice({ notice, onClose, onSellAnyway }: PosNoticeProps) {
-  const crit = notice.kind === 'recall';
+  const crit = notice.kind === 'recall' || notice.kind === 'recallNoStock';
   return (
     <div
       role="alert"
@@ -39,6 +41,19 @@ export function PosNotice({ notice, onClose, onSellAnyway }: PosNoticeProps) {
             </strong>
             <span className="block text-sm">
               Hay una alerta de seguridad alimentaria activa para ese lote. Sacalo de la bolsa y avisá al encargado.
+            </span>
+          </>
+        ) : notice.kind === 'recallNoStock' ? (
+          <>
+            <strong className="font-semibold">
+              {notice.productName} · Recall vigente ({notice.lots})
+              {notice.available > 0 ? '.' : ' · no se puede vender.'}
+            </strong>
+            <span className="block text-sm">
+              {notice.available > 0
+                ? `Solo ${notice.available === 1 ? 'se puede vender la unidad cargada' : `se pueden vender las ${notice.available} u. cargadas`} en esta sucursal. `
+                : `No queda stock cargado${notice.branchName ? ` en ${notice.branchName}` : ''}. `}
+              Una unidad sin lote registrado puede ser del lote retirado: separala y avisá al encargado.
             </span>
           </>
         ) : notice.kind === 'out' ? (

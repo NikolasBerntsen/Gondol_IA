@@ -189,6 +189,28 @@ export interface PosLotRef {
   unitPrice: number;
 }
 
+/**
+ * Tramo de precio: `quantity` unidades a `unitPrice` (con el descuento del lote ya aplicado), en el orden en el
+ * que se venden (liquidación primero, después FIFO/FEFO). Lo que pase de la suma de los tramos es faltante y se
+ * cobra a precio de lista.
+ */
+export interface PosPriceTier {
+  quantity: number;
+  discountPct: number | null;
+  unitPrice: number;
+}
+
+/**
+ * Recall publicado del producto. Los lotes cargados ya pasaron por el chequeo de recall y se venden; lo que no se
+ * puede vender son unidades sin lote registrado (faltante), porque podrían ser del lote retirado.
+ */
+export interface PosRecallRef {
+  announcementId: number;
+  title: string;
+  allLots: boolean;
+  lotNumbers: string[];
+}
+
 export interface PosProduct {
   productId: number;
   barcode: string | null;
@@ -200,7 +222,9 @@ export interface PosProduct {
   listPrice: number;
   sellableStock: number;
   nextLot: PosLotRef | null;
+  priceTiers: PosPriceTier[];
   hasRecalledStock: boolean;
+  activeRecall: PosRecallRef | null;
   hasExpiredStock: boolean;
   outOfStock: boolean;
   branchId: number;

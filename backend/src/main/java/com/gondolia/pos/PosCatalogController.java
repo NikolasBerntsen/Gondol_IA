@@ -1,5 +1,7 @@
 package com.gondolia.pos;
 
+import com.gondolia.common.error.BadRequestException;
+import com.gondolia.common.error.ErrorCodes;
 import com.gondolia.domain.tenant.TenantModule;
 import com.gondolia.modules.RequiresModule;
 import com.gondolia.pos.dto.PosCategoryDto;
@@ -30,6 +32,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class PosCatalogController {
 
+    /** Tope de productos por consulta del carrito (un ticket de almacén rara vez pasa de 50 líneas). */
+    static final int MAX_IDS = 200;
+
     private final PosCatalogService catalogService;
 
     @Operation(summary = "Buscar por código de barras exacto",
@@ -51,6 +56,20 @@ public class PosCatalogController {
                                       @Max(value = 20, message = "no puede superar 20") int limit) {
         Long tenantId = CurrentUser.tenantId();
         return catalogService.search(tenantId, catalogService.resolveBranch(branchId), q, categoryId, limit);
+    }
+
+    @Operation(summary = "Productos del carrito al día",
+            description = "Stock, tramos de precio por lote y banderas de recall de los productos indicados (hasta "
+                    + MAX_IDS + "). El mostrador los vuelve a pedir al abrir el cobro para mostrar el total que va a "
+                    + "cobrar el núcleo.")
+    @GetMapping
+    public List<PosProductDto> byIds(@RequestParam List<Long> ids, @RequestParam(required = false) Long branchId) {
+        if (ids.size() > MAX_IDS) {
+            throw new BadRequestException(ErrorCodes.VALIDATION_ERROR,
+                    "Se pueden consultar hasta " + MAX_IDS + " productos a la vez.");
+        }
+        Long tenantId = CurrentUser.tenantId();
+        return catalogService.byIds(tenantId, catalogService.resolveBranch(branchId), ids);
     }
 
     @Operation(summary = "Categorías con stock en la sucursal", description = "Filtros rápidos del mostrador.")
