@@ -63,10 +63,17 @@ export default function OwnerAnnouncementsPage() {
     },
   });
 
+  // Comercios distintos, no la suma por recall: un comercio alcanzado por dos recalls cuenta una vez (igual que en
+  // Métricas, SPEC §6.6). La consola no sabe qué comercios son, así que el total lo calcula el backend.
+  const reach = useQuery({
+    queryKey: announcementKeys.recallReach,
+    queryFn: ownerAnnouncementsApi.recallReach,
+  });
+
   const items = query.data?.content ?? [];
-  const recalls = items.filter((item) => item.kind === 'RECALL');
-  const affected = recalls.reduce((total, item) => total + item.affectedTenantsCount, 0);
   const recipients = items.reduce((total, item) => total + item.recipientsCount, 0);
+  const affected = reach.data?.affectedTenantsTotal ?? null;
+  const activeRecalls = reach.data?.activeRecalls ?? null;
 
   return (
     <>
@@ -103,10 +110,15 @@ export default function OwnerAnnouncementsPage() {
         <StatCard label="Avisos en esta página" value={items.length} icon={Megaphone} tone="primary" />
         <StatCard
           label="Clientes alcanzados por recalls"
-          value={formatNumber(affected)}
+          value={affected === null ? '—' : formatNumber(affected)}
           icon={Store}
           tone={affected ? 'crit' : 'neutral'}
-          hint={`${recalls.length} ${recalls.length === 1 ? 'recall' : 'recalls'}`}
+          loading={reach.isPending}
+          hint={
+            activeRecalls === null
+              ? 'No pudimos calcularlo'
+              : `Sin repetir · ${formatNumber(activeRecalls)} ${activeRecalls === 1 ? 'recall activo' : 'recalls activos'}`
+          }
         />
         <StatCard label="Destinatarios notificados" value={formatNumber(recipients)} icon={Users} tone="info" />
       </div>

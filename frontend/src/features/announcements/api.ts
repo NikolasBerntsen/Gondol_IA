@@ -1,5 +1,5 @@
 import { apiGet, apiPost } from '@/api/client';
-import type { PageResponse } from '@/api/types';
+import type { BranchScope, PageResponse } from '@/api/types';
 import type {
   AnnouncementDetail,
   AnnouncementListItem,
@@ -9,6 +9,7 @@ import type {
   RecallMatchFilter,
   RecallPreview,
   RecallPreviewBody,
+  RecallReach,
   ResolveRecallBody,
   TenantAnnouncement,
 } from './types';
@@ -22,6 +23,13 @@ export const ownerAnnouncementsApi = {
   archive: (id: number) => apiPost<AnnouncementDetail>(`/platform/announcements/${id}/archive`),
   preview: (body: RecallPreviewBody) =>
     apiPost<RecallPreview>('/platform/announcements/recall-preview', body),
+  /**
+   * Comercios **distintos** alcanzados por los recalls activos. Sale de las métricas de la plataforma (SPEC §6.6
+   * `recalls.affectedTenantsTotal`): sumar `affectedTenantsCount` de cada recall cuenta dos veces al comercio que
+   * coincide con más de uno, y la consola no conoce qué comercios son (§3.4.3) para deduplicarlos.
+   */
+  recallReach: () =>
+    apiGet<{ recalls: RecallReach }>('/platform/metrics').then((metrics) => metrics.recalls),
 };
 
 /** Bandeja de avisos del comercio. */
@@ -34,7 +42,13 @@ export const noticesApi = {
 
 /** Seguridad alimentaria: coincidencias de recall de las sucursales del alcance. */
 export const recallsApi = {
-  list: (status: RecallMatchFilter) => apiGet<RecallMatch[]>('/tenant/recall-matches', { status }),
+  /**
+   * Coincidencias del alcance elegido en el topbar o, con `branch`, de ese alcance (`'all'` = todas las sucursales
+   * accesibles, SPEC §3.5). La alerta de seguridad y los links a una coincidencia puntual usan `'all'`: una alerta de
+   * otra sucursal del usuario no puede depender de qué sucursal tiene elegida.
+   */
+  list: (status: RecallMatchFilter, branch?: BranchScope) =>
+    apiGet<RecallMatch[]>('/tenant/recall-matches', { status }, branch === undefined ? undefined : { branch }),
   acknowledge: (id: number) => apiPost<RecallMatch>(`/tenant/recall-matches/${id}/acknowledge`),
   resolve: (id: number, body: ResolveRecallBody) =>
     apiPost<RecallMatch>(`/tenant/recall-matches/${id}/resolve`, body),
@@ -49,4 +63,7 @@ export const announcementKeys = {
   noticesList: (page: number) => ['notices', 'list', page] as const,
   noticesUnread: ['notices', 'unread'] as const,
   recalls: ['recall-matches'] as const,
+  /** Coincidencias de todas las sucursales accesibles, sin importar la elegida (sin segmento de sucursal). */
+  recallsAllBranches: ['recall-matches', 'all-branches'] as const,
+  recallReach: ['owner-announcements', 'recall-reach'] as const,
 };

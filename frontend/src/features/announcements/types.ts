@@ -91,6 +91,12 @@ export interface RecallPreview {
   affectedUnits: number;
 }
 
+/** `recalls` de `GET /api/platform/metrics` (SPEC §6.6): recalls publicados y comercios distintos alcanzados. */
+export interface RecallReach {
+  activeRecalls: number;
+  affectedTenantsTotal: number;
+}
+
 // ---------------------------------------------------------------------------
 // Comercio
 // ---------------------------------------------------------------------------

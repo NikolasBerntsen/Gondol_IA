@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -8,6 +8,7 @@ import { useAuth } from '@/auth/AuthContext';
 import { useBranch, useBranchQueryKey } from '@/branches/BranchContext';
 import { BarcodeDigits, ExpiryChip, StatusPill } from '@/components/gondola';
 import {
+  Alert,
   Badge,
   Button,
   Card,
@@ -43,10 +44,14 @@ const RESOLUTION_OPTIONS: ReadonlyArray<{ value: RecallResolution; label: string
 /**
  * Seguridad alimentaria (SPEC §6.7): los lotes en cuarentena por un recall, por sucursal, con "Entendido" y el
  * retiro del stock. Solo el administrador y el empleado pueden resolver (matriz §3.3).
+ * <p>
+ * El listado sigue la sucursal del topbar, pero una alerta puede ser de otra sucursal del usuario: con `?match=<id>`
+ * (el botón del diálogo de seguridad) se cambia a la sucursal de esa coincidencia, y con una sucursal elegida se
+ * avisa si quedan alertas sin resolver en las otras (el link de la campana no dice de qué sucursal es).
  */
 export default function RecallsPage() {
   const { hasRole } = useAuth();
-  const { isAll, scopeLabel } = useBranch();
+  const { isAll, scopeLabel, selectedBranchId, setBranch, canSelectAll } = useBranch();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [filter, setFilter] = useState<RecallMatchFilter>('ACTIVE');
@@ -61,12 +66,46 @@ export default function RecallsPage() {
     queryFn: () => recallsApi.list(filter),
   });
 
-  // Si llegamos desde la alerta con ?match=…, mostramos el filtro donde esa fila existe.
+  // Todas las sucursales accesibles (`X-Branch-Id: all`), sin importar la elegida: ubica la coincidencia del link y
+  // cuenta las pendientes de las otras sucursales. Con "Todas" elegido el listado ya las incluye.
+  const acrossBranches = useQuery({
+    queryKey: announcementKeys.recallsAllBranches,
+    queryFn: () => recallsApi.list('ALL', 'all'),
+    enabled: highlightedId !== null || (!isAll && canSelectAll),
+  });
+
+  // Si llegamos desde la alerta con ?match=…, vamos a la sucursal y al filtro donde esa fila existe (una sola vez
+  // por link: si después el usuario cambia de sucursal, no lo volvemos a mover).
+  const located = useRef<number | null>(null);
   useEffect(() => {
-    if (highlightedId && filter === 'ACTIVE' && query.data && !query.data.some((m) => m.id === highlightedId)) {
-      setFilter('ALL');
+    if (highlightedId === null || located.current === highlightedId || !acrossBranches.data) return;
+    const target = acrossBranches.data.find((match) => match.id === highlightedId);
+    if (!target) {
+      // Puede ser una alerta recién llegada que el caché todavía no tiene: esperamos el refetch.
+      if (!acrossBranches.isFetching) located.current = highlightedId;
+      return;
     }
-  }, [filter, highlightedId, query.data]);
+    located.current = highlightedId;
+    if (target.status === 'RESOLVED') setFilter('ALL');
+    if (!isAll && selectedBranchId !== target.branchId) {
+      setBranch(target.branchId);
+      toast.info(`Te mostramos ${target.branchName}, la sucursal de esta alerta.`);
+    }
+  }, [acrossBranches.data, acrossBranches.isFetching, highlightedId, isAll, selectedBranchId, setBranch]);
+
+  // Alertas sin resolver de las otras sucursales accesibles (solo con una sucursal elegida).
+  const pendingElsewhere = useMemo(() => {
+    if (isAll || !acrossBranches.data) return [];
+    const byBranch = new Map<number, { branchId: number; branchName: string; count: number }>();
+    for (const match of acrossBranches.data) {
+      if (match.status === 'RESOLVED' || match.branchId === selectedBranchId) continue;
+      const entry = byBranch.get(match.branchId) ?? { branchId: match.branchId, branchName: match.branchName, count: 0 };
+      entry.count += 1;
+      byBranch.set(match.branchId, entry);
+    }
+    return [...byBranch.values()].sort((a, b) => a.branchName.localeCompare(b.branchName, 'es'));
+  }, [acrossBranches.data, isAll, selectedBranchId]);
+  const pendingElsewhereCount = pendingElsewhere.reduce((total, entry) => total + entry.count, 0);
 
   const acknowledge = useMutation({
     mutationFn: (id: number) => recallsApi.acknowledge(id),
@@ -127,6 +166,35 @@ export default function RecallsPage() {
         />
       </PageHeader>
 
+      {pendingElsewhere.length > 0 ? (
+        <Alert
+          tone="crit"
+          className="mb-4"
+          title={
+            pendingElsewhere.length === 1
+              ? `${pendingElsewhereCount === 1 ? 'Hay 1 alerta' : `Hay ${pendingElsewhereCount} alertas`} sin resolver en ${pendingElsewhere[0].branchName}`
+              : `Hay ${pendingElsewhereCount} alertas sin resolver en otras sucursales`
+          }
+          action={
+            pendingElsewhere.length === 1 ? (
+              <Button size="sm" variant="outline" onClick={() => setBranch(pendingElsewhere[0].branchId)}>
+                Ver {pendingElsewhere[0].branchName}
+              </Button>
+            ) : (
+              <Button size="sm" variant="outline" onClick={() => setBranch('all')}>
+                Ver todas
+              </Button>
+            )
+          }
+        >
+          {pendingElsewhere.length === 1
+            ? `Estás viendo ${scopeLabel}. Cambiá de sucursal para ver el lote y retirarlo del stock.`
+            : `Estás viendo ${scopeLabel}. ${pendingElsewhere
+                .map((entry) => `${entry.branchName}: ${entry.count}`)
+                .join(' · ')}.`}
+        </Alert>
+      ) : null}
+
       {filter !== 'RESOLVED' && matches.length > 0 ? (
         <div className="mb-4 grid gap-4 sm:grid-cols-3">
           <StatCard label="Sin confirmar" value={stats.open} icon={ShieldAlert} tone={stats.open ? 'crit' : 'ok'} />
@@ -156,7 +224,13 @@ export default function RecallsPage() {
       ) : matches.length === 0 ? (
         <EmptyState
           icon={ShieldCheck}
-          title={filter === 'RESOLVED' ? 'Todavía no resolviste ningún recall' : 'No tenés recalls pendientes'}
+          title={
+            filter === 'RESOLVED'
+              ? 'Todavía no resolviste ningún recall'
+              : pendingElsewhere.length > 0
+                ? `No hay recalls pendientes en ${scopeLabel}`
+                : 'No tenés recalls pendientes'
+          }
           description={
             filter === 'RESOLVED'
               ? 'Acá van a quedar los retiros que ya hiciste, con quién los resolvió y cómo.'
@@ -207,8 +281,13 @@ function MatchCard({
   onResolve: () => void;
 }) {
   const resolved = match.status === 'RESOLVED';
+  const cardRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (highlighted) cardRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [highlighted]);
   return (
     <Card
+      ref={cardRef}
       padding="none"
       className={cn(
         'overflow-hidden',
@@ -255,11 +334,20 @@ function MatchCard({
         </div>
 
         {resolved ? (
-          <p className="text-sm text-muted-foreground">
-            {match.resolution ? RECALL_RESOLUTION_LABELS[match.resolution] : 'Resuelto'} por{' '}
-            {match.resolvedByName ?? 'un usuario'} el {match.resolvedAt ? formatDateTime(match.resolvedAt) : '—'}
-            {match.resolutionNote ? ` · ${match.resolutionNote}` : ''}
-          </p>
+          <div className="space-y-0.5 border-t border-border pt-3 text-sm text-muted-foreground">
+            {/* Quién lo reconoció, quién lo resolvió y la nota (datos-demo §5). Si se resolvió sin un "Entendido"
+                previo, el backend registra la confirmación en el mismo instante y por el mismo usuario: no se repite. */}
+            {match.acknowledgedAt && match.acknowledgedAt !== match.resolvedAt ? (
+              <p>
+                Confirmado por {match.acknowledgedByName ?? 'un usuario'} el {formatDateTime(match.acknowledgedAt)}
+              </p>
+            ) : null}
+            <p>
+              {match.resolution ? RECALL_RESOLUTION_LABELS[match.resolution] : 'Resuelto'} por{' '}
+              {match.resolvedByName ?? 'un usuario'} el {match.resolvedAt ? formatDateTime(match.resolvedAt) : '—'}
+              {match.resolutionNote ? ` · ${match.resolutionNote}` : ''}
+            </p>
+          </div>
         ) : (
           <div className="flex flex-col gap-2 border-t border-border pt-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
