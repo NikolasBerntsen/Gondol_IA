@@ -2,6 +2,7 @@ import { Ban } from 'lucide-react';
 import { StatusPill } from '@/components/gondola';
 import { cn } from '@/lib/cn';
 import { formatMoney } from '@/lib/format';
+import { recallLotsLabel } from '../recall';
 import type { PosProduct } from '../types';
 
 export interface PosProductTileProps {
@@ -13,16 +14,24 @@ export interface PosProductTileProps {
 
 /**
  * Mosaico del mostrador: nombre, marca, precio con el descuento del lote y estado.
- * Los productos en cuarentena por recall se ven bloqueados y no se pueden vender (SPEC §15.3).
+ * Los productos en cuarentena por recall se ven bloqueados y no se pueden vender (SPEC §15.3). Con un recall
+ * vigente y sin stock cargado también: no hay lote que verificar, así que no se ofrece "vender igual".
  */
 export function PosProductTile({ product, inCart, onAdd }: PosProductTileProps) {
-  const blocked = product.hasRecalledStock;
+  const recall = product.activeRecall;
+  const blocked = product.hasRecalledStock || (!!recall && product.outOfStock);
   const out = product.outOfStock;
   const pct = product.nextLot?.discountPct ?? 0;
   const unitPrice = product.nextLot?.unitPrice ?? product.listPrice;
   const discounted = pct > 0;
 
-  const stateLabel = blocked ? ', bloqueado por recall' : out ? ', sin stock' : '';
+  const stateLabel = blocked
+    ? ', bloqueado por recall'
+    : out
+      ? ', sin stock'
+      : recall
+        ? `, recall vigente del ${recallLotsLabel(recall)}`
+        : '';
 
   return (
     <button

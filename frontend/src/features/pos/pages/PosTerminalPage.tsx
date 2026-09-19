@@ -38,6 +38,8 @@ import { PaymentSheet } from '../components/PaymentSheet';
 import { PosNotice, type PosNoticeData } from '../components/PosNotice';
 import { PosProductTile } from '../components/PosProductTile';
 import { subtractMoney, sumMoney } from '../money';
+import { priceLine } from '../pricing';
+import { recallLotsLabel } from '../recall';
 import type {
   CashMovementType,
   PaymentMethod,
@@ -166,17 +168,20 @@ export default function PosTerminalPage() {
   });
 
   // ----------------------------------------------------------------- carrito
+  // Cada línea se cotiza lote por lote (`priceTiers`), igual que el núcleo: si la cantidad pasa del lote en
+  // liquidación, el resto va al precio del lote siguiente (SPEC §4.2).
   const lines = useMemo(
     () =>
       cart.map((line) => {
-        const unitPrice = line.product.nextLot?.unitPrice ?? line.product.listPrice;
-        const pct = line.product.nextLot?.discountPct ?? 0;
+        const pricing = priceLine(line.product, line.quantity);
+        const first = pricing.parts[0];
         return {
           ...line,
-          unitPrice,
-          pct,
-          listTotal: Math.round(line.product.listPrice * line.quantity * 100) / 100,
-          lineTotal: Math.round(unitPrice * line.quantity * 100) / 100,
+          pricing,
+          unitPrice: first?.unitPrice ?? line.product.listPrice,
+          pct: pricing.discountedUnits > 0 ? (first?.discountPct ?? 0) : 0,
+          listTotal: pricing.listTotal,
+          lineTotal: pricing.lineTotal,
         };
       }),
     [cart],
@@ -197,6 +202,19 @@ export default function PosTerminalPage() {
       }
       const existing = cart.find((line) => line.product.productId === product.productId);
       const next = (existing?.quantity ?? 0) + 1;
+
+      // Recall vigente: solo se venden unidades de lotes cargados (ya verificados). Sin "vender igual".
+      if (product.activeRecall && next > product.sellableStock) {
+        setPendingProduct(null);
+        setNotice({
+          kind: 'recallNoStock',
+          productName: product.name,
+          lots: recallLotsLabel(product.activeRecall),
+          available: Math.max(0, product.sellableStock),
+          branchName: product.branchName,
+        });
+        return;
+      }
 
       if (!options?.force) {
         if (product.outOfStock) {
@@ -283,14 +301,78 @@ export default function PosTerminalPage() {
       if (details.length) {
         // El carrito ya tiene la línea: "vender igual" solo habilita el faltante, no agrega otra unidad.
         const first = details[0];
+        const recall = cart.find((line) => line.product.productId === first.productId)?.product.activeRecall;
         setPayOpen(false);
         setPendingProduct(null);
-        setNotice({ kind: 'limit', productName: first.productName, available: first.available });
+        setNotice(
+          recall
+            ? {
+                kind: 'recallNoStock',
+                productName: first.productName,
+                lots: recallLotsLabel(recall),
+                available: first.available,
+                branchName: session?.branchName ?? null,
+              }
+            : { kind: 'limit', productName: first.productName, available: first.available },
+        );
         return;
+      }
+      if (isApiError(error, 'PRODUCT_RECALLED')) {
+        // Se publicó un recall entre el escaneo y el cobro: volvemos al carrito para que el cajero lo saque.
+        setPayOpen(false);
       }
       toast.error(getErrorMessage(error));
     },
   });
+
+  // Al abrir el cobro se vuelve a pedir el carrito al servidor: otra caja pudo vender el lote en liquidación
+  // (cambia el precio de algunas unidades) o pudo publicarse un recall. La hoja no deja confirmar hasta tenerlo.
+  const refreshCart = useMutation({
+    mutationFn: (snapshot: CartLine[]) =>
+      posApi.byIds(
+        snapshot.map((line) => line.product.productId),
+        branchId,
+      ),
+    meta: { errorToast: false },
+    onSuccess: (fresh, snapshot) => {
+      const byId = new Map(fresh.map((product) => [product.productId, product]));
+      setCart((prev) =>
+        prev.map((line) => {
+          const product = byId.get(line.product.productId);
+          return product ? { ...line, product } : line;
+        }),
+      );
+      for (const line of snapshot) {
+        const product = byId.get(line.product.productId);
+        if (!product) continue;
+        if (product.hasRecalledStock) {
+          setPayOpen(false);
+          setSelected(product.productId);
+          setNotice({ kind: 'recall', productName: product.name });
+          return;
+        }
+        if (product.activeRecall && line.quantity > product.sellableStock) {
+          setPayOpen(false);
+          setSelected(product.productId);
+          setNotice({
+            kind: 'recallNoStock',
+            productName: product.name,
+            lots: recallLotsLabel(product.activeRecall),
+            available: Math.max(0, product.sellableStock),
+            branchName: product.branchName,
+          });
+          return;
+        }
+      }
+    },
+  });
+
+  const { mutate: requestFreshCart, isPending: refreshingCart } = refreshCart;
+  const openPayment = useCallback(() => {
+    if (!cart.length) return;
+    setPayOpen(true);
+    requestFreshCart(cart);
+  }, [cart, requestFreshCart]);
 
   const newSale = useCallback(() => {
     setPayOpen(false);
@@ -319,7 +401,7 @@ export default function PosTerminalPage() {
         }
       } else if (event.key === 'F4') {
         event.preventDefault();
-        if (cart.length && !payOpen) setPayOpen(true);
+        if (cart.length && !payOpen) openPayment();
       } else if (event.key === 'F8') {
         event.preventDefault();
         if (payOpen || !cart.length) return;
@@ -337,7 +419,7 @@ export default function PosTerminalPage() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [cart, payOpen, selected, query, cashMode, closeOpen, scannerOpen, hasSession, removeLine]);
+  }, [cart, payOpen, selected, query, cashMode, closeOpen, scannerOpen, hasSession, removeLine, openPayment]);
 
   useEffect(() => {
     if (hasSession) searchRef.current?.focus({ preventScroll: true });

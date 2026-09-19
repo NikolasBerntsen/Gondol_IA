@@ -30,6 +30,20 @@ class PosMoneyTest {
     }
 
     @Test
+    void capsTheDiscountAtOneHundredPercentLikeTheCore() {
+        assertThat(PosMoney.withDiscount(new BigDecimal("2100"), new BigDecimal("150"))).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void formatsAmountsLikeTheInterface() {
+        assertThat(PosMoney.format(new BigDecimal("950"))).isEqualTo("$ 950,00");
+        assertThat(PosMoney.format(new BigDecimal("1234.5"))).isEqualTo("$ 1.234,50");
+        assertThat(PosMoney.format(new BigDecimal("1234567.891"))).isEqualTo("$ 1.234.567,89");
+        assertThat(PosMoney.format(new BigDecimal("-350"))).isEqualTo("-$ 350,00");
+        assertThat(PosMoney.format(null)).isEqualTo("$ 0,00");
+    }
+
+    @Test
     void averagesUnitPriceOfALine() {
         assertThat(PosMoney.perUnit(new BigDecimal("27720"), 16)).isEqualByComparingTo("1732.50");
         assertThat(PosMoney.perUnit(new BigDecimal("100"), 0)).isEqualByComparingTo("0.00");

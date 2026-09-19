@@ -134,6 +134,8 @@ public class PosSaleService {
 
         Map<Long, PosStockQueries.BranchStock> stock = catalogService.stockOf(tenantId, branchId, quantities.keySet());
         assertNotRecalled(quantities.keySet(), byId, stock);
+        assertNoUnverifiedUnitsUnderRecall(quantities, byId, stock,
+                catalogService.activeRecallsOf(tenantId, quantities.keySet()));
         if (!request.allowShortage()) {
             assertEnoughStock(quantities, byId, stock);
         }
@@ -231,7 +233,9 @@ public class PosSaleService {
         PosSession session = sessionRepository.findByIdAndTenantId(sale.getSessionId(), user.tenantId())
                 .orElseThrow(() -> new NotFoundException(NOT_FOUND));
         if (!PosAccess.isAdmin(user) && !(PosAccess.owns(user, session) && session.isOpen())) {
-            throw new ForbiddenException(ErrorCodes.FORBIDDEN, PosAccess.ONLY_OWN_SALE);
+            throw new ForbiddenException(ErrorCodes.FORBIDDEN, PosAccess.owns(user, session)
+                    ? PosAccess.ONLY_OPEN_SESSION_SALE
+                    : PosAccess.ONLY_OWN_SALE);
         }
 
         stockService.voidSale(new VoidSaleCommand(user.tenantId(), sale.getBatchRef(), user.id(),
@@ -275,18 +279,7 @@ public class PosSaleService {
 
         List<PosTicketDto.TicketItem> ticketItems = new ArrayList<>(items.size());
         for (PosSaleItem item : items) {
-            List<PosSaleLotDto> lots = readLots(item);
-            PosSaleLotDto discounted = lots.stream()
-                    .filter(lot -> lot.discountPct() != null && lot.discountPct().signum() > 0)
-                    .findFirst().orElse(lots.isEmpty() ? null : lots.getFirst());
-            BigDecimal unitPrice = PosMoney.perUnit(item.getLineTotal(), item.getQuantity());
-            boolean discountedLine = PosMoney.orZero(item.getDiscountAmount()).signum() > 0;
-            ticketItems.add(new PosTicketDto.TicketItem(item.getProductName(), item.getQuantity(), unitPrice,
-                    discountedLine ? PosMoney.orZero(item.getListUnitPrice()) : null,
-                    discounted == null ? null : discounted.lotNumber(),
-                    discounted == null ? null : discounted.expiryDate(),
-                    discounted == null ? null : discounted.discountPct(),
-                    PosMoney.orZero(item.getLineTotal())));
+            ticketItems.addAll(ticketLines(item));
         }
         List<PosTicketDto.TicketPayment> ticketPayments = payments.stream()
                 .map(payment -> new PosTicketDto.TicketPayment(payment.getMethod(),
@@ -429,6 +422,43 @@ public class PosSaleService {
         }
     }
 
+    /**
+     * Con un recall vigente del producto solo se venden unidades de lotes cargados: esos lotes ya pasaron por el
+     * chequeo de recall. Una unidad sin stock registrado (faltante) puede ser del lote retirado y no hay forma de
+     * verificarlo, así que se rechaza aunque la venta traiga {@code allowShortage} (SPEC §6.7, §15.2).
+     */
+    private void assertNoUnverifiedUnitsUnderRecall(Map<Long, Integer> quantities, Map<Long, Product> products,
+                                                    Map<Long, PosStockQueries.BranchStock> stock,
+                                                    Map<Long, PosStockQueries.ActiveRecall> recalls) {
+        for (Map.Entry<Long, Integer> entry : quantities.entrySet()) {
+            PosStockQueries.ActiveRecall recall = recalls.get(entry.getKey());
+            if (recall == null) {
+                continue;
+            }
+            int available = stock.getOrDefault(entry.getKey(), PosStockQueries.BranchStock.EMPTY).sellable();
+            if (entry.getValue() <= available) {
+                continue;
+            }
+            String name = products.get(entry.getKey()).getName();
+            String lots = recallLots(recall);
+            String message = available <= 0
+                    ? name + " tiene un recall vigente (" + lots + ") y no hay stock cargado en esta sucursal: no se "
+                            + "puede vender sin verificar el lote. Separalo y avisá al encargado."
+                    : name + " tiene un recall vigente (" + lots + "): "
+                            + (available == 1 ? "solo se puede vender la unidad cargada"
+                                    : "solo se pueden vender las " + available + " u. cargadas")
+                            + " en esta sucursal, no unidades sin lote registrado.";
+            throw new ConflictException(PosErrorCodes.PRODUCT_RECALLED, message);
+        }
+    }
+
+    private static String recallLots(PosStockQueries.ActiveRecall recall) {
+        if (recall.allLots() || recall.lotNumbers().isEmpty()) {
+            return "todos los lotes";
+        }
+        return (recall.lotNumbers().size() == 1 ? "lote " : "lotes ") + String.join(", ", recall.lotNumbers());
+    }
+
     private void assertEnoughStock(Map<Long, Integer> quantities, Map<Long, Product> products,
                                    Map<Long, PosStockQueries.BranchStock> stock) {
         List<PosInsufficientStockException.Detail> details = new ArrayList<>();
@@ -462,8 +492,7 @@ public class PosSaleService {
         paid = PosMoney.scale(paid);
         if (paid.compareTo(total) < 0) {
             throw new BadRequestException(ErrorCodes.PAYMENT_INSUFFICIENT,
-                    "Los pagos no cubren el total: faltan $ " + PosMoney.scale(total.subtract(paid)).toPlainString()
-                            + ".");
+                    "Los pagos no cubren el total: faltan " + PosMoney.format(total.subtract(paid)) + ".");
         }
         BigDecimal excess = PosMoney.scale(paid.subtract(total));
         if (excess.compareTo(cash) > 0) {
@@ -535,6 +564,68 @@ public class PosSaleService {
         }
         item.setLots(array);
         return item;
+    }
+
+    /**
+     * Renglones del ticket de un ítem. Si todas las unidades salieron al mismo precio es un solo renglón; si la
+     * cantidad cruzó de un lote en liquidación a otro sin descuento (o hubo faltante a precio de lista), va un
+     * renglón por tramo de precio, en el orden en el que se consumieron: {@code 15 x $ 2.850} con el lote y el
+     * descuento, y {@code 1 x $ 3.800}. Así cada renglón muestra el precio que se cobró de verdad (SPEC §4.2).
+     */
+    private List<PosTicketDto.TicketItem> ticketLines(PosSaleItem item) {
+        List<PosSaleLotDto> lots = readLots(item);
+        BigDecimal listPrice = PosMoney.orZero(item.getListUnitPrice());
+        List<PriceGroup> groups = new ArrayList<>();
+        int fromLots = 0;
+        for (PosSaleLotDto lot : lots) {
+            fromLots += lot.quantity();
+            BigDecimal pct = lot.discountPct() != null && lot.discountPct().signum() > 0 ? lot.discountPct() : null;
+            addToGroup(groups, new PriceGroup(lot.quantity(), PosMoney.orZero(lot.unitPrice()), pct, lot));
+        }
+        int shortage = item.getQuantity() - fromLots;
+        if (shortage > 0) {
+            addToGroup(groups, new PriceGroup(shortage, listPrice, null, null));
+        }
+
+        if (groups.size() <= 1) {
+            PosSaleLotDto discounted = lots.stream()
+                    .filter(lot -> lot.discountPct() != null && lot.discountPct().signum() > 0)
+                    .findFirst().orElse(lots.isEmpty() ? null : lots.getFirst());
+            boolean discountedLine = PosMoney.orZero(item.getDiscountAmount()).signum() > 0;
+            return List.of(new PosTicketDto.TicketItem(item.getProductName(), item.getQuantity(),
+                    PosMoney.perUnit(item.getLineTotal(), item.getQuantity()),
+                    discountedLine ? listPrice : null,
+                    discounted == null ? null : discounted.lotNumber(),
+                    discounted == null ? null : discounted.expiryDate(),
+                    discounted == null ? null : discounted.discountPct(),
+                    PosMoney.orZero(item.getLineTotal())));
+        }
+        List<PosTicketDto.TicketItem> lines = new ArrayList<>(groups.size());
+        for (PriceGroup group : groups) {
+            boolean discounted = group.discountPct() != null;
+            lines.add(new PosTicketDto.TicketItem(item.getProductName(), group.quantity(), group.unitPrice(),
+                    discounted ? listPrice : null,
+                    discounted && group.firstLot() != null ? group.firstLot().lotNumber() : null,
+                    discounted && group.firstLot() != null ? group.firstLot().expiryDate() : null,
+                    group.discountPct(),
+                    PosMoney.scale(group.unitPrice().multiply(BigDecimal.valueOf(group.quantity())))));
+        }
+        return lines;
+    }
+
+    /** Suma al último tramo si tiene el mismo precio y descuento; si no, abre uno nuevo. */
+    private static void addToGroup(List<PriceGroup> groups, PriceGroup next) {
+        if (!groups.isEmpty()) {
+            PriceGroup last = groups.getLast();
+            boolean samePct = last.discountPct() == null ? next.discountPct() == null
+                    : next.discountPct() != null && last.discountPct().compareTo(next.discountPct()) == 0;
+            if (samePct && last.unitPrice().compareTo(next.unitPrice()) == 0) {
+                groups.set(groups.size() - 1, new PriceGroup(last.quantity() + next.quantity(), last.unitPrice(),
+                        last.discountPct(), last.firstLot() != null ? last.firstLot() : next.firstLot()));
+                return;
+            }
+        }
+        groups.add(next);
     }
 
     private List<PosSaleLotDto> readLots(PosSaleItem item) {
@@ -614,5 +705,9 @@ public class PosSaleService {
     }
 
     private record Payments(List<PosSaleRequest.Payment> lines, BigDecimal paidTotal, BigDecimal change) {
+    }
+
+    /** Tramo de unidades de una línea que se cobraron al mismo precio (para los renglones del ticket). */
+    private record PriceGroup(int quantity, BigDecimal unitPrice, BigDecimal discountPct, PosSaleLotDto firstLot) {
     }
 }

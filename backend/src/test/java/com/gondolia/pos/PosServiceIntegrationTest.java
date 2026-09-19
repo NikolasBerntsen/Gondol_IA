@@ -26,6 +26,7 @@ import com.gondolia.pos.dto.PosProductDto;
 import com.gondolia.pos.dto.PosSaleDto;
 import com.gondolia.pos.dto.PosSaleRequest;
 import com.gondolia.pos.dto.PosSessionReportDto;
+import com.gondolia.pos.dto.PosTicketDto;
 import com.gondolia.pos.dto.VoidSaleRequest;
 import com.gondolia.security.AuthUser;
 import com.gondolia.security.BranchAccessService;
@@ -200,6 +201,12 @@ class PosServiceIntegrationTest extends PostgresIntegrationTest {
                 List.of(new PosSaleRequest.Item(leche, 1)),
                 List.of(new PosSaleRequest.Payment(PaymentMethod.CASH, new BigDecimal("100"), null)),
                 null, null, false)), 400, "PAYMENT_INSUFFICIENT");
+        // El mostrador muestra el mensaje tal cual: el importe va en formato de pesos, como el resto de la interfaz.
+        assertThatThrownBy(() -> saleService.create(cashier, new PosSaleRequest(session.id(),
+                List.of(new PosSaleRequest.Item(leche, 1)),
+                List.of(new PosSaleRequest.Payment(PaymentMethod.CASH, new BigDecimal("100"), null)),
+                null, null, false)))
+                .hasMessage("Los pagos no cubren el total: faltan $ 1.300,00.");
 
         assertApiError(() -> saleService.create(cashier, new PosSaleRequest(session.id(),
                 List.of(new PosSaleRequest.Item(leche, 1)),
@@ -211,6 +218,109 @@ class PosServiceIntegrationTest extends PostgresIntegrationTest {
                 List.of(new PosSaleRequest.Item(leche, 1)),
                 List.of(new PosSaleRequest.Payment(PaymentMethod.CASH, new BigDecimal("1400"), null)),
                 null, null, false)), 409, "PRODUCT_RECALLED");
+    }
+
+    @Test
+    void cartPriceTiersMatchWhatTheCoreChargesAcrossLots() {
+        as(cashier, centro);
+        // Yogur: 4 u. del lote en liquidación (-20 %, $ 1.680) y 6 u. a precio de lista ($ 2.100), en ese orden.
+        PosProductDto product = catalogService.search(tenantId, centro, "yogur", null, 20).getFirst();
+        assertThat(product.priceTiers()).hasSize(2);
+        assertThat(product.priceTiers().getFirst()).satisfies(tier -> {
+            assertThat(tier.quantity()).isEqualTo(4);
+            assertThat(tier.discountPct()).isEqualByComparingTo("20");
+            assertThat(tier.unitPrice()).isEqualByComparingTo("1680.00");
+        });
+        assertThat(product.priceTiers().get(1)).satisfies(tier -> {
+            assertThat(tier.quantity()).isEqualTo(6);
+            assertThat(tier.discountPct()).isNull();
+            assertThat(tier.unitPrice()).isEqualByComparingTo("2100.00");
+        });
+
+        // 5 u. cruzan de lote: 4 x 1680 + 1 x 2100 = 8820. Pagar exactamente eso con débito tiene que alcanzar.
+        PosSessionReportDto session = sessionService.open(cashier,
+                new OpenSessionRequest(registerCentro, BigDecimal.ZERO));
+        PosSaleDto sale = saleService.create(cashier, new PosSaleRequest(session.id(),
+                List.of(new PosSaleRequest.Item(yogur, 5)),
+                List.of(new PosSaleRequest.Payment(PaymentMethod.DEBIT, new BigDecimal("8820"), null)),
+                null, null, false));
+        assertThat(sale.total()).isEqualByComparingTo("8820.00");
+        assertThat(sale.changeAmount()).isEqualByComparingTo("0.00");
+
+        // El ticket muestra un renglón por precio cobrado, con el lote y el descuento solo donde corresponde.
+        PosTicketDto ticket = saleService.ticket(cashier, sale.id());
+        assertThat(ticket.items()).hasSize(2);
+        assertThat(ticket.items().getFirst()).satisfies(line -> {
+            assertThat(line.quantity()).isEqualTo(4);
+            assertThat(line.unitPrice()).isEqualByComparingTo("1680.00");
+            assertThat(line.listPrice()).isEqualByComparingTo("2100.00");
+            assertThat(line.lotNumber()).isEqualTo("YV0925");
+            assertThat(line.discountPct()).isEqualByComparingTo("20");
+            assertThat(line.lineTotal()).isEqualByComparingTo("6720.00");
+        });
+        assertThat(ticket.items().get(1)).satisfies(line -> {
+            assertThat(line.quantity()).isEqualTo(1);
+            assertThat(line.unitPrice()).isEqualByComparingTo("2100.00");
+            assertThat(line.listPrice()).isNull();
+            assertThat(line.discountPct()).isNull();
+            assertThat(line.lineTotal()).isEqualByComparingTo("2100.00");
+        });
+        assertThat(ticket.total()).isEqualByComparingTo("8820.00");
+
+        // Al abrir el cobro el mostrador vuelve a pedir el carrito: el lote en liquidación ya se agotó.
+        PosProductDto fresh = catalogService.byIds(tenantId, centro, List.of(yogur)).getFirst();
+        assertThat(fresh.sellableStock()).isEqualTo(5);
+        assertThat(fresh.priceTiers()).singleElement().satisfies(tier -> {
+            assertThat(tier.quantity()).isEqualTo(5);
+            assertThat(tier.unitPrice()).isEqualByComparingTo("2100.00");
+        });
+    }
+
+    @Test
+    void productUnderAnActiveRecallCannotBeSoldWithoutAVerifiedLot() {
+        String code = data.barcode();
+        long sopa = data.product(tenantId, code, "Sopa de tomate La Huerta 340 g", "900", "1500");
+        // El lote retirado ya se resolvió: quedó en 0 y RECALLED, pero el recall sigue publicado.
+        data.lot(tenantId, centro, sopa, "L2409A", "L2409A", LocalDate.now().plusYears(1), 0, "RECALLED", 30);
+        long recall = data.recall(code, false, null, null, "PUBLISHED", "L2409A");
+
+        as(cashier, centro);
+        PosProductDto product = catalogService.lookup(tenantId, centro, code);
+        assertThat(product.hasRecalledStock()).isFalse();
+        assertThat(product.outOfStock()).isTrue();
+        assertThat(product.activeRecall()).isNotNull();
+        assertThat(product.activeRecall().announcementId()).isEqualTo(recall);
+        assertThat(product.activeRecall().allLots()).isFalse();
+        assertThat(product.activeRecall().lotNumbers()).containsExactly("L2409A");
+
+        PosSessionReportDto session = sessionService.open(cashier,
+                new OpenSessionRequest(registerCentro, BigDecimal.ZERO));
+        // "Vender igual" no corre: una lata sin lote registrado puede ser del lote retirado.
+        assertApiError(() -> saleService.create(cashier, new PosSaleRequest(session.id(),
+                List.of(new PosSaleRequest.Item(sopa, 1)),
+                List.of(new PosSaleRequest.Payment(PaymentMethod.CASH, new BigDecimal("1500"), null)),
+                null, null, true)), 409, "PRODUCT_RECALLED");
+
+        // Otro lote cargado (ya pasó el chequeo de recall) se vende, pero no por encima de lo cargado.
+        data.lot(tenantId, centro, sopa, "L2501C", "L2501C", LocalDate.now().plusYears(1), 2, "ACTIVE", 1);
+        assertApiError(() -> saleService.create(cashier, new PosSaleRequest(session.id(),
+                List.of(new PosSaleRequest.Item(sopa, 3)),
+                List.of(new PosSaleRequest.Payment(PaymentMethod.CASH, new BigDecimal("4500"), null)),
+                null, null, true)), 409, "PRODUCT_RECALLED");
+        PosSaleDto sale = saleService.create(cashier, new PosSaleRequest(session.id(),
+                List.of(new PosSaleRequest.Item(sopa, 2)),
+                List.of(new PosSaleRequest.Payment(PaymentMethod.CASH, new BigDecimal("3000"), null)),
+                null, null, false));
+        assertThat(sale.total()).isEqualByComparingTo("3000.00");
+
+        // Archivado el recall, el faltante vuelve a estar permitido.
+        jdbc.update("update announcements set status = 'ARCHIVED' where id = ?", recall);
+        assertThat(catalogService.lookup(tenantId, centro, code).activeRecall()).isNull();
+        PosSaleDto shortage = saleService.create(cashier, new PosSaleRequest(session.id(),
+                List.of(new PosSaleRequest.Item(sopa, 1)),
+                List.of(new PosSaleRequest.Payment(PaymentMethod.CASH, new BigDecimal("1500"), null)),
+                null, null, true));
+        assertThat(shortage.hasShortage()).isTrue();
     }
 
     // ------------------------------------------------------------------ anulación
@@ -262,6 +372,28 @@ class PosServiceIntegrationTest extends PostgresIntegrationTest {
         as(admin, centro);
         assertThat(saleService.voidSale(admin, sale.id(), new VoidSaleRequest("Corrección del administrador"))
                 .status()).isEqualTo(PosSaleStatus.VOIDED);
+    }
+
+    @Test
+    void voidingASaleOfTheCashiersOwnClosedShiftExplainsThatTheShiftClosed() {
+        as(cashier, centro);
+        PosSessionReportDto session = sessionService.open(cashier,
+                new OpenSessionRequest(registerCentro, BigDecimal.ZERO));
+        PosSaleDto sale = saleService.create(cashier, new PosSaleRequest(session.id(),
+                List.of(new PosSaleRequest.Item(leche, 1)),
+                List.of(new PosSaleRequest.Payment(PaymentMethod.CASH, new BigDecimal("1400"), null)),
+                null, null, false));
+        sessionService.close(cashier, session.id(), new CloseSessionRequest(new BigDecimal("1400"), null));
+
+        assertThatThrownBy(() -> saleService.voidSale(cashier, sale.id(), new VoidSaleRequest("tarde")))
+                .isInstanceOfSatisfying(ApiException.class, ex -> {
+                    assertThat(ex.getStatus().value()).isEqualTo(403);
+                    assertThat(ex.getMessage()).isEqualTo(PosAccess.ONLY_OPEN_SESSION_SALE);
+                });
+
+        as(otherCashier, centro);
+        assertThatThrownBy(() -> saleService.voidSale(otherCashier, sale.id(), new VoidSaleRequest("ajena")))
+                .hasMessage(PosAccess.ONLY_OWN_SALE);
     }
 
     // ------------------------------------------------------------------ turnos y arqueo

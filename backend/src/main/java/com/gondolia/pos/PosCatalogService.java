@@ -8,7 +8,9 @@ import com.gondolia.domain.inventory.ProductUnit;
 import com.gondolia.domain.tenant.StockRotation;
 import com.gondolia.pos.dto.PosCategoryDto;
 import com.gondolia.pos.dto.PosLotRef;
+import com.gondolia.pos.dto.PosPriceTier;
 import com.gondolia.pos.dto.PosProductDto;
+import com.gondolia.pos.dto.PosRecallRef;
 import com.gondolia.security.BranchAccessService;
 import com.gondolia.stock.StockService;
 import java.math.BigDecimal;
@@ -16,6 +18,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -153,6 +156,25 @@ public class PosCatalogService {
         return stockQueries.stockByProduct(tenantId, branchId, productIds, today());
     }
 
+    /** Recalls vigentes de los productos (la venta los usa para no aceptar faltantes sin lote verificable). */
+    @Transactional(readOnly = true)
+    public Map<Long, PosStockQueries.ActiveRecall> activeRecallsOf(Long tenantId, Collection<Long> productIds) {
+        return stockQueries.activeRecallsByProduct(tenantId, productIds);
+    }
+
+    /**
+     * Productos del carrito con el stock, los tramos de precio y las banderas al día. El mostrador los vuelve a pedir
+     * al abrir el cobro: entre el escaneo y el pago otra caja pudo vender el lote en liquidación o pudo publicarse
+     * un recall. Devuelve también los dados de baja, para que el carrito los muestre y el cobro los rechace.
+     */
+    @Transactional(readOnly = true)
+    public List<PosProductDto> byIds(Long tenantId, Long branchId, Collection<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        return enrich(tenantId, branchId, rowsByIds(tenantId, List.copyOf(new LinkedHashSet<>(ids))));
+    }
+
     private List<PosProductDto> enrich(Long tenantId, Long branchId, List<Row> rows) {
         if (rows.isEmpty()) {
             return List.of();
@@ -161,26 +183,62 @@ public class PosCatalogService {
         List<Long> ids = rows.stream().map(Row::id).toList();
         Map<Long, PosStockQueries.BranchStock> stock = stockQueries.stockByProduct(tenantId, branchId, ids, today);
         StockRotation rotation = stockService.rotationFor(tenantId);
-        Map<Long, PosStockQueries.NextLot> nextLots =
-                stockQueries.nextLotByProduct(tenantId, branchId, ids, today, rotation);
+        Map<Long, List<PosStockQueries.SellableLot>> lotsByProduct =
+                stockQueries.sellableLotsByProduct(tenantId, branchId, ids, today, rotation);
+        Map<Long, PosStockQueries.ActiveRecall> recalls = stockQueries.activeRecallsByProduct(tenantId, ids);
         String branchName = directory.branchNames(tenantId).get(branchId);
 
         List<PosProductDto> products = new ArrayList<>(rows.size());
         for (Row row : rows) {
             PosStockQueries.BranchStock counts = stock.getOrDefault(row.id(), PosStockQueries.BranchStock.EMPTY);
-            PosStockQueries.NextLot lot = nextLots.get(row.id());
+            List<PosStockQueries.SellableLot> lots = lotsByProduct.getOrDefault(row.id(), List.of());
             BigDecimal listPrice = PosMoney.orZero(row.salePrice());
+            PosStockQueries.SellableLot lot = lots.isEmpty() ? null : lots.getFirst();
             PosLotRef lotRef = lot == null ? null : new PosLotRef(lot.lotId(), lot.lotNumber(), lot.expiryDate(),
                     activeDiscount(lot.discountPct()), PosMoney.withDiscount(listPrice, lot.discountPct()));
             products.add(new PosProductDto(row.id(), row.barcode(), row.name(), row.brand(), row.categoryId(),
-                    row.categoryName(), row.unit(), listPrice, counts.sellable(), lotRef, counts.quarantined() > 0,
-                    counts.expired() > 0, counts.sellable() <= 0, branchId, branchName));
+                    row.categoryName(), row.unit(), listPrice, counts.sellable(), lotRef, priceTiers(listPrice, lots),
+                    counts.quarantined() > 0, recallRef(recalls.get(row.id())), counts.expired() > 0,
+                    counts.sellable() <= 0, branchId, branchName));
         }
         return products;
     }
 
+    /**
+     * Tramos de precio en el orden de venta: lotes consecutivos con el mismo descuento se agrupan en un tramo. Con
+     * esto el carrito calcula {@code 15 × $ 2.850 + 1 × $ 3.800} igual que {@code StockService.registerSale}.
+     */
+    static List<PosPriceTier> priceTiers(BigDecimal listPrice, List<PosStockQueries.SellableLot> lots) {
+        List<PosPriceTier> tiers = new ArrayList<>();
+        BigDecimal currentPct = null;
+        int currentQuantity = 0;
+        for (PosStockQueries.SellableLot lot : lots) {
+            BigDecimal pct = activeDiscount(lot.discountPct());
+            if (currentQuantity > 0 && !samePct(currentPct, pct)) {
+                tiers.add(new PosPriceTier(currentQuantity, currentPct, PosMoney.withDiscount(listPrice, currentPct)));
+                currentQuantity = 0;
+            }
+            currentPct = pct;
+            currentQuantity += lot.quantity();
+        }
+        if (currentQuantity > 0) {
+            tiers.add(new PosPriceTier(currentQuantity, currentPct, PosMoney.withDiscount(listPrice, currentPct)));
+        }
+        return tiers;
+    }
+
+    private static boolean samePct(BigDecimal a, BigDecimal b) {
+        return a == null ? b == null : b != null && a.compareTo(b) == 0;
+    }
+
+    private static PosRecallRef recallRef(PosStockQueries.ActiveRecall recall) {
+        return recall == null ? null
+                : new PosRecallRef(recall.announcementId(), recall.title(), recall.allLots(), recall.lotNumbers());
+    }
+
+    /** Descuento vigente del lote (0 &lt; pct ≤ 100) o null, igual que {@code StockService}. */
     private static BigDecimal activeDiscount(BigDecimal discountPct) {
-        return discountPct == null || discountPct.signum() <= 0 ? null : discountPct;
+        return discountPct == null || discountPct.signum() <= 0 ? null : discountPct.min(PosMoney.HUNDRED);
     }
 
     private LocalDate today() {
