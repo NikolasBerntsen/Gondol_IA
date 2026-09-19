@@ -662,6 +662,7 @@ export default function IntakePage() {
 
         {product && (
           <div
+            data-bottom-action-bar=""
             className="sticky bottom-0 -mx-4 mt-auto border-t bg-card px-4 pt-3 sm:mx-0 sm:rounded-b-panel"
             style={{ paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}
           >
