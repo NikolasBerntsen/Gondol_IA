@@ -31,7 +31,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Inteligencia IA del comercio (SPEC §6.5). Ver: jefe y administrador. Recalcular: solo administrador.
+ * Inteligencia IA del comercio (SPEC §6.5). Ver y recalcular: jefe y administrador.
  */
 @Tag(name = "Inteligencia IA")
 @RestController
@@ -81,7 +81,7 @@ public class InsightsController {
 
     @Operation(summary = "Recalcular la IA de las sucursales del alcance (asincrónico)")
     @PostMapping("/run")
-    @PreAuthorize(Roles.TENANT_ADMIN)
+    @PreAuthorize(Roles.TENANT_DASHBOARD)
     public InsightsRunLaunchedDto run() {
         return insightsService.launch(CurrentUser.tenantId(), scope());
     }
