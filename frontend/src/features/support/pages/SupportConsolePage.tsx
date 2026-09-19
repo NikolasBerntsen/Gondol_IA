@@ -91,17 +91,20 @@ function QueueStat({
   loading: boolean;
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-2.5 px-3 py-2.5" title={hint}>
-      <span className={cn('grid h-7 w-7 shrink-0 place-items-center rounded-control', STAT_TONES[tone])}>
+    <div className="flex min-w-0 items-center gap-2.5 px-3 py-2" title={hint}>
+      {/* Entre lg y xl las cinco columnas son angostas: el ícono se oculta para que entre el rótulo. */}
+      <span className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-control lg:hidden xl:grid', STAT_TONES[tone])}>
         <Icon className="h-4 w-4" aria-hidden="true" />
       </span>
-      <dt className="min-w-0 flex-1 truncate text-sm font-medium text-muted-foreground">
-        {label}
-        {hint && <span className="sr-only"> ({hint})</span>}
-      </dt>
-      <dd className="shrink-0 font-display text-lg font-bold leading-none tabular-nums text-foreground">
-        {loading ? <span className="gd-skeleton inline-block h-5 w-8 rounded-[6px] bg-muted" aria-hidden="true" /> : value}
-      </dd>
+      <div className="min-w-0 flex-1">
+        <dt className="truncate text-xs font-medium text-muted-foreground">
+          {label}
+          {hint && <span className="sr-only"> ({hint})</span>}
+        </dt>
+        <dd className="whitespace-nowrap font-display text-lg font-bold leading-6 tabular-nums text-foreground">
+          {loading ? <span className="gd-skeleton inline-block h-5 w-10 rounded-[6px] bg-muted" aria-hidden="true" /> : value}
+        </dd>
+      </div>
     </div>
   );
 }
