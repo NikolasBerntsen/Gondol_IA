@@ -71,8 +71,8 @@ public class ProductService {
     static final String DUPLICATE_BARCODE_CODE = "DUPLICATE_BARCODE";
 
     /**
-     * Ventana de lotes sin remanente que igual se muestran en la ficha del producto: los que ingresaron o tuvieron
-     * algún movimiento (venta, baja, retiro por recall) en estos días.
+     * Ventana de lotes sin remanente que igual se muestran en la ficha del producto: los que ingresaron en estos días
+     * o de los que salió stock por un retiro por recall, un descarte, un ajuste o una transferencia.
      */
     private static final int RECENT_EMPTY_LOT_DAYS = 30;
 
@@ -220,15 +220,16 @@ public class ProductService {
 
     /**
      * Lotes del producto en el alcance (SPEC §6.3 "con quantity &gt; 0 o recientes"): los que tienen remanente y los
-     * que quedaron en 0 pero ingresaron o se movieron en los últimos 30 días. Así un lote retirado hoy por un recall
-     * sigue a la vista (en cuarentena, con 0 u.) aunque haya ingresado hace meses.
+     * que quedaron en 0 pero ingresaron en los últimos 30 días o en ese lapso se retiraron, descartaron, ajustaron o
+     * transfirieron. Así un lote retirado hoy por un recall sigue a la vista (en cuarentena, con 0 u.) aunque haya
+     * ingresado hace meses; uno que solo se vendió entero no vuelve a aparecer.
      */
     private List<LotDto> lotsOf(Long tenantId, Long productId, CatalogScope scope) {
         if (scope.isEmpty()) {
             return List.of();
         }
         Instant recentSince = clock.instant().minus(RECENT_EMPTY_LOT_DAYS, ChronoUnit.DAYS);
-        Set<Long> recentlyTouched = stockReader.recentlyTouchedLotIds(tenantId, scope.branchIds(), productId,
+        Set<Long> recentlyWithdrawn = stockReader.recentlyWithdrawnLotIds(tenantId, scope.branchIds(), productId,
                 recentSince);
         List<Lot> lots = lotRepository
                 .findByTenantIdAndBranchIdInAndProductIdOrderByBranchIdAscReceivedAtAscIdAsc(
@@ -236,7 +237,7 @@ public class ProductService {
                 .stream()
                 .filter(lot -> lot.getQuantity() > 0
                         || (lot.getReceivedAt() != null && lot.getReceivedAt().isAfter(recentSince))
-                        || recentlyTouched.contains(lot.getId()))
+                        || recentlyWithdrawn.contains(lot.getId()))
                 .toList();
         LotMapper.Context context = lotMapper.context(tenantId, List.of(productId));
         return lotMapper.sortForDisplay(lotMapper.toDtos(lots, context));

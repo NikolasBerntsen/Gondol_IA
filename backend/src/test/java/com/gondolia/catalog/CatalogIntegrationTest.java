@@ -256,16 +256,24 @@ class CatalogIntegrationTest extends PostgresIntegrationTest {
         // Lote viejo retirado hoy por un recall: quedó RECALLED con 0 u.
         long retirado = data.lot(tenant, centro, lecheId, "L2409A", "L2409A", today.plusDays(20), 0, "RECALLED", 90);
         movement(centro, lecheId, retirado, "RECALL_REMOVAL", 8, null, null, null, 0);
+        // Lote viejo descartado por vencido hace una semana: también sigue a la vista.
+        long descartado = data.lot(tenant, centro, lecheId, "LDESC", "LDESC", today.minusDays(9), 0,
+                "EXPIRED_DISCARDED", 70);
+        movement(centro, lecheId, descartado, "WASTE_EXPIRED", 2, null, null, null, 7);
         // Lote viejo que se agotó hace dos meses: ya no es reciente.
         long agotado = data.lot(tenant, centro, lecheId, "LVIEJO", "LVIEJO", today.minusDays(30), 0, "DEPLETED", 120);
         movement(centro, lecheId, agotado, "SALE", 3, "1400", "4200", "S-VIEJA", 60);
+        // Lote viejo que se terminó de vender hace días: vender no lo vuelve "reciente" (si no, la ficha de un
+        // producto de alta rotación se llena de lotes agotados).
+        long vendido = data.lot(tenant, centro, lecheId, "LVEND", "LVEND", today.plusDays(10), 0, "DEPLETED", 45);
+        movement(centro, lecheId, vendido, "SALE", 5, "1400", "7000", "S-RECIENTE", 3);
         authenticate(admin, String.valueOf(centro));
 
         ProductDetail detail = productService.get(lecheId);
 
         assertThat(detail.lots()).extracting(LotDto::lotNumber, LotDto::status, LotDto::quantity)
-                .contains(tuple("L2409A", LotStatus.RECALLED, 0));
-        assertThat(detail.lots()).extracting(LotDto::lotNumber).doesNotContain("LVIEJO");
+                .contains(tuple("L2409A", LotStatus.RECALLED, 0), tuple("LDESC", LotStatus.EXPIRED_DISCARDED, 0));
+        assertThat(detail.lots()).extracting(LotDto::lotNumber).doesNotContain("LVIEJO", "LVEND");
     }
 
     // ------------------------------------------------------------------ movimientos de la ficha

@@ -82,14 +82,19 @@ public class CatalogStockReader {
                and l.branch_id in (:branchIds)
             """;
 
-    /** Lotes del producto con algún movimiento desde {@code :since} (ventas, bajas, retiro por recall…). */
-    private static final String RECENTLY_TOUCHED_LOTS_SQL = """
+    /**
+     * Lotes del producto de los que salió stock por algo que no es una venta desde {@code :since}: retiro por recall,
+     * descarte, ajuste o transferencia. Un lote que simplemente se vendió entero no cuenta (si no, un producto de
+     * alta rotación llenaría la ficha de lotes agotados).
+     */
+    private static final String RECENTLY_WITHDRAWN_LOTS_SQL = """
             select distinct m.lot_id
               from stock_movements m
              where m.tenant_id = :tenantId
                and m.branch_id in (:branchIds)
                and m.product_id = :productId
                and m.lot_id is not null
+               and m.type in ('RECALL_REMOVAL', 'WASTE_EXPIRED', 'WASTE_DAMAGED', 'ADJUSTMENT_OUT', 'TRANSFER_OUT')
                and m.occurred_at >= :since
             """;
 
@@ -156,11 +161,12 @@ public class CatalogStockReader {
     }
 
     /**
-     * Ids de los lotes del producto que tuvieron algún movimiento desde {@code since} en el alcance. La ficha los
-     * sigue mostrando aunque hayan quedado en 0: un lote retirado hoy por un recall o agotado ayer es "reciente"
-     * aunque haya ingresado hace meses (SPEC §6.3).
+     * Ids de los lotes del producto en el alcance de los que salió stock desde {@code since} por un retiro por
+     * recall, un descarte, un ajuste o una transferencia. La ficha los sigue mostrando aunque hayan quedado en 0: un
+     * lote retirado hoy por un recall es "reciente" aunque haya ingresado hace meses (SPEC §6.3).
      */
-    public Set<Long> recentlyTouchedLotIds(Long tenantId, Collection<Long> branchIds, Long productId, Instant since) {
+    public Set<Long> recentlyWithdrawnLotIds(Long tenantId, Collection<Long> branchIds, Long productId,
+                                             Instant since) {
         if (tenantId == null || productId == null || branchIds == null || branchIds.isEmpty()) {
             return Set.of();
         }
@@ -169,7 +175,7 @@ public class CatalogStockReader {
                 .addValue("branchIds", branchIds)
                 .addValue("productId", productId)
                 .addValue("since", OffsetDateTime.ofInstant(since, ZoneOffset.UTC));
-        return new HashSet<>(jdbc.queryForList(RECENTLY_TOUCHED_LOTS_SQL, params, Long.class));
+        return new HashSet<>(jdbc.queryForList(RECENTLY_WITHDRAWN_LOTS_SQL, params, Long.class));
     }
 
     private static final class Accumulator {

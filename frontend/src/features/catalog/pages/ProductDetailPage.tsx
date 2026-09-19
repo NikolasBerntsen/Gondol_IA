@@ -41,9 +41,6 @@ import { productInsightApi, productsApi } from '../api';
 import { movementSign, movementSourceLabel, movementTypeLabel, unitShort } from '../lib';
 import type { LotDto, ProductMovement } from '../types';
 
-/** Días en que un lote vacío sigue en la ficha (ProductService.RECENT_EMPTY_LOT_DAYS, docs/api-a1.md §4). */
-const RECENT_LOT_DAYS = 30;
-
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
   const productId = Number(id);
@@ -115,7 +112,7 @@ export default function ProductDetailPage() {
     null,
   );
   // Sin movimientos en el alcance: nunca entró mercadería. Si los hay, el producto tuvo stock y sus lotes se
-  // vendieron, vencieron o se retiraron (la ficha muestra los lotes vacíos que se movieron en los últimos 30 días).
+  // vendieron, vencieron o se retiraron (la ficha solo muestra los lotes vacíos recientes, docs/api-a1.md §4).
   const neverHadStock = movementsQuery.isSuccess && movementsQuery.data.length === 0;
 
   const lotColumns: Array<TableColumn<LotDto> | null> = [
@@ -387,7 +384,7 @@ export default function ProductDetailPage() {
                 ? canIntake
                   ? 'Registrá el primer ingreso para empezar a controlar vencimientos.'
                   : 'Cuando se registre el primer ingreso vas a ver acá sus lotes y vencimientos.'
-                : `No quedan lotes con stock${isAll ? '' : ' en esta sucursal'} ni lotes que se hayan movido en los últimos ${RECENT_LOT_DAYS} días. Lo que pasó con el producto está en Movimientos recientes.${
+                : `No quedan lotes con stock${isAll ? '' : ' en esta sucursal'}. Lo que pasó con sus lotes (ventas, descartes, retiros) está en Movimientos recientes.${
                     canIntake ? ' Registrá un ingreso para volver a tener stock.' : ''
                   }`,
               action: canIntake ? (
@@ -503,7 +500,6 @@ export default function ProductDetailPage() {
                             {row.suggestedOrderQty
                               ? ` · sugiere pedir ${formatNumber(row.suggestedOrderQty)} ${unitShort(product.unit)}`
                               : ''}
-                            .
                           </p>
                         )}
                       </li>

@@ -127,9 +127,12 @@ Los lotes vienen **agrupados por sucursal y, dentro de cada una, en orden de rot
  "supplierId":1,"supplierName":"Distribuidora La Pampa","expiryBucket":"UPCOMING","originLotId":null,
  "rotationRank":1}
 ```
-Entran los lotes con remanente y los que quedaron en 0 pero **ingresaron o tuvieron un movimiento en los últimos 30
-días** (una venta, una baja, el retiro por un recall): así el lote retirado hoy por un recall sigue a la vista en
-cuarentena con 0 u. aunque haya ingresado hace meses (SPEC §6.3 "con quantity > 0 o recientes").
+Entran los lotes con remanente y los que quedaron en 0 pero **ingresaron en los últimos 30 días o en ese lapso se
+retiraron por un recall, se descartaron, se ajustaron o se transfirieron** (`RECALL_REMOVAL`, `WASTE_EXPIRED`,
+`WASTE_DAMAGED`, `ADJUSTMENT_OUT`, `TRANSFER_OUT`): así el lote retirado hoy por un recall sigue a la vista en
+cuarentena con 0 u. aunque haya ingresado hace meses (SPEC §6.3 "con quantity > 0 o recientes"). Un lote viejo que
+simplemente se terminó de vender no vuelve a aparecer, para no llenar de agotados la ficha de un producto de alta
+rotación.
 `rotationRank` = posición de salida **dentro de su sucursal** (1 = "1º sale"); es `null` para los lotes que ya no
 son vendibles (vencidos, agotados o en cuarentena). El orden respeta `tenant_settings.stock_rotation`
 (FIFO o FEFO) y pone primero los lotes con `discountPct` (SPEC §4.2). Código inexistente → **404 `NOT_FOUND`**.
