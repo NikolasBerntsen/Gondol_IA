@@ -48,6 +48,10 @@ public abstract class PostgresIntegrationTest {
                 () -> setting("gondolia.it.db.url", "jdbc:postgresql://localhost:55432/gondolia_it"));
         registry.add("spring.datasource.username", () -> setting("gondolia.it.db.user", "postgres"));
         registry.add("spring.datasource.password", () -> setting("gondolia.it.db.password", "dev"));
+        // Spring cachea un contexto por combinación de configuración: con el pool de producción (20)
+        // la suite completa agota max_connections=100 del Postgres compartido.
+        registry.add("spring.datasource.hikari.maximum-pool-size", () -> setting("gondolia.it.db.pool", "4"));
+        registry.add("spring.datasource.hikari.minimum-idle", () -> "1");
         registry.add("app.seed-demo", () -> "false");
         registry.add("app.dev-fixture", () -> "false");
     }
