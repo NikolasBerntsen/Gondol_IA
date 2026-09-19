@@ -204,9 +204,22 @@ class FoundationDatabaseTest {
                 + "where id = ?", key.hash(), key.prefix(), norte);
 
         assertThat(apiKeyService.resolveBranch(key.rawKey())).contains(new PosBranch(tenantA, norte));
+        assertThat(apiKeyService.authenticate(key.rawKey())).isEqualTo(new PosBranch(tenantA, norte));
 
+        // SPEC §3.2: con el comercio bloqueado la key sigue siendo válida; el webhook responde el bloqueo.
         jdbc.update("update tenants set status = 'DISABLED' where id = ?", tenantA);
         assertThat(apiKeyService.resolveBranch(key.rawKey())).isEmpty();
+        assertApiError(() -> apiKeyService.authenticate(key.rawKey()), 403, "TENANT_DISABLED");
+
+        jdbc.update("update tenants set status = 'CANCELLED' where id = ?", tenantA);
+        assertApiError(() -> apiKeyService.authenticate(key.rawKey()), 403, "TENANT_CANCELLED");
+
+        jdbc.update("update tenants set status = 'ACTIVE' where id = ?", tenantA);
+        GeneratedApiKey inactiveBranchKey = apiKeyService.generate();
+        jdbc.update("update branches set pos_api_key_hash = ?, pos_api_key_prefix = ?, pos_api_key_created_at = now() "
+                + "where id = ?", inactiveBranchKey.hash(), inactiveBranchKey.prefix(), vieja);
+        assertApiError(() -> apiKeyService.authenticate(inactiveBranchKey.rawKey()), 401, "INVALID_API_KEY");
+        assertApiError(() -> apiKeyService.authenticate(apiKeyService.generate().rawKey()), 401, "INVALID_API_KEY");
     }
 
     @Test

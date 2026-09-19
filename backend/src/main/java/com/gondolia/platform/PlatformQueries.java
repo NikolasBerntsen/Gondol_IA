@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.RowMapper;
@@ -45,15 +46,41 @@ class PlatformQueries {
                      String statusReason) {
     }
 
-    /** Filtros del listado (SPEC §6.6 y §14.3). */
+    /**
+     * Filtros del listado (SPEC §6.6 y §14.3). {@code q} ya viene normalizado para la búsqueda: sin tildes, en
+     * minúsculas y con los comodines de {@code LIKE} escapados.
+     */
     record TenantFilters(String q, TenantStatus status, TenantPlan plan, BusinessType businessType,
                          TenantModule module) {
 
         static TenantFilters of(String q, TenantStatus status, TenantPlan plan, BusinessType businessType,
                                 TenantModule module) {
-            String text = q == null || q.isBlank() ? null : q.strip().toLowerCase(Locale.ROOT);
+            String text = q == null || q.isBlank() ? null : escapeLike(plain(q.strip()));
             return new TenantFilters(text, status, plan, businessType, module);
         }
+    }
+
+    /**
+     * Letras con tilde y su versión sin tilde (mismo orden). La búsqueda compara sin tildes de los dos lados: el
+     * texto buscado con {@link #plain} y las columnas con {@code translate(...)} en SQL, con la misma tabla. Van las
+     * mayúsculas también para no depender de que {@code lower()} de la base conozca las letras con tilde.
+     */
+    static final String ACCENTED = "áàâäãéèêëíìîïóòôöõúùûüñçÁÀÂÄÃÉÈÊËÍÌÎÏÓÒÔÖÕÚÙÛÜÑÇ";
+    static final String UNACCENTED = "aaaaaeeeeiiiiooooouuuuncAAAAAEEEEIIIIOOOOOUUUUNC";
+
+    /** Texto sin tildes y en minúsculas, igual que {@code lower(translate(columna, ACCENTED, UNACCENTED))}. */
+    static String plain(String text) {
+        StringBuilder out = new StringBuilder(text.length());
+        for (char character : text.toCharArray()) {
+            int index = ACCENTED.indexOf(character);
+            out.append(index < 0 ? character : UNACCENTED.charAt(index));
+        }
+        return out.toString().toLowerCase(Locale.ROOT);
+    }
+
+    /** Escapa la barra invertida, {@code %} y {@code _} para que {@code LIKE ... escape '\'} los tome literales. */
+    static String escapeLike(String text) {
+        return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 
     /** Columnas por las que se puede ordenar el listado (`sort=campo,asc|desc`). */
@@ -66,6 +93,10 @@ class PlatformQueries {
             "city", "t.city",
             "activeBranchCount", "active_branch_count",
             "userCount", "user_count");
+
+    /** Columnas en las que busca {@code q}: nombre, razón social, contacto, ciudad y CUIT. */
+    private static final List<String> SEARCHABLE = List.of("t.name", "t.legal_name", "t.contact_name",
+            "t.contact_email", "t.city", "t.tax_id");
 
     private static final String SELECT_COLUMNS = """
             select t.id, t.name, t.business_type, t.plan, t.status, t.city, t.province, t.contact_name,
@@ -118,6 +149,15 @@ class PlatformQueries {
         return byTenant;
     }
 
+    /**
+     * Antes de eliminar un comercio: guarda su id en {@code deleted_tenant_id} de todo su historial, porque al borrarlo
+     * {@code tenant_id} queda NULL y las métricas necesitan saber qué eventos eran del mismo comercio.
+     */
+    void keepHistoryOfDeletedTenant(Long tenantId) {
+        jdbc.update("update tenant_events set deleted_tenant_id = :id where tenant_id = :id",
+                new MapSqlParameterSource("id", tenantId));
+    }
+
     /** Cantidad de usuarios por rol de un comercio (todos los roles, incluso los que no tiene). */
     Map<Role, Long> usersByRole(Long tenantId) {
         Map<Role, Long> counts = new LinkedHashMap<>();
@@ -136,6 +176,8 @@ class PlatformQueries {
         MapSqlParameterSource params = new MapSqlParameterSource();
         if (filters.q() != null) {
             params.addValue("q", "%" + filters.q() + "%");
+            params.addValue("accented", ACCENTED);
+            params.addValue("unaccented", UNACCENTED);
         }
         if (filters.status() != null) {
             params.addValue("status", filters.status().name());
@@ -155,10 +197,11 @@ class PlatformQueries {
     private String where(TenantFilters filters) {
         List<String> conditions = new ArrayList<>();
         if (filters.q() != null) {
-            conditions.add("""
-                    (lower(t.name) like :q or lower(coalesce(t.legal_name, '')) like :q
-                     or lower(coalesce(t.contact_name, '')) like :q or lower(coalesce(t.contact_email, '')) like :q
-                     or lower(coalesce(t.city, '')) like :q or lower(coalesce(t.tax_id, '')) like :q)""");
+            String columns = SEARCHABLE.stream()
+                    .map(column -> "lower(translate(coalesce(" + column + ", ''), :accented, :unaccented))"
+                            + " like :q escape '\\'")
+                    .collect(Collectors.joining(" or "));
+            conditions.add("(" + columns + ")");
         }
         if (filters.status() != null) {
             conditions.add("t.status = :status");

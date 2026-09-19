@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Receipt, Store, TriangleAlert, User } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useAccess } from '@/auth/useAccess';
 import { BarcodeDigits, ExpiryChip, StatusPill } from '@/components/gondola';
 import {
   Badge,
@@ -79,6 +80,7 @@ function LineCard({ line }: { line: SaleLine }) {
 
 /** Detalle de una venta del historial: cabecera, líneas y los lotes de los que salió cada unidad. */
 export function SaleDetailSheet({ batchRef, onClose }: SaleDetailSheetProps) {
+  const { canOpen } = useAccess();
   const detail = useQuery({
     queryKey: ['sales', 'detail', batchRef],
     queryFn: () => salesApi.detail(batchRef as string),
@@ -114,10 +116,15 @@ export function SaleDetailSheet({ batchRef, onClose }: SaleDetailSheetProps) {
               ) : (
                 <StatusPill tone="ok">Vigente</StatusPill>
               )}
-              {sale.ticketCode && sale.posSaleId ? (
+              {/* El ticket del POS se abre solo si el rol usa el POS (el jefe ve el código sin link). */}
+              {sale.ticketCode && sale.posSaleId && canOpen(`/app/pos/sales/${sale.posSaleId}/ticket`) ? (
                 <Button asChild variant="outline" size="sm" leftIcon={<Receipt className="h-3.5 w-3.5" />}>
                   <Link to={`/app/pos/sales/${sale.posSaleId}/ticket`}>Ticket {sale.ticketCode}</Link>
                 </Button>
+              ) : sale.ticketCode ? (
+                <Badge tone="neutral" className="font-mono">
+                  Ticket {sale.ticketCode}
+                </Badge>
               ) : null}
             </div>
 

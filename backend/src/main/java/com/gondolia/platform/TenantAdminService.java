@@ -180,18 +180,16 @@ public class TenantAdminService {
         createUser(tenant.getId(), request.admin(), Role.TENANT_ADMIN, null);
         createUser(tenant.getId(), request.employee(), Role.TENANT_EMPLOYEE, branch.getId());
 
-        if (request.modules() == null) {
-            moduleService.applyPlanPreset(tenant.getId(), request.plan());
-        } else {
-            Set<TenantModule> requested = request.modules().stream()
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toCollection(() -> EnumSet.noneOf(TenantModule.class)));
-            for (TenantModule module : TenantModule.values()) {
-                moduleService.setEnabled(tenant.getId(), module, requested.contains(module), actorUserId);
-            }
-        }
-
+        // El alta va primero en el historial y los módulos iniciales (los pedidos o el preset del plan, SPEC §14.1)
+        // quedan a nombre del dueño que creó el comercio, no del "Sistema".
         record(tenant.getId(), TenantEventType.CREATED, null, request.plan().name(), null, actorUserId);
+        Set<TenantModule> initialModules = request.modules() == null ? ModuleCatalog.preset(request.plan())
+                : request.modules().stream()
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toCollection(() -> EnumSet.noneOf(TenantModule.class)));
+        for (TenantModule module : TenantModule.values()) {
+            moduleService.setEnabled(tenant.getId(), module, initialModules.contains(module), actorUserId);
+        }
         log.info("Alta del comercio {} ({}) con plan {}", tenant.getId(), tenant.getName(), tenant.getPlan());
         return detail(tenant.getId());
     }
@@ -271,7 +269,8 @@ public class TenantAdminService {
 
     /**
      * Eliminación definitiva (solo comercios dados de baja y escribiendo el nombre exacto). Borra usuarios,
-     * sucursales y todos sus datos; el historial queda en {@code tenant_events} con {@code tenant_id} nulo.
+     * sucursales y todos sus datos; el historial queda en {@code tenant_events} con {@code tenant_id} nulo y el id
+     * del comercio en {@code deleted_tenant_id}, para las métricas de crecimiento.
      */
     @Transactional
     public void delete(Long tenantId, String confirmName, Long actorUserId) {
@@ -286,6 +285,9 @@ public class TenantAdminService {
         }
         record(tenantId, TenantEventType.DELETED, tenant.getStatus().name(), tenant.getName(),
                 "Eliminación definitiva", actorUserId);
+        // Al borrar el comercio su historial pierde el tenant_id: se guarda el id para que las métricas sigan
+        // contando su alta y su baja una sola vez (V250).
+        queries.keepHistoryOfDeletedTenant(tenantId);
         sessionTermination.forceLogoutTenant(tenantId, ErrorCodes.TENANT_CANCELLED, MSG_CANCELLED);
         tenantRepository.delete(tenant);
         tenantRepository.flush();
@@ -404,8 +406,11 @@ public class TenantAdminService {
         }
     }
 
+    /** Historial del comercio, del más nuevo al más viejo (a igual instante, el último registrado primero). */
     private List<TenantEventDto> eventsOf(Long tenantId) {
-        List<TenantEvent> all = eventRepository.findByTenantIdOrderByCreatedAtDesc(tenantId);
+        List<TenantEvent> all = new ArrayList<>(eventRepository.findByTenantIdOrderByCreatedAtDesc(tenantId));
+        all.sort(Comparator.comparing(TenantEvent::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(TenantEvent::getId, Comparator.nullsLast(Comparator.reverseOrder())));
         Set<Long> actorIds = new HashSet<>();
         all.forEach(event -> {
             if (event.getActorUserId() != null) {

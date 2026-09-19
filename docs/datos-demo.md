@@ -55,6 +55,8 @@ Centro y Despensa El Trébol (baja), Dietética Grano de Oro (deshabilitada).
 - "Sucursal Centro", "Sucursal Fisherton" y "Sucursal Echesortu", rotación **FIFO**, **los 3 módulos**. 66 productos.
 - Centro y Fisherton venden con el **POS GondolIA** (Caja 1 y Caja 2); Echesortu importó un CSV de ventas por día los
   primeros 60 días y después conectó su POS por API (key de demo `gk_DemoelsolECH0123456789ABCDEFGHJKLMNPQRST`).
+  Además, un viernes por medio la administradora carga a mano (Ventas → Registrar venta) el pedido de bebidas y snacks
+  que el club del barrio retira de Centro para el fin de semana, así El Sol tiene ventas de las cuatro fuentes.
 - Arrancó con una **importación masiva APLICADA** ("stock-el-sol-marzo-2026.xlsx": catálogo + stock inicial de las 3
   sucursales, con 3 filas omitidas en la revisión).
 - El lote `L2409A` de la sopa está **solo en Fisherton**; Centro y Echesortu tienen la sopa con otros lotes.
@@ -86,9 +88,12 @@ adopción de módulos y actividad de la consola de dueños.
 - **Liquidación en curso**: Jamón cocido en El Sol Centro con 25 % aceptado hace 2 días ("En liquidación · sale
   primero"). **Descuentos históricos aceptados con resultado medido** (yogures, jamón, crema, salchichas, hummus): la
   IA los recibe como feedback para ajustar la elasticidad.
-- **Sin stock / bajo mínimo** (el proveedor dejó de entregar): Yerba y Aceite en Don Pepe, Leche descremada y
-  Detergente en Centro, Huevos y Arroz en Fisherton, Agua y Gaseosa cola en Echesortu, Chía y Granola en Nueva Córdoba,
-  Avena en Cerro de las Rosas.
+- **Sin stock / bajo mínimo** (el proveedor dejó de entregar entre 11 y 24 días antes de la siembra; los pedidos
+  pendientes ya no llegan y la historia no los cubre con transferencias, así se puede mostrar una en vivo): Yerba y
+  Aceite en Don Pepe, Leche descremada y Detergente en Centro, Huevos y Arroz en Fisherton, Agua y Gaseosa cola en
+  Echesortu, Chía y Granola en Nueva Córdoba, Avena en Cerro de las Rosas. Pasa lo mismo, sea cual sea el día en que
+  se siembre, con Galletitas de agua y Lavandina en Don Pepe, Galletitas dulces en Centro y Bebida de almendras en
+  Cerro de las Rosas.
 - **Vencidos pendientes de descarte**: Manteca (Don Pepe), Leche chocolatada (Centro), Salame (Fisherton), Pan integral
   (Echesortu), Tofu (Nueva Córdoba), Hummus (Cerro), además de los que el personal todavía no descartó.
 - **Mermas** por vencimiento y roturas, **ajustes** de recuento y **transferencias** entre sucursales.
@@ -114,7 +119,9 @@ primeros segundos después de arrancar.
    y volver a entrar.
 3. **Jefe de El Sol** (`jefe@elsol.com`): Inicio consolidado de las 3 sucursales (productos, por vencer, stock bajo,
    valor de inventario, ventas de hoy), cambiar a una sucursal, Estadísticas, Inteligencia IA (patrones: finde fuerte,
-   creciente, intermitente, sin movimiento; recomendaciones con explicación) y Alertas.
+   creciente, intermitente, sin movimiento; recomendaciones con explicación, que el jefe acepta o descarta) y
+   Alertas. Desde el Inicio, "Ver todos" abre Vencimientos e Inventario (stock bajo) en solo lectura, y también ve
+   el historial de Ventas.
 4. **Administradora de El Sol** (`admin@elsol.com`): aceptar un descuento sugerido; ver en Inventario el Queso untable
    de Centro con dos lotes y la etiqueta "Se vende primero"; Vencimientos (vencidos pendientes → descartar);
    Transferencias; Importar Excel/CSV (la importación de marzo aplicada, con sus filas); Cajas y turnos (arqueos con

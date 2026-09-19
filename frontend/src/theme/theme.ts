@@ -61,8 +61,13 @@ export function subscribeSystemTheme(onChange: (theme: ResolvedTheme) => void): 
   const query = darkQuery();
   if (!query) return () => undefined;
   const listener = (event: MediaQueryListEvent) => onChange(event.matches ? 'dark' : 'light');
-  query.addEventListener('change', listener);
-  return () => query.removeEventListener('change', listener);
+  // Safari < 14 solo tiene addListener: sin este respaldo el provider (en la raíz) tiraría y dejaría la app en blanco.
+  if (typeof query.addEventListener === 'function') {
+    query.addEventListener('change', listener);
+    return () => query.removeEventListener('change', listener);
+  }
+  query.addListener(listener);
+  return () => query.removeListener(listener);
 }
 
 /**

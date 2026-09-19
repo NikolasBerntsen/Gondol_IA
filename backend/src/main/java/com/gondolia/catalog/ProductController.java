@@ -41,7 +41,7 @@ public class ProductController {
     private final ProductMovementService productMovementService;
 
     @GetMapping
-    @PreAuthorize(Roles.TENANT_INVENTORY)
+    @PreAuthorize(Roles.TENANT_INVENTORY_READ)
     public PageResponse<ProductListItem> list(
             @Parameter(description = "Busca en nombre, marca y código de barras") @RequestParam(required = false) String q,
             @RequestParam(required = false) Long categoryId,
@@ -56,20 +56,20 @@ public class ProductController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize(Roles.TENANT_INVENTORY)
+    @PreAuthorize(Roles.TENANT_INVENTORY_READ)
     public ProductDetail get(@PathVariable Long id) {
         return productService.get(id);
     }
 
     @GetMapping("/by-barcode/{barcode}")
-    @PreAuthorize(Roles.TENANT_INVENTORY)
+    @PreAuthorize(Roles.TENANT_INVENTORY_READ)
     public ProductDetail getByBarcode(@PathVariable String barcode) {
         return productService.getByBarcode(barcode);
     }
 
     /** Últimos movimientos del producto en el alcance (ficha del producto). */
     @GetMapping("/{id}/movements")
-    @PreAuthorize(Roles.TENANT_INVENTORY)
+    @PreAuthorize(Roles.TENANT_INVENTORY_READ)
     public List<ProductMovementDto> movements(@PathVariable Long id,
                                               @RequestParam(defaultValue = "12") int limit) {
         return productMovementService.recent(id, limit);
