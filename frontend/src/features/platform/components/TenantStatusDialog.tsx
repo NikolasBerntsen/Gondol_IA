@@ -28,7 +28,7 @@ const COPY: Record<TenantAction, Copy> = {
   disable: {
     title: 'Deshabilitar el acceso del cliente',
     description:
-      'Sus usuarios no van a poder entrar y se cierran las sesiones abiertas. El cliente sigue facturando hasta que lo des de baja.',
+      'Sus usuarios no van a poder entrar y se cierran las sesiones abiertas. Mientras esté deshabilitado no factura; conserva su plan, sus módulos y sus datos.',
     confirmLabel: 'Deshabilitar acceso',
     tone: 'danger',
     reason: 'required',
@@ -36,7 +36,7 @@ const COPY: Record<TenantAction, Copy> = {
   },
   enable: {
     title: 'Volver a habilitar el acceso',
-    description: 'Sus usuarios vuelven a entrar con las mismas credenciales.',
+    description: 'Sus usuarios vuelven a entrar con las mismas credenciales y el cliente vuelve a facturar.',
     confirmLabel: 'Habilitar acceso',
     tone: 'primary',
     reason: 'optional',

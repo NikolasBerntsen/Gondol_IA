@@ -103,7 +103,7 @@ export default function OwnerMetricsPage() {
                 loading={metrics.isPending}
                 hint={
                   data
-                    ? `${formatNumber(data.branches.avgPerActiveTenant)} por cliente · ${pluralize(data.branches.multiBranchTenants, 'cliente multi-sucursal', 'clientes multi-sucursal')}`
+                    ? `De clientes activos · ${formatNumber(data.branches.avgPerActiveTenant)} por cliente · ${pluralize(data.branches.multiBranchTenants, 'cliente multi-sucursal', 'clientes multi-sucursal')}`
                     : undefined
                 }
               />
@@ -123,6 +123,7 @@ export default function OwnerMetricsPage() {
 
             <Card padding="none">
               <CardHeader
+                className="px-4 pt-4 sm:px-5 sm:pt-5"
                 title="Crecimiento de los últimos 12 meses"
                 description="Clientes activos al cierre de cada mes, con las altas y las bajas."
               />
@@ -139,7 +140,11 @@ export default function OwnerMetricsPage() {
 
             <div className="grid gap-5 lg:grid-cols-2">
               <Card padding="none">
-                <CardHeader title="Clientes por plan" description="Con el precio mensual por sucursal activa." />
+                <CardHeader
+                  className="px-4 pt-4 sm:px-5 sm:pt-5"
+                  title="Clientes por plan"
+                  description="Todos los clientes, en cualquier estado, con el precio mensual por sucursal activa."
+                />
                 <div className="p-4 sm:p-5">
                   {metrics.isPending ? (
                     <Skeleton className="h-32 w-full" />
@@ -158,7 +163,11 @@ export default function OwnerMetricsPage() {
               </Card>
 
               <Card padding="none">
-                <CardHeader title="Clientes por rubro" description="En qué tipo de comercio se usa GondolIA." />
+                <CardHeader
+                  className="px-4 pt-4 sm:px-5 sm:pt-5"
+                  title="Clientes por rubro"
+                  description="En qué tipo de comercio se usa GondolIA (clientes en cualquier estado)."
+                />
                 <div className="p-4 sm:p-5">
                   {metrics.isPending ? (
                     <Skeleton className="h-32 w-full" />
@@ -186,6 +195,7 @@ export default function OwnerMetricsPage() {
             <div className="grid gap-5 lg:grid-cols-3">
               <Card padding="none" className="lg:col-span-2">
                 <CardHeader
+                  className="px-4 pt-4 sm:px-5 sm:pt-5"
                   title="Usuarios de los comercios"
                   icon={Users}
                   description="Cuántas cuentas hay por rol. No vemos qué hace cada una."
@@ -216,7 +226,7 @@ export default function OwnerMetricsPage() {
 
               <div className="flex flex-col gap-5">
                 <Card padding="none">
-                  <CardHeader title="Soporte" icon={LifeBuoy} />
+                  <CardHeader className="px-4 pt-4 sm:px-5 sm:pt-5" title="Soporte" icon={LifeBuoy} />
                   <dl className="grid grid-cols-2 gap-4 p-4 sm:p-5">
                     <Metric label="Tickets abiertos" value={data ? formatNumber(data.support.openTickets) : '—'} />
                     <Metric label="Sin asignar" value={data ? formatNumber(data.support.unassignedTickets) : '—'} />
@@ -244,16 +254,17 @@ export default function OwnerMetricsPage() {
                 </Card>
 
                 <Card padding="none">
-                  <CardHeader title="Recalls" icon={ShieldAlert} />
+                  <CardHeader className="px-4 pt-4 sm:px-5 sm:pt-5" title="Recalls" icon={ShieldAlert} />
                   <dl className="grid grid-cols-2 gap-4 p-4 sm:p-5">
-                    <Metric label="Recalls activos" value={data ? formatNumber(data.recalls.activeRecalls) : '—'} />
+                    <Metric label="Recalls en curso" value={data ? formatNumber(data.recalls.activeRecalls) : '—'} />
                     <Metric
                       label="Comercios alcanzados"
                       value={data ? formatNumber(data.recalls.affectedTenantsTotal) : '—'}
                     />
                   </dl>
                   <p className="border-t border-border px-4 py-3 text-sm text-muted-foreground sm:px-5">
-                    Sabemos cuántos comercios alcanzó cada recall, nunca cuáles ni qué productos tienen.
+                    En curso: algún comercio todavía no resolvió sus coincidencias. Sabemos cuántos comercios alcanzó
+                    cada recall, nunca cuáles ni qué productos tienen.
                   </p>
                 </Card>
               </div>

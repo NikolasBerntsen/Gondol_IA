@@ -2,13 +2,19 @@ package com.gondolia.platform;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.gondolia.domain.tenant.BusinessType;
 import com.gondolia.domain.tenant.TenantModule;
 import com.gondolia.domain.tenant.TenantPlan;
 import com.gondolia.domain.tenant.TenantStatus;
 import com.gondolia.domain.user.Role;
 import com.gondolia.it.PostgresIntegrationTest;
 import com.gondolia.it.TestData;
+import com.gondolia.platform.dto.CreateTenantRequest;
+import com.gondolia.platform.dto.CreateTenantRequest.NewUserRequest;
 import com.gondolia.platform.dto.PlatformMetrics;
+import com.gondolia.platform.dto.PlatformMetrics.GrowthPoint;
+import com.gondolia.platform.dto.TenantDetail;
+import com.gondolia.security.AuthUser;
 import java.math.BigDecimal;
 import java.time.YearMonth;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +33,8 @@ class PlatformMetricsServiceIntegrationTest extends PostgresIntegrationTest {
 
     @Autowired
     private PlatformMetricsService service;
+    @Autowired
+    private TenantAdminService tenantAdmin;
     @Autowired
     private JdbcTemplate jdbc;
 
@@ -62,7 +70,8 @@ class PlatformMetricsServiceIntegrationTest extends PostgresIntegrationTest {
         assertThat(after.tenants().active() - before.tenants().active()).isEqualTo(1);
         assertThat(after.tenants().disabled() - before.tenants().disabled()).isEqualTo(1);
         assertThat(after.branches().total() - before.branches().total()).isEqualTo(4);
-        assertThat(after.branches().active() - before.branches().active()).isEqualTo(3);
+        // Las sucursales activas son las que facturan: las del comercio deshabilitado no cuentan.
+        assertThat(after.branches().active() - before.branches().active()).isEqualTo(2);
         assertThat(after.branches().multiBranchTenants() - before.branches().multiBranchTenants()).isEqualTo(1);
         assertThat(after.tenantsByPlan().get(TenantPlan.PROFESIONAL) - before.tenantsByPlan().get(TenantPlan.PROFESIONAL))
                 .isEqualTo(2);
@@ -125,6 +134,113 @@ class PlatformMetricsServiceIntegrationTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void deletedTenantKeepsItsAltaAndCountsASingleBaja() {
+        AuthUser owner = data.user(null, Role.PLATFORM_OWNER, true);
+        PlatformMetrics before = service.metrics();
+
+        // Baja, reactivación, otra baja y eliminación definitiva: un alta y una sola baja.
+        TenantDetail tenant = tenantAdmin.create(newTenant("Eliminado"), owner.id());
+        tenantAdmin.cancel(tenant.id(), "Cerró el local", owner.id());
+        tenantAdmin.reactivate(tenant.id(), "Volvió", owner.id());
+        tenantAdmin.cancel(tenant.id(), "Cerró de nuevo", owner.id());
+        tenantAdmin.delete(tenant.id(), tenant.name(), owner.id());
+
+        PlatformMetrics after = service.metrics();
+
+        assertThat(after.tenants().total()).isEqualTo(before.tenants().total());
+        assertThat(after.tenants().newLast30d() - before.tenants().newLast30d()).isEqualTo(1);
+        assertThat(after.tenants().cancelledLast30d() - before.tenants().cancelledLast30d()).isEqualTo(1);
+        GrowthPoint thisMonthBefore = before.growth().getLast();
+        GrowthPoint thisMonth = after.growth().getLast();
+        assertThat(thisMonth.newTenants() - thisMonthBefore.newTenants()).isEqualTo(1);
+        assertThat(thisMonth.cancelled() - thisMonthBefore.cancelled()).isEqualTo(1);
+        assertThat(thisMonth.activeAtEndOfMonth()).isEqualTo(thisMonthBefore.activeAtEndOfMonth());
+    }
+
+    @Test
+    void deletedTenantStillCountsAsActiveInThePastMonths() {
+        long tenant = data.tenant("Eliminado viejo", "ALMACEN", "BASICO", "CANCELLED", "FIFO");
+        jdbc.update("update tenants set created_at = now() - interval '5 months' where id = ?", tenant);
+        jdbc.update("""
+                insert into tenant_events (tenant_id, type, from_value, to_value, created_at)
+                values (?, 'CREATED', null, 'BASICO', now() - interval '5 months'),
+                       (?, 'CANCELLED', 'ACTIVE', 'CANCELLED', now() - interval '2 months')
+                """, tenant, tenant);
+        PlatformMetrics before = service.metrics();
+
+        // Lo mismo que hace TenantAdminService.delete: guarda el id y borra el comercio.
+        jdbc.update("update tenant_events set deleted_tenant_id = tenant_id where tenant_id = ?", tenant);
+        jdbc.update("delete from tenants where id = ?", tenant);
+
+        PlatformMetrics after = service.metrics();
+
+        // La historia no cambia por eliminarlo: siguen su alta, su baja y los meses en que estuvo activo.
+        assertThat(after.growth()).isEqualTo(before.growth());
+        assertThat(after.tenants().total()).isEqualTo(before.tenants().total() - 1);
+        int last = after.growth().size() - 1;
+        assertThat(after.growth().get(last - 2).cancelled()).isPositive();
+    }
+
+    @Test
+    void cancellationUndoneInTheSamePeriodIsNotChurn() {
+        AuthUser owner = data.user(null, Role.PLATFORM_OWNER, true);
+        PlatformMetrics before = service.metrics();
+
+        TenantDetail tenant = tenantAdmin.create(newTenant("Arrepentido"), owner.id());
+        tenantAdmin.cancel(tenant.id(), "Por error", owner.id());
+        tenantAdmin.reactivate(tenant.id(), "Fue un error", owner.id());
+
+        PlatformMetrics after = service.metrics();
+
+        assertThat(after.tenants().cancelledLast30d()).isEqualTo(before.tenants().cancelledLast30d());
+        assertThat(after.growth().getLast().cancelled()).isEqualTo(before.growth().getLast().cancelled());
+        assertThat(after.growth().getLast().newTenants() - before.growth().getLast().newTenants()).isEqualTo(1);
+        assertThat(after.growth().getLast().activeAtEndOfMonth()
+                - before.growth().getLast().activeAtEndOfMonth()).isEqualTo(1);
+    }
+
+    @Test
+    void eventsWithoutATenantToAttributeThemToAreIgnored() {
+        PlatformMetrics before = service.metrics();
+
+        // Historial de un comercio eliminado antes de V250: no se sabe de quién es, no suma ni altas ni bajas.
+        jdbc.update("""
+                insert into tenant_events (tenant_id, type, from_value, to_value)
+                values (null, 'CREATED', null, 'BASICO'), (null, 'CANCELLED', 'ACTIVE', 'CANCELLED'),
+                       (null, 'REACTIVATED', 'CANCELLED', 'ACTIVE'), (null, 'CANCELLED', 'ACTIVE', 'CANCELLED')
+                """);
+
+        PlatformMetrics after = service.metrics();
+
+        assertThat(after.tenants().newLast30d()).isEqualTo(before.tenants().newLast30d());
+        assertThat(after.tenants().cancelledLast30d()).isEqualTo(before.tenants().cancelledLast30d());
+        assertThat(after.growth()).isEqualTo(before.growth());
+    }
+
+    @Test
+    void activeRecallsAreTheOnesWithPendingMatches() {
+        long first = data.tenant("Recall uno", "ALMACEN", "BASICO", "ACTIVE", "FIFO");
+        long second = data.tenant("Recall dos", "ALMACEN", "BASICO", "ACTIVE", "FIFO");
+        String barcode = data.barcode();
+        long resolved = data.recall(barcode, false, null, null, "PUBLISHED", "L-VIEJO");
+        long live = data.recall(barcode, false, null, null, "PUBLISHED", "L-NUEVO");
+        PlatformMetrics before = service.metrics();
+
+        // Un recall con todas sus coincidencias resueltas ya no está en curso.
+        match(resolved, first, "L-VIEJO", "RESOLVED");
+        match(resolved, second, "L-VIEJO", "RESOLVED");
+        assertThat(service.metrics().recalls()).isEqualTo(before.recalls());
+
+        // El recall nuevo sigue en curso mientras algún comercio no lo resuelva, y alcanzó a los dos.
+        match(live, first, "L-NUEVO", "OPEN");
+        match(live, second, "L-NUEVO", "RESOLVED");
+        PlatformMetrics withLive = service.metrics();
+        assertThat(withLive.recalls().activeRecalls() - before.recalls().activeRecalls()).isEqualTo(1);
+        assertThat(withLive.recalls().affectedTenantsTotal() - before.recalls().affectedTenantsTotal())
+                .isEqualTo(2);
+    }
+
+    @Test
     void supportAndRecallsAreOnlyCounts() {
         PlatformMetrics before = service.metrics();
 
@@ -171,6 +287,28 @@ class PlatformMetricsServiceIntegrationTest extends PostgresIntegrationTest {
         assertThat(metrics.tenants().total()).isEqualTo(metrics.tenants().active() + metrics.tenants().disabled()
                 + metrics.tenants().cancelled());
         assertThat(TenantStatus.values()).hasSize(3);
+    }
+
+    private void match(long recallId, long tenantId, String lotNumber, String status) {
+        long branch = data.branch(tenantId, "Sucursal " + lotNumber, true);
+        long product = data.product(tenantId, data.barcode(), "Sopa de tomate", "100", "150");
+        long lot = data.lot(tenantId, branch, product, lotNumber, lotNumber, null, 10, "RECALLED", 3);
+        jdbc.update("""
+                insert into recall_matches (announcement_id, tenant_id, branch_id, product_id, lot_id,
+                                            quantity_at_match, status)
+                values (?, ?, ?, ?, ?, 10, ?)
+                """, recallId, tenantId, branch, product, lot, status);
+    }
+
+    private CreateTenantRequest newTenant(String name) {
+        String suffix = data.suffix() + "-" + Math.abs(name.hashCode());
+        return new CreateTenantRequest(name + " " + suffix, null, null, BusinessType.ALMACEN, TenantPlan.BASICO,
+                null, null, null, null, "CABA", "Buenos Aires", null, null, newUser("jefe", suffix),
+                newUser("admin", suffix), newUser("empleado", suffix), null, null);
+    }
+
+    private static NewUserRequest newUser(String prefix, String suffix) {
+        return new NewUserRequest("Usuario " + prefix, prefix + "." + suffix + "@metricas.test", "Demo2026!");
     }
 
     private void enable(long tenantId, TenantModule... modules) {
