@@ -63,6 +63,11 @@ class ImportFileServiceTest {
             assertDate(first, ImportField.EXPIRY_DATE, LocalDate.of(2026, 10, 15));
             assertDate(first, ImportField.RECEIVED_AT, LocalDate.of(2026, 9, 1));
             assertThat(first.getCell(ImportField.PERISHABLE.ordinal()).getStringCellValue()).isEqualTo("sí");
+            // El resto del texto queda con formato General (solo los identificadores van como Texto).
+            assertThat(first.getCell(ImportField.NAME.ordinal()).getCellStyle().getDataFormatString())
+                    .isEqualTo("General");
+            assertThat(first.getCell(ImportField.LOT_NUMBER.ordinal()).getCellStyle().getDataFormatString())
+                    .isEqualTo("@");
 
             // Las celdas vacías no se crean como texto vacío.
             Row withoutLot = sheet.getRow(4);

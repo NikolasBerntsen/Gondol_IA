@@ -62,6 +62,8 @@ public class ImportFileService {
     /** Separador del CSV: Excel en español abre los `;` en columnas sin pedir nada. */
     private static final char CSV_DELIMITER = ';';
     private static final DateTimeFormatter DMY = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+    /** Columnas de identificadores: siempre texto en el Excel, aunque sean solo dígitos. */
+    private static final List<ImportField> IDENTIFIER_FIELDS = List.of(ImportField.BARCODE, ImportField.LOT_NUMBER);
 
     private final NamedParameterJdbcTemplate jdbc;
     private final BranchAccessService branchAccess;
@@ -408,7 +410,7 @@ public class ImportFileService {
             }
         }
         autoSize(sheet, headers.size());
-        for (ImportField field : List.of(ImportField.BARCODE, ImportField.LOT_NUMBER)) {
+        for (ImportField field : IDENTIFIER_FIELDS) {
             int column = field.ordinal();
             sheet.setDefaultColumnStyle(column, styles.text());
             if (sheet instanceof XSSFSheet xssf) {
@@ -430,7 +432,9 @@ public class ImportFileService {
             case String text -> {
                 Cell cell = row.createCell(column);
                 cell.setCellValue(text);
-                cell.setCellStyle(styles.text());
+                if (IDENTIFIER_FIELDS.stream().anyMatch(field -> field.ordinal() == column)) {
+                    cell.setCellStyle(styles.text());
+                }
             }
             case BigDecimal amount -> {
                 Cell cell = row.createCell(column);
