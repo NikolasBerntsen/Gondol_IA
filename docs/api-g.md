@@ -40,7 +40,7 @@ en [`datos-demo.md`](datos-demo.md); este documento cuenta cómo funciona el see
    soporte con conversación (uno con **foto adjunta real** guardada con `AttachmentStorageService`).
 
 **No se siembran** alertas ni recomendaciones pendientes ni resultados de IA: al terminar el arranque el motor de
-alertas y el análisis de IA (módulo B) los generan solos sobre estos datos (en la prueba local: 126 alertas abiertas y
+alertas y el análisis de IA (módulo B) los generan solos sobre estos datos (en la prueba local: 134 alertas abiertas y
 ~190 recomendaciones pendientes en las 18 sucursales activas, en unos segundos).
 
 ## 3. Rendimiento
@@ -48,7 +48,7 @@ alertas y el análisis de IA (módulo B) los generan solos sobre estos datos (en
 | Medición (Windows 11, Postgres 16 en Docker) | Valor |
 |---|---|
 | Siembra completa (base vacía → mundo listo) | **≈ 26 s** |
-| Filas escritas en bloque | ≈ 358.000 (6.700 lotes, 158.000 movimientos, 46.000 tickets del POS con ítems y pagos, 1.276 turnos) |
+| Filas escritas en bloque | ≈ 361.000 (7.300 lotes, 160.000 movimientos, 46.000 tickets del POS con ítems y pagos, 1.276 turnos) |
 | Simulación en memoria (sin base) | ≈ 1 s |
 
 Muy por debajo de la ventana de salud del backend (`start_period: 240s`). La prueba de integración falla si la siembra
@@ -98,7 +98,7 @@ Don Pepe → otro comercio = 404; comercios deshabilitados o dados de baja → l
 
 ## 6. Decisiones
 
-- **SQL directo + `COPY` en lugar de `StockService` por venta**: 158.000 movimientos pasando por el servicio (bloqueos,
+- **SQL directo + `COPY` en lugar de `StockService` por venta**: 160.000 movimientos pasando por el servicio (bloqueos,
   eventos, alertas) tardarían muchos minutos. La simulación replica las reglas del núcleo y las pruebas lo verifican
   reproduciendo cada movimiento. El driver de PostgreSQL es `runtime` en el `pom.xml`, así que la API de `COPY` se usa
   por reflexión (`PGConnection.getCopyAPI().copyIn`) a través de `JdbcTemplate`, en la misma transacción.

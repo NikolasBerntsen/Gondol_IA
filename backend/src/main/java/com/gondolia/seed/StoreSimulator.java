@@ -702,7 +702,8 @@ final class StoreSimulator {
         }
         int lead = stock.product.leadTimeDays;
         int position = coveringStock(stock, day.plusDays(lead)) + stock.pendingQuantity;
-        double safety = (template.perishable() && template.shelfLifeDays() <= 30 ? 3 : 4) + (lead >= 5 ? 2 : 0);
+        // Stock de seguridad en días: corto en perecederos (evita merma), holgado en el resto (evita quiebres).
+        double safety = (template.perishable() && template.shelfLifeDays() <= 30 ? 3 : 7) + (lead >= 5 ? 2 : 0);
         double reorderPoint = Math.max(2, daily * (lead + safety));
         if (position > reorderPoint) {
             return 0;
