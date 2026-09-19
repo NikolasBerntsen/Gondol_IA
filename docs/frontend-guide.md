@@ -232,18 +232,38 @@ me.tenant?.stockRotation;          // 'FIFO' | 'FEFO'
 me.tenant?.modules;                // TenantModule[] habilitados
 me.tenant?.maxBranches;            // máximo EFECTIVO (sin MULTI_BRANCH es 1)
 me.branches;                       // sucursales accesibles
-hasRole('TENANT_ADMIN');           // p. ej. mostrar "Eliminar" solo al admin
+hasRole('TENANT_ADMIN');           // preferí los permisos de useAccess() (abajo)
 ```
 
 ### 5.1 Roles
 
 Seis roles (SPEC §3.1): `PLATFORM_OWNER`, `SUPPORT_AGENT`, `TENANT_BOSS`, `TENANT_ADMIN`, `TENANT_EMPLOYEE`,
 **`TENANT_CASHIER`** (etiqueta "Cajero", inicio `/app/pos`). Grupos en `@/config/access` (espejo de `Roles.java`):
-`ALL`, `OWNER`, `SUPPORT`, `TENANT_ANY`, `TENANT_DASHBOARD`, `TENANT_INVENTORY`, `TENANT_ADMIN` y **`TENANT_POS`**
-(admin + empleado + cajero).
+`ALL`, `OWNER`, `SUPPORT`, `TENANT_ANY`, `TENANT_DASHBOARD`, `TENANT_INVENTORY`, **`TENANT_INVENTORY_READ`**
+(jefe + admin + empleado), `TENANT_ADMIN` y **`TENANT_POS`** (admin + empleado + cajero).
 
-Las rutas ya están protegidas en `App.tsx`; dentro de la página ocultá acciones según la matriz §3.3
-(el backend igual valida). El cajero solo ve POS + Avisos/Seguridad alimentaria/Soporte.
+**Regla (SPEC §3.3): todo botón o enlace visible para un rol funciona para ese rol; lo que un rol no puede hacer no se
+le muestra.** Nunca dibujes un botón que termina en "No tenés acceso a esta sección" o en un 403. Los permisos están
+centralizados en `PERMISSIONS` de `@/config/access` (`products.view`, `products.write`, `products.delete`,
+`intake.use`, `imports.use`, `expirations.view`, `expirations.discard`, `sales.view`, `sales.write`,
+`movements.view`, `movements.adjust`, `transfers.view`, `transfers.write`, `recommendations.decide`,
+`alerts.manage`, `insights.run`, `recalls.resolve`, `pos.use`, `pos.admin`, …) y los usan las rutas de `App.tsx`
+(`<RequireRole roles={rolesWith('products.view')} />`), el menú y las páginas:
+
+```tsx
+import { useAccess } from '@/auth/useAccess';
+
+const { can, canOpen } = useAccess();
+{can('products.write') && <ButtonLink to="/app/products/new">Nuevo producto</ButtonLink>}
+{can('recommendations.decide') ? <Button onClick={accept}>Aceptar</Button> : <span>Solo lectura</span>}
+// Links armados a mano: canOpen() mira el rol Y el módulo de la ruta.
+{canOpen(`/app/pos/sales/${id}/ticket`) ? <Link to={…}>Ticket</Link> : <Badge>{ticketCode}</Badge>}
+```
+
+Fuera de componentes: `can(role, permiso)`, `canAccessPath(role, ruta)` y `linkTargetFor(role, link)` (lo usa la
+campana para no mandar a nadie a "Acceso denegado"). El jefe tiene la vista resumida pero **ve** inventario, ficha
+de producto, vencimientos, ventas, movimientos y transferencias (sin botones de carga ni edición) y **decide** sobre
+recomendaciones y alertas. El cajero solo ve POS + Avisos/Seguridad alimentaria/Soporte. El backend igual valida.
 
 ### 5.2 Módulos por tenant (SPEC §14)
 

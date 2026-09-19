@@ -2,6 +2,7 @@ import { Menu, Search, X } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthContext';
+import { can } from '@/config/access';
 import { BranchSelector } from '@/branches/BranchSelector';
 import { Button } from '@/components/ui/Button';
 import { SearchInput } from '@/components/ui/SearchInput';
@@ -27,7 +28,8 @@ export function Topbar({ onOpenSidebar }: TopbarProps) {
   const { me, isTenantUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const canSearch = me?.role === 'TENANT_ADMIN' || me?.role === 'TENANT_EMPLOYEE';
+  // El buscador lleva al inventario: lo ve quien puede abrirlo (jefe, administrador y empleado).
+  const canSearch = can(me?.role, 'products.view');
 
   const [query, setQuery] = useState('');
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);

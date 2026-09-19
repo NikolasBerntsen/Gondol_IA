@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { keepPreviousData } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -22,7 +23,7 @@ import { StatusPill } from '@/components/gondola';
 import type { StripeSeverity } from '@/components/gondola';
 import { useBranch, useBranchQueryKey } from '@/branches/BranchContext';
 import { useBranchColumn } from '@/branches/branchColumn';
-import { useAuth } from '@/auth/AuthContext';
+import { useAccess } from '@/auth/useAccess';
 import { ALERT_STATUS_LABELS, ALERT_TYPE_LABELS, SEVERITY_LABELS } from '@/api/types';
 import type { AlertStatus, AlertType, Severity } from '@/api/types';
 import { useDebounce } from '@/lib/useDebounce';
@@ -57,10 +58,11 @@ const SEVERITY_OPTIONS = [
 ];
 
 export default function AlertsPage() {
-  const { hasRole } = useAuth();
+  const { can } = useAccess();
   const { isAll } = useBranch();
   const queryClient = useQueryClient();
-  const readOnly = !hasRole('TENANT_ADMIN');
+  // Marcar como vista, resolver y descartar: jefe y administrador (SPEC §3.3).
+  const readOnly = !can('alerts.manage');
   const branchColumn = useBranchColumn<AlertRow>();
 
   const [status, setStatus] = useState<AlertStatus | 'ALL'>('OPEN');
@@ -134,6 +136,14 @@ export default function AlertsPage() {
           <div className="font-semibold text-foreground">{row.title}</div>
           {row.message ? <p className="mt-0.5 text-sm text-muted-foreground">{row.message}</p> : null}
           {row.lotNumber ? <div className="mt-0.5 font-mono text-xs text-muted-foreground">Lote {row.lotNumber}</div> : null}
+          {row.productId != null && can('products.view') ? (
+            <Link
+              to={`/app/products/${row.productId}`}
+              className="mt-0.5 inline-block text-sm font-medium text-primary underline-offset-2 hover:underline"
+            >
+              Ver producto
+            </Link>
+          ) : null}
         </div>
       ),
     },
@@ -292,7 +302,7 @@ export default function AlertsPage() {
 
       {readOnly ? (
         <Alert tone="info" title="Estás viendo las alertas en modo lectura">
-          El administrador del comercio es quien las marca como vistas, resueltas o descartadas.
+          El jefe o el administrador del comercio las marcan como vistas, resueltas o descartadas.
         </Alert>
       ) : null}
 

@@ -2,7 +2,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { FileSpreadsheet, Package, PackagePlus, PackageSearch, Pencil, ScanBarcode } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useAuth } from '@/auth/AuthContext';
+import { useAccess } from '@/auth/useAccess';
 import { useBranch } from '@/branches/BranchContext';
 import { useBranchQueryKey } from '@/branches/BranchContext';
 import { ExpiryChip, StockStatusPill } from '@/components/gondola';
@@ -28,22 +28,36 @@ import type { ProductListItem, ProductStockFilter } from '../types';
 
 const PAGE_SIZE = 20;
 
+/** Filtro de stock que llega por URL (`?stockStatus=LOW`); cualquier otro valor es "Todos". */
+function parseStockFilter(value: string | null): ProductStockFilter {
+  return STOCK_FILTERS.find((option) => option.value === value)?.value ?? 'ALL';
+}
+
 export default function InventoryPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { hasRole } = useAuth();
+  const { can } = useAccess();
   const { branches, isAll } = useBranch();
-  const isAdmin = hasRole('TENANT_ADMIN');
+  // El jefe ve el inventario completo pero no carga ni edita (SPEC §3.3): sin esos botones.
+  const canImport = can('imports.use');
+  const canWrite = can('products.write');
+  const canIntake = can('intake.use');
 
   // El buscador de la barra superior navega a /app/inventory?q=<texto> (docs/frontend-guide.md §9).
   const urlQuery = searchParams.get('q') ?? '';
   const [search, setSearch] = useState(urlQuery);
   const [categoryId, setCategoryId] = useState<string>('');
-  const [stockStatus, setStockStatus] = useState<ProductStockFilter>('ALL');
+  // El Inicio abre /app/inventory?stockStatus=LOW desde "Artículos a reponer".
+  const urlStockStatus = searchParams.get('stockStatus');
+  const [stockStatus, setStockStatus] = useState<ProductStockFilter>(() => parseStockFilter(urlStockStatus));
   const [page, setPage] = useState(0);
 
   useEffect(() => {
     setSearch(urlQuery);
   }, [urlQuery]);
+
+  useEffect(() => {
+    setStockStatus(parseStockFilter(urlStockStatus));
+  }, [urlStockStatus]);
 
   const debouncedSearch = useDebounce(search, 300);
 
@@ -157,34 +171,40 @@ export default function InventoryPage() {
       mobileLabel: 'Precio',
       cell: (row) => <span className="whitespace-nowrap tabular-nums">{formatMoney(row.salePrice)}</span>,
     },
-    {
-      id: 'actions',
-      header: <span className="sr-only">Acciones</span>,
-      align: 'right',
-      mobile: 'actions',
-      cell: (row) => (
-        <div className="flex items-center justify-end gap-1">
-          <ButtonLink
-            to={`/app/intake?productId=${row.id}${row.barcode ? `&barcode=${encodeURIComponent(row.barcode)}` : ''}`}
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Cargar mercadería de ${row.name}`}
-            title="Cargar mercadería"
-          >
-            <ScanBarcode className="h-4 w-4" aria-hidden="true" />
-          </ButtonLink>
-          <ButtonLink
-            to={`/app/products/${row.id}/edit`}
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Editar ${row.name}`}
-            title="Editar producto"
-          >
-            <Pencil className="h-4 w-4" aria-hidden="true" />
-          </ButtonLink>
-        </div>
-      ),
-    },
+    canIntake || canWrite
+      ? {
+          id: 'actions',
+          header: <span className="sr-only">Acciones</span>,
+          align: 'right',
+          mobile: 'actions',
+          cell: (row) => (
+            <div className="flex items-center justify-end gap-1">
+              {canIntake ? (
+                <ButtonLink
+                  to={`/app/intake?productId=${row.id}${row.barcode ? `&barcode=${encodeURIComponent(row.barcode)}` : ''}`}
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Cargar mercadería de ${row.name}`}
+                  title="Cargar mercadería"
+                >
+                  <ScanBarcode className="h-4 w-4" aria-hidden="true" />
+                </ButtonLink>
+              ) : null}
+              {canWrite ? (
+                <ButtonLink
+                  to={`/app/products/${row.id}/edit`}
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Editar ${row.name}`}
+                  title="Editar producto"
+                >
+                  <Pencil className="h-4 w-4" aria-hidden="true" />
+                </ButtonLink>
+              ) : null}
+            </div>
+          ),
+        }
+      : null,
   ];
 
   return (
@@ -200,16 +220,20 @@ export default function InventoryPage() {
             : 'Productos, stock y vencimientos de tu comercio.'
         }
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            {isAdmin && (
-              <ButtonLink to="/app/imports" variant="outline" leftIcon={<FileSpreadsheet className="h-4 w-4" />}>
-                Importar Excel/CSV
-              </ButtonLink>
-            )}
-            <ButtonLink to="/app/products/new" leftIcon={<PackagePlus className="h-4 w-4" />}>
-              Nuevo producto
-            </ButtonLink>
-          </div>
+          canImport || canWrite ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {canImport && (
+                <ButtonLink to="/app/imports" variant="outline" leftIcon={<FileSpreadsheet className="h-4 w-4" />}>
+                  Importar Excel/CSV
+                </ButtonLink>
+              )}
+              {canWrite && (
+                <ButtonLink to="/app/products/new" leftIcon={<PackagePlus className="h-4 w-4" />}>
+                  Nuevo producto
+                </ButtonLink>
+              )}
+            </div>
+          ) : undefined
         }
       >
         <div className="flex flex-col gap-3">
@@ -242,7 +266,13 @@ export default function InventoryPage() {
           <Segmented
             label="Filtrar por estado de stock"
             value={stockStatus}
-            onChange={setStockStatus}
+            onChange={(value) => {
+              setStockStatus(value);
+              const next = new URLSearchParams(searchParams);
+              if (value === 'ALL') next.delete('stockStatus');
+              else next.set('stockStatus', value);
+              setSearchParams(next, { replace: true });
+            }}
             options={STOCK_FILTERS.map((option) => ({ value: option.value, label: option.label }))}
           />
         </div>
@@ -252,23 +282,31 @@ export default function InventoryPage() {
         <Card padding="lg">
           <EmptyState
             icon={PackageSearch}
-            title="Todavía no cargaste productos"
-            description="Empezá por tu planilla de Excel o CSV, o cargá el primer producto a mano y después su mercadería."
+            title={canWrite ? 'Todavía no cargaste productos' : 'Todavía no hay productos cargados'}
+            description={
+              canWrite
+                ? 'Empezá por tu planilla de Excel o CSV, o cargá el primer producto a mano y después su mercadería.'
+                : 'Cuando el administrador cargue el catálogo, lo vas a ver acá con su stock y sus vencimientos.'
+            }
             action={
-              <div className="flex flex-col gap-2 sm:flex-row">
-                {isAdmin && (
-                  <ButtonLink to="/app/imports" leftIcon={<FileSpreadsheet className="h-4 w-4" />}>
-                    Importar Excel/CSV
-                  </ButtonLink>
-                )}
-                <ButtonLink
-                  to="/app/products/new"
-                  variant={isAdmin ? 'outline' : 'default'}
-                  leftIcon={<PackagePlus className="h-4 w-4" />}
-                >
-                  Cargar el primer producto
-                </ButtonLink>
-              </div>
+              canImport || canWrite ? (
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  {canImport && (
+                    <ButtonLink to="/app/imports" leftIcon={<FileSpreadsheet className="h-4 w-4" />}>
+                      Importar Excel/CSV
+                    </ButtonLink>
+                  )}
+                  {canWrite && (
+                    <ButtonLink
+                      to="/app/products/new"
+                      variant={canImport ? 'outline' : 'default'}
+                      leftIcon={<PackagePlus className="h-4 w-4" />}
+                    >
+                      Cargar el primer producto
+                    </ButtonLink>
+                  )}
+                </div>
+              ) : undefined
             }
           />
         </Card>
@@ -296,6 +334,7 @@ export default function InventoryPage() {
                     setStockStatus('ALL');
                     const next = new URLSearchParams(searchParams);
                     next.delete('q');
+                    next.delete('stockStatus');
                     setSearchParams(next, { replace: true });
                   }}
                 >

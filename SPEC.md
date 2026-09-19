@@ -100,7 +100,7 @@ Backend (Spring) las lee como: `spring.datasource.url=jdbc:postgresql://${DB_HOS
 |---|---|---|---|
 | `PLATFORM_OWNER` | plataforma (tenant_id NULL) | Dueño GondolIA | Alta/baja/habilitación de tenants, métricas agregadas, avisos y recalls, equipo interno. **Nunca ve datos de negocio de un tenant** (productos, stock, ventas, chats). |
 | `SUPPORT_AGENT` | plataforma | Soporte | Atiende tickets y chat en vivo de todos los tenants. Ve solo lo que el cliente envía en el ticket (texto e imágenes) + nombre de comercio/usuario. |
-| `TENANT_BOSS` | tenant | Jefe | Toma de decisiones: **solo dashboards** (Inicio, Estadísticas, Inteligencia IA, Alertas) en modo lectura + Avisos, Seguridad alimentaria, Soporte. |
+| `TENANT_BOSS` | tenant | Jefe | Dueño y tomador de decisiones, con **vista resumida**: Inicio, Estadísticas, Inteligencia IA y Alertas; **ve** (sin cargar ni editar) inventario, ficha de producto con lotes y movimientos, vencimientos, historial de ventas, movimientos y transferencias; **decide** sobre las recomendaciones de la IA y las alertas (y puede recalcular la IA) + Avisos, Seguridad alimentaria, Soporte. |
 | `TENANT_ADMIN` | tenant | Administrador | Máximo nivel dentro del tenant: todo. |
 | `TENANT_EMPLOYEE` | tenant | Empleado | Carga de inventario y productos con vencimiento/lote (escáner y OCR), vencimientos y **cobro en el POS GondolIA** (si el módulo está activo) + Avisos, Seguridad alimentaria, Soporte. |
 | `TENANT_CASHIER` | tenant | Cajero | **Solo el POS GondolIA** (abrir/cerrar su caja, cobrar, anular ventas de su turno) + Avisos, Seguridad alimentaria, Soporte. |
@@ -115,23 +115,33 @@ Un tenant se crea con (al menos) un jefe, un administrador y un empleado. El adm
   (reactivar) o eliminable definitivamente.
 
 ### 3.3 Matriz de permisos (tenant)
+**Regla (todos los roles): todo botón o enlace visible para un rol funciona para ese rol; lo que un rol no puede hacer
+no se le muestra.** Un rol puede tener una navegación resumida (el jefe), pero todo lo que se abre desde ella —un "Ver
+todos" del Inicio, el nombre de un producto, el link de una notificación— lo puede ver completo. Nunca se muestra un
+botón que termina en "No tenés acceso a esta sección" o en un 403. En el frontend, los botones y los links se deciden con
+los permisos centralizados de `config/access.ts` (`can(role, permiso)`, `useAccess()`), que espejan esta tabla.
+
 Las filas marcadas con [módulo] además requieren que ese módulo esté habilitado para el tenant (§14).
 | Funcionalidad | BOSS | ADMIN | EMPLOYEE | CASHIER |
 |---|:-:|:-:|:-:|:-:|
 | Inicio / Estadísticas / Inteligencia IA / Alertas (ver) | ✔ | ✔ | ✘ | ✘ |
-| Aceptar/descartar recomendaciones, gestionar alertas, recalcular IA | ✘ | ✔ | ✘ | ✘ |
-| Inventario (listar/ver productos), crear/editar productos, categorías inline | ✘ | ✔ | ✔ | ✘ |
+| Aceptar/descartar recomendaciones, gestionar alertas (vista/resuelta/descartada), recalcular IA | ✔ | ✔ | ✘ | ✘ |
+| Inventario (listar/ver productos, ficha con lotes y movimientos del producto, proveedores en listas) | ✔ | ✔ | ✔ | ✘ |
+| Crear/editar productos, categorías inline | ✘ | ✔ | ✔ | ✘ |
 | Eliminar productos, CRUD categorías/proveedores | ✘ | ✔ | ✘ | ✘ |
 | Carga de mercadería (lotes, escáner, OCR) — en sus sucursales | ✘ | ✔ | ✔ | ✘ |
 | **Importación masiva Excel/CSV y exportación del catálogo** (§16) | ✘ | ✔ | ✘ | ✘ |
 | Ver consolidado de todas las sucursales / cambiar de sucursal | ✔ | ✔ | solo asignadas | solo asignadas |
 | Gestionar sucursales (alta, edición, baja) y asignar empleados/cajeros | ✘ | ✔ | ✘ | ✘ |
-| Transferencias de stock entre sucursales [MULTI_BRANCH] | ✘ | ✔ | ✘ | ✘ |
-| Vencimientos (ver) y descartar vencidos/dañados | ✘ | ✔ | ✔ | ✘ |
+| Transferencias de stock entre sucursales: historial y detalle [MULTI_BRANCH] | ✔ | ✔ | ✘ | ✘ |
+| Transferencias de stock entre sucursales: transferir [MULTI_BRANCH] | ✘ | ✔ | ✘ | ✘ |
+| Vencimientos (ver: listado y resumen) | ✔ | ✔ | ✔ | ✘ |
+| Descartar vencidos/dañados | ✘ | ✔ | ✔ | ✘ |
 | **POS GondolIA: abrir/cerrar caja, cobrar, anular ventas del propio turno** [POS_GONDOLIA] (§15) | ✘ | ✔ | ✔ | ✔ |
 | POS GondolIA: administrar cajas, ver todos los turnos, anular cualquier venta [POS_GONDOLIA] | ✘ | ✔ | ✘ | ✘ |
 | Integración con POS propio: API keys, importación CSV de ventas, simulador [POS_INTEGRATION] | ✘ | ✔ | ✘ | ✘ |
-| Historial de ventas (todas las fuentes), venta manual, ajustes, historial de movimientos | ✘ | ✔ | ✘ | ✘ |
+| Historial de ventas (todas las fuentes) con detalle, historial de movimientos | ✔ | ✔ | ✘ | ✘ |
+| Venta manual, ajustes de stock (el empleado solo registra mermas, §6.4) | ✘ | ✔ | ✘ | ✘ |
 | Usuarios del comercio y Configuración | ✘ | ✔ | ✘ | ✘ |
 | Avisos (ver), Seguridad alimentaria (ver + "Entendido") | ✔ | ✔ | ✔ | ✔ |
 | Resolver recall (retirar de stock) | ✘ | ✔ | ✔ | ✘ |
@@ -284,6 +294,8 @@ spring-boot-starter-test, spring-security-test. `artifactId=gondolia-backend`, j
   public static final String TENANT_ADMIN = "hasRole('TENANT_ADMIN')";
   public static final String TENANT_DASHBOARD = "hasAnyRole('TENANT_BOSS','TENANT_ADMIN')";
   public static final String TENANT_INVENTORY = "hasAnyRole('TENANT_ADMIN','TENANT_EMPLOYEE')";
+  // Lecturas de inventario (productos, lotes, proveedores, vencimientos): el jefe mira, no escribe (§3.3).
+  public static final String TENANT_INVENTORY_READ = "hasAnyRole('TENANT_BOSS','TENANT_ADMIN','TENANT_EMPLOYEE')";
   ```
   Además `SecurityConfig` protege por prefijo: `/api/auth/login`, `/api/integrations/pos/**`, `/actuator/health`,
   `/api/docs/**`, `/api/swagger-ui/**`, `/ws/**` → permitAll (el WS autentica en CONNECT; POS con API key);
@@ -449,7 +461,7 @@ Dinero y decimales → número JSON. En cada módulo documentá los endpoints fi
 - `GET /api/presence/support` → `{"agentsOnline":1}`
 - `GET /api/attachments/{id}` → imagen
 
-### 6.3 Módulo A1 — Catálogo y carga (`com.gondolia.catalog`) · roles: TENANT_INVENTORY salvo indicación
+### 6.3 Módulo A1 — Catálogo y carga (`com.gondolia.catalog`) · roles: lecturas (`GET` de productos, lotes y proveedores) TENANT_INVENTORY_READ (jefe + admin + empleado); escrituras TENANT_INVENTORY salvo indicación
 - Categorías: `GET /api/tenant/categories` → `[{id,name,productCount}]` (TENANT_ANY) · `POST` `{name}` · `PUT /{id}` (ADMIN) · `DELETE /{id}` (ADMIN, 409 si tiene productos).
 - Proveedores: `GET /api/tenant/suppliers` → `[{id,name,contactName,phone,email,leadTimeDays,notes,active,productCount}]` · `POST|PUT /{id}|DELETE /{id}` (ADMIN).
 - Productos:
@@ -474,17 +486,17 @@ Dinero y decimales → número JSON. En cada módulo documentá los endpoints fi
 - `POST /api/tenant/ocr/barcode` multipart `file` → `{"barcodes":[{"value":"...","format":"EAN_13"}]}`
 
 ### 6.4 Módulo A2 — Movimientos, ventas, transferencias, vencimientos, POS (`com.gondolia.movements`)
-- Ventas (ADMIN): `POST /api/tenant/sales` `{branchId?,items:[{productId,quantity,unitPrice?}],occurredAt?}` →
+- Ventas (venta manual e importación: ADMIN; historial y detalle: TENANT_DASHBOARD = jefe + admin): `POST /api/tenant/sales` `{branchId?,items:[{productId,quantity,unitPrice?}],occurredAt?}` →
   `{"batchRef":"S-...","branchId":3,"branchName":"...","occurredAt":"...","lines":[{productId,productName,quantity,unitPrice,discountPct,total,shortage,lots:[{lotId,lotNumber,expiryDate,quantity}]}],"total":1234.5}`
   (`lots` muestra de qué lotes salió cada unidad según la rotación)
   · `GET /api/tenant/sales?from=&to=&page=` → `PageResponse<{batchRef,branchId,branchName,occurredAt,itemsCount,units,total,source,userName}>`
   · `GET /api/tenant/sales/{batchRef}` · `POST /api/tenant/sales/import` multipart csv (`fecha,codigo_barras,cantidad,precio_unitario`; fecha `YYYY-MM-DD` o `DD/MM/YYYY`) → `{imported,skipped,errors:[{line,message}]}`
   · `GET /api/tenant/sales/import/template` → CSV
-- Movimientos (ADMIN): `GET /api/tenant/movements?productId=&type=&from=&to=&page=` → `PageResponse<{id,branchId,branchName,productId,productName,lotId,lotNumber,type,quantity,unitPrice,discountPct,totalAmount,source,batchRef,reason,userName,occurredAt}>`
+- Movimientos (historial: TENANT_DASHBOARD): `GET /api/tenant/movements?productId=&type=&from=&to=&page=` → `PageResponse<{id,branchId,branchName,productId,productName,lotId,lotNumber,type,quantity,unitPrice,discountPct,totalAmount,source,batchRef,reason,userName,occurredAt}>`
   · `POST /api/tenant/movements/adjustments` `{lotId,type,quantity,reason}` (ADMIN todos los tipos; EMPLOYEE solo `WASTE_EXPIRED|WASTE_DAMAGED` y en sus sucursales)
-- Transferencias (ADMIN): `POST /api/tenant/transfers` `{fromBranchId,toBranchId,items:[{lotId,quantity}],note}` → `{batchRef,fromBranchId,fromBranchName,toBranchId,toBranchName,occurredAt,items:[{lotId,destinationLotId,productId,productName,lotNumber,expiryDate,quantity}],recalls:[RecallInfo]}`
+- Transferencias (transferir y `available-lots`: ADMIN; historial y detalle: TENANT_DASHBOARD): `POST /api/tenant/transfers` `{fromBranchId,toBranchId,items:[{lotId,quantity}],note}` → `{batchRef,fromBranchId,fromBranchName,toBranchId,toBranchName,occurredAt,items:[{lotId,destinationLotId,productId,productName,lotNumber,expiryDate,quantity}],recalls:[RecallInfo]}`
   · `GET /api/tenant/transfers?page=` → `PageResponse<{batchRef,fromBranchId,fromBranchName,toBranchId,toBranchName,occurredAt,itemsCount,units,userName,note}>` · `GET /api/tenant/transfers/{batchRef}`
-- Vencimientos (TENANT_INVENTORY): `GET /api/tenant/expirations?bucket=ALL|EXPIRED|CRITICAL|WARNING|UPCOMING&q=&page=` →
+- Vencimientos (ver: TENANT_INVENTORY_READ = jefe + admin + empleado; descartar: TENANT_INVENTORY): `GET /api/tenant/expirations?bucket=ALL|EXPIRED|CRITICAL|WARNING|UPCOMING&q=&page=` →
   `PageResponse<{lotId,branchId,branchName,productId,productName,barcode,categoryName,lotNumber,expiryDate,daysLeft,quantity,receivedAt,rotationRank,costValue,saleValue,bucket,discountPct,status}>`
   · `GET /api/tenant/expirations/summary` → `{"expired":{lots,units,costValue},"critical":{...},"warning":{...},"upcoming":{...}}`
   · `POST /api/tenant/expirations/{lotId}/discard` `{quantity?,reason?}` → `WASTE_EXPIRED` (todo el remanente si no se indica)
@@ -499,21 +511,22 @@ Dinero y decimales → número JSON. En cada módulo documentá los endpoints fi
   `{externalId?,occurredAt?,items:[{barcode,quantity,unitPrice?}]}` → `{batchRef,processed,unknownBarcodes:[],shortages:[{barcode,quantity}]}`. 401 `INVALID_API_KEY`.
 
 ### 6.5 Módulo B — Dashboards, estadísticas, alertas e IA (`com.gondolia.analytics`, `com.gondolia.alerts`, `com.gondolia.insights`)
-Roles: lectura TENANT_DASHBOARD; acciones TENANT_ADMIN. Todo respeta el scope de sucursales (§3.5).
+Roles: lectura **y decisiones** (gestionar alertas, aceptar/descartar recomendaciones, recalcular la IA) TENANT_DASHBOARD
+(jefe + admin). Todo respeta el scope de sucursales (§3.5).
 - `GET /api/tenant/dashboard/summary` → `{scope:"ALL|BRANCH",branchCount,productsCount,expiringSoonCount,expiredCount,lowStockCount,outOfStockCount,inventoryCostValue,inventorySaleValue,openAlertsCount,pendingRecommendationsCount,openRecallMatchesCount,todaySalesUnits,todaySalesAmount,lastAiRunAt,asOf}`
 - `GET /api/tenant/dashboard/sales-stock-trend?days=30` → `[{date,salesUnits,salesAmount,stockUnits}]`
 - `GET /api/tenant/dashboard/branch-comparison?days=30` → `[{branchId,branchName,salesUnits,salesAmount,inventoryCostValue,expiringSoonCount,lowStockCount,wasteValue,openAlertsCount}]` (útil en la vista "Todas las sucursales")
 - `GET /api/tenant/dashboard/upcoming-expirations?limit=8` → `[{lotId,branchId,branchName,productId,productName,lotNumber,expiryDate,daysLeft,quantity,bucket}]`
 - `GET /api/tenant/dashboard/reorder?limit=8` → `[{productId,productName,branchId,branchName,sellableStock,minStock,suggestedQuantity,status:"SIN_STOCK|CRITICO|BAJO",predictedStockoutDate}]`
 - `GET /api/tenant/statistics/overview?days=90` → ventas por día/semana, por categoría, por sucursal, top/bottom productos, ABC, rotación, merma por mes (valor), ventas perdidas estimadas por faltantes, tasa de aceptación de recomendaciones, ventas recuperadas con descuentos (estructura libre documentada en `docs/api-analytics.md`).
-- Alertas: `GET /api/tenant/alerts?status=OPEN&type=&page=` · `POST /api/tenant/alerts/{id}/acknowledge|resolve|dismiss` (ADMIN).
+- Alertas: `GET /api/tenant/alerts?status=OPEN&type=&page=` · `POST /api/tenant/alerts/{id}/acknowledge|resolve|dismiss` (jefe + admin).
   Motor: `AlertEngine` programado (cada 10 min + al inicio + listener `StockChangedEvent`) que abre/cierra alertas **por
   sucursal** `EXPIRING_SOON`, `EXPIRED`, `LOW_STOCK`, `OUT_OF_STOCK`, `STOCKOUT_PREDICTED`, `ANOMALY` con `dedupe_key`
   (incluye branchId) y notifica a los ADMIN (y a los EMPLOYEE de esa sucursal solo las de vencimiento) cuando se abre una CRITICAL nueva.
   Filas: `{id,branchId,branchName,type,severity,status,productId,productName,lotId,lotNumber,title,message,createdAt,handledByName,resolvedAt}`.
 - IA (**por sucursal**): `GET /api/tenant/insights/summary` · `GET /api/tenant/insights/products?pattern=&abc=&page=` (filas con branchId/branchName) ·
   `GET /api/tenant/insights/products/{productId}?branchId=` (incluye historia diaria 90 días + pronóstico de esa sucursal; si falta branchId y el scope es una sola sucursal, usa esa) ·
-  `POST /api/tenant/insights/run` (ADMIN, asincrónico → un `ai_runs` por sucursal del scope) · `GET /api/tenant/insights/runs/latest` → `[{branchId,branchName,status,startedAt,finishedAt,productsAnalyzed,recommendationsCreated,errorMessage}]`.
+  `POST /api/tenant/insights/run` (jefe + admin, asincrónico → un `ai_runs` por sucursal del scope) · `GET /api/tenant/insights/runs/latest` → `[{branchId,branchName,status,startedAt,finishedAt,productsAnalyzed,recommendationsCreated,errorMessage}]`.
   `InsightsService` arma un `AnalyzeRequest` (§8.2) **por sucursal** con 180 días de ventas de esa sucursal, persiste `product_insights`,
   upsert de `recommendations` (dedupe por sucursal), expira las PENDING que ya no aplican. Programado diario 03:00 y al arrancar
   (si no hay run OK en 24 h) para todas las sucursales activas de tenants ACTIVE, con reintentos si la IA no está lista.
@@ -740,8 +753,10 @@ archivos nuevos solo dentro de `features/<modulo>/` (`api.ts`, `types.ts`, `comp
 | `/owner` · `/owner/tenants` · `/owner/tenants/new` · `/owner/tenants/:id` · `/owner/tenants/:id/edit` · `/owner/announcements` · `/owner/announcements/new` · `/owner/team` | OwnerMetricsPage · TenantsPage · TenantFormPage · TenantDetailPage · TenantFormPage · OwnerAnnouncementsPage · AnnouncementFormPage · PlatformTeamPage | PLATFORM_OWNER |
 | `/support` · `/support/tickets/:id` | SupportConsolePage | SUPPORT_AGENT |
 | `/app/dashboard` · `/app/statistics` · `/app/insights` · `/app/alerts` | Dashboard · Statistics · Insights · Alerts | BOSS, ADMIN |
-| `/app/inventory` · `/app/products/new` · `/app/products/:id` · `/app/products/:id/edit` · `/app/intake` · `/app/expirations` | Inventory · ProductForm · ProductDetail · ProductForm · Intake · Expirations | ADMIN, EMPLOYEE |
-| `/app/categories` · `/app/suppliers` · `/app/sales` · `/app/movements` · `/app/transfers` · `/app/users` · `/app/branches` · `/app/settings` | Categories · Suppliers · Sales · Movements · Transfers · Users · Branches · Settings | ADMIN |
+| `/app/inventory` (acepta `?q=` y `?stockStatus=`) · `/app/products/:id` · `/app/expirations` | Inventory · ProductDetail · Expirations | BOSS (solo lectura), ADMIN, EMPLOYEE |
+| `/app/products/new` · `/app/products/:id/edit` · `/app/intake` | ProductForm · ProductForm · Intake | ADMIN, EMPLOYEE |
+| `/app/sales` · `/app/movements` · `/app/transfers` | Sales · Movements · Transfers | BOSS (solo historial), ADMIN |
+| `/app/categories` · `/app/suppliers` · `/app/users` · `/app/branches` · `/app/settings` | Categories · Suppliers · Users · Branches · Settings | ADMIN |
 | `/app/notices` · `/app/recalls` · `/app/support` · `/app/support/:id` | Notices · Recalls · TenantSupport | BOSS, ADMIN, EMPLOYEE, CASHIER |
 | `/app/pos` · `/app/pos/sessions` | PosTerminalPage · PosSessionsPage (§15) | ADMIN, EMPLOYEE, CASHIER + módulo POS_GONDOLIA |
 | `/app/pos/registers` | PosRegistersPage (§15) | ADMIN + POS_GONDOLIA |
@@ -750,12 +765,18 @@ archivos nuevos solo dentro de `features/<modulo>/` (`api.ts`, `types.ts`, `comp
 | `/app/imports` · `/app/imports/:id` | ImportsPage · ImportWizardPage (§16) | ADMIN |
 | `/owner/modules` | ModulesMatrixPage (§14) | PLATFORM_OWNER |
 `/app/transfers` requiere además MULTI_BRANCH. Rutas con módulo deshabilitado → `ModuleDisabledPage` (guard `RequireModule`).
+Las rutas y los botones salen de los permisos de `config/access.ts` (regla de §3.3): en las pantallas que el jefe ve en
+solo lectura no aparecen Nuevo producto, Editar, Dar de baja, Importar, Cargar mercadería, Descartar, Registrar venta,
+Registrar ajuste ni Nueva transferencia; sí aparecen Aceptar/Descartar recomendación, Vista/Resuelta/Descartar alerta y
+Recalcular IA. El Inicio enlaza "Ver todos" de Próximos vencimientos → `/app/expirations`, "Ver todos" de Artículos a
+reponer → `/app/inventory?stockStatus=LOW` y cada producto → `/app/products/:id`.
 
 ### 9.4 Navegación (sidebar, íconos lucide)
 Cada ítem puede declarar `module`; si el tenant no lo tiene habilitado, el ítem no se muestra.
 - OWNER: Métricas (BarChart3) · Clientes (Store) · Módulos por cliente (Blocks) · Avisos y recalls (Megaphone) · Equipo GondolIA (Users)
 - SUPPORT: Bandeja de soporte (Headset)
-- BOSS: Inicio (Home) · Estadísticas (BarChart3) · Inteligencia IA (Sparkles) · Alertas (Bell) ‖ Avisos (Megaphone) · Seguridad alimentaria (ShieldAlert) · Soporte (LifeBuoy)
+- BOSS: Inicio (Home) · Inventario (Package) · Vencimientos (CalendarClock) · Ventas (ShoppingCart) · Estadísticas (BarChart3) · Inteligencia IA (Sparkles) · Alertas (Bell) ‖ Avisos (Megaphone) · Seguridad alimentaria (ShieldAlert) · Soporte (LifeBuoy)
+  (vista resumida: Movimientos y Transferencias no están en su menú, pero las puede abrir en solo lectura)
 - ADMIN: Inicio · Punto de venta (MonitorSmartphone)[POS_GONDOLIA] · Inventario (Package) · Carga de mercadería (ScanBarcode) · Importar Excel/CSV (FileSpreadsheet) · Vencimientos (CalendarClock) · Ventas (ShoppingCart) · Transferencias (ArrowLeftRight)[MULTI_BRANCH] · Movimientos (History) · Estadísticas · Inteligencia IA · Alertas · Proveedores (Truck) · Categorías (Tags) ‖ Sucursales (Building2) · Usuarios (UserCog) · Cajas y turnos (Calculator)[POS_GONDOLIA] · Integración POS (Plug)[POS_INTEGRATION] · Configuración (Settings) ‖ Avisos · Seguridad alimentaria · Soporte
 - EMPLOYEE: Punto de venta[POS_GONDOLIA] · Mis turnos de caja (Calculator)[POS_GONDOLIA] · Carga de mercadería · Inventario · Vencimientos ‖ Avisos · Seguridad alimentaria · Soporte
 - CASHIER: Punto de venta[POS_GONDOLIA] · Mis turnos de caja[POS_GONDOLIA] ‖ Avisos · Seguridad alimentaria · Soporte

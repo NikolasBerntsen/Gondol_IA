@@ -1,9 +1,11 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarClock, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
+import { useAccess } from '@/auth/useAccess';
 import { useBranch, useBranchQueryKey } from '@/branches/BranchContext';
 import { useBranchColumn } from '@/branches/branchColumn';
 import { BarcodeDigits, ExpiryChip, LotRankChip, StatusPill } from '@/components/gondola';
@@ -64,7 +66,11 @@ function daysLabel(row: ExpirationRow): string {
 export default function ExpirationsPage() {
   const queryClient = useQueryClient();
   const { me } = useAuth();
+  const { can } = useAccess();
   const { isAll, scopeLabel } = useBranch();
+  // El jefe ve los vencimientos pero no descarta (SPEC §3.3): sin botones de descarte.
+  const canDiscard = can('expirations.discard');
+  const canViewProduct = can('products.view');
   const rotation = me?.tenant?.stockRotation ?? 'FIFO';
 
   const [bucket, setBucket] = useState<ExpirationBucketFilter>('ALL');
@@ -152,7 +158,16 @@ export default function ExpirationsPage() {
       mobile: 'title',
       cell: (row) => (
         <span className="flex flex-col gap-0.5">
-          <span className="truncate font-semibold text-foreground">{row.productName}</span>
+          {canViewProduct ? (
+            <Link
+              to={`/app/products/${row.productId}`}
+              className="truncate font-semibold text-foreground underline-offset-2 hover:underline"
+            >
+              {row.productName}
+            </Link>
+          ) : (
+            <span className="truncate font-semibold text-foreground">{row.productName}</span>
+          )}
           <span className="flex flex-wrap items-center gap-1.5">
             {row.barcode ? <BarcodeDigits code={row.barcode} digitsOnly /> : null}
             {row.categoryName ? (
@@ -203,27 +218,29 @@ export default function ExpirationsPage() {
         </span>
       ),
     },
-    {
-      id: 'actions',
-      header: <span className="sr-only">Acciones</span>,
-      align: 'right',
-      mobile: 'actions',
-      cell: (row) => (
-        <Button
-          variant="outline"
-          size="sm"
-          className="whitespace-nowrap"
-          leftIcon={<Trash2 className="h-3.5 w-3.5" />}
-          onClick={() => {
-            setDiscarding(row);
-            setDiscardQuantity('');
-            setDiscardReason('');
-          }}
-        >
-          Descartar
-        </Button>
-      ),
-    },
+    canDiscard
+      ? {
+          id: 'actions',
+          header: <span className="sr-only">Acciones</span>,
+          align: 'right',
+          mobile: 'actions',
+          cell: (row) => (
+            <Button
+              variant="outline"
+              size="sm"
+              className="whitespace-nowrap"
+              leftIcon={<Trash2 className="h-3.5 w-3.5" />}
+              onClick={() => {
+                setDiscarding(row);
+                setDiscardQuantity('');
+                setDiscardReason('');
+              }}
+            >
+              Descartar
+            </Button>
+          ),
+        }
+      : null,
   ];
 
   const filterOptions = [
@@ -254,14 +271,16 @@ export default function ExpirationsPage() {
         icon={CalendarClock}
         description={`Lotes por vencer y vencidos de ${scopeLabel.toLowerCase()}.`}
         actions={
-          <Button
-            variant="destructive"
-            leftIcon={<Trash2 className="h-4 w-4" />}
-            disabled={expiredLots === 0}
-            onClick={() => setBulkOpen(true)}
-          >
-            Descartar todos los vencidos
-          </Button>
+          canDiscard ? (
+            <Button
+              variant="destructive"
+              leftIcon={<Trash2 className="h-4 w-4" />}
+              disabled={expiredLots === 0}
+              onClick={() => setBulkOpen(true)}
+            >
+              Descartar todos los vencidos
+            </Button>
+          ) : undefined
         }
       >
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -290,7 +309,7 @@ export default function ExpirationsPage() {
       </PageHeader>
 
       <div className="mb-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {kpi('Vencidos', totals?.expired, 'crit', 'para descartar')}
+        {kpi('Vencidos', totals?.expired, 'crit', canDiscard ? 'para descartar' : 'sin descartar')}
         {kpi('Críticos', totals?.critical, 'crit', `hasta ${totals?.criticalDays ?? 0} días`)}
         {kpi('Por vencer', totals?.warning, 'warn', `hasta ${totals?.warningDays ?? 0} días`)}
         {kpi('Próximos', totals?.upcoming, 'info', `hasta ${totals?.upcomingDays ?? 30} días`)}
