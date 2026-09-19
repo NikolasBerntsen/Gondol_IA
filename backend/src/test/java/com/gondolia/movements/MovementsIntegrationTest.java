@@ -24,6 +24,7 @@ import com.gondolia.movements.dto.SaleDtos.SaleSummaryDto;
 import com.gondolia.movements.dto.TransferDtos.TransferDto;
 import com.gondolia.movements.dto.TransferDtos.TransferItemRequest;
 import com.gondolia.movements.dto.TransferDtos.TransferRequest;
+import com.gondolia.movements.dto.TransferDtos.TransferSummaryDto;
 import com.gondolia.movements.dto.TransferDtos.TransferableLotDto;
 import com.gondolia.security.AuthUser;
 import com.gondolia.security.BranchAccessService;
@@ -226,6 +227,26 @@ class MovementsIntegrationTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void theSalesHistoryCanBeFilteredByDate() {
+        as(admin, centro);
+        data.lot(tenant, centro, milk, "L1", "L1", today.plusDays(30), 10, "ACTIVE", 1);
+        SaleDto sale = salesService.register(new SaleRequest(centro,
+                List.of(new SaleItemRequest(milk, 1, null)), null));
+
+        // Los límites viajan como parámetros de JDBC: antes un Instant suelto rompía la consulta (500).
+        assertThat(salesService.list(today, null, null, null, null, 0, 20).content())
+                .extracting(SaleSummaryDto::batchRef).containsExactly(sale.batchRef());
+        assertThat(salesService.list(null, today, null, null, null, 0, 20).content())
+                .extracting(SaleSummaryDto::batchRef).containsExactly(sale.batchRef());
+        assertThat(salesService.list(today, today, null, null, null, 0, 20).content())
+                .extracting(SaleSummaryDto::batchRef).containsExactly(sale.batchRef());
+        assertThat(salesService.list(today.plusDays(1), null, null, null, null, 0, 20).content()).isEmpty();
+        assertThat(salesService.list(null, today.minusDays(1), null, null, null, 0, 20).content()).isEmpty();
+        assertApiError(() -> salesService.list(today, today.minusDays(1), null, null, null, 0, 20),
+                400, "VALIDATION_ERROR");
+    }
+
+    @Test
     void theDetailOfASaleOfAnotherTenantIsNotFound() {
         as(otherAdmin, otherBranch);
         data.lot(otherTenant, otherBranch, otherProduct, "X1", "X1", today.plusDays(30), 5, "ACTIVE", 1);
@@ -332,6 +353,24 @@ class MovementsIntegrationTest extends PostgresIntegrationTest {
         as(employee, null); // el empleado solo ve Centro
         assertThat(movementsService.list(null, null, null, null, null, null, null, 0, 20).content())
                 .extracting(MovementDto::branchId).containsOnly(centro);
+    }
+
+    @Test
+    void theMovementsListCanBeFilteredByDate() {
+        as(admin, centro);
+        long lot = data.lot(tenant, centro, milk, "L1", "L1", today.plusDays(30), 10, "ACTIVE", 1);
+        movementsService.adjust(new AdjustmentRequest(lot, MovementType.WASTE_DAMAGED, 1, "Rotura"));
+
+        assertThat(movementsService.list(null, MovementType.WASTE_DAMAGED, null, null, today, null, null, 0, 20)
+                .content()).singleElement().extracting(MovementDto::lotId).isEqualTo(lot);
+        assertThat(movementsService.list(null, MovementType.WASTE_DAMAGED, null, null, null, today, null, 0, 20)
+                .content()).hasSize(1);
+        assertThat(movementsService.list(null, MovementType.WASTE_DAMAGED, null, null, today, today, null, 0, 20)
+                .content()).hasSize(1);
+        assertThat(movementsService.list(null, null, null, null, today.plusDays(1), null, null, 0, 20)
+                .content()).isEmpty();
+        assertThat(movementsService.list(null, null, null, null, null, today.minusDays(1), null, 0, 20)
+                .content()).isEmpty();
     }
 
     // ------------------------------------------------------------------ vencimientos
@@ -442,6 +481,23 @@ class MovementsIntegrationTest extends PostgresIntegrationTest {
                 "select received_at from lots where id = ?", java.sql.Timestamp.class, destination))
                 .isEqualTo(jdbc.queryForObject(
                         "select received_at from lots where id = ?", java.sql.Timestamp.class, origin));
+    }
+
+    @Test
+    void theTransfersHistoryCanBeFilteredByDate() {
+        as(admin, centro);
+        long origin = data.lot(tenant, centro, milk, "L-1", "L1", today.plusDays(40), 10, "ACTIVE", 7);
+        TransferDto transfer = transfersService.transfer(new TransferRequest(centro, norte,
+                List.of(new TransferItemRequest(origin, 2)), null));
+
+        assertThat(transfersService.list(today, null, null, 0, 20).content())
+                .extracting(TransferSummaryDto::batchRef).containsExactly(transfer.batchRef());
+        assertThat(transfersService.list(null, today, null, 0, 20).content())
+                .extracting(TransferSummaryDto::batchRef).containsExactly(transfer.batchRef());
+        assertThat(transfersService.list(today, today, null, 0, 20).content())
+                .extracting(TransferSummaryDto::batchRef).containsExactly(transfer.batchRef());
+        assertThat(transfersService.list(today.plusDays(1), null, null, 0, 20).content()).isEmpty();
+        assertThat(transfersService.list(null, today.minusDays(1), null, 0, 20).content()).isEmpty();
     }
 
     @Test
