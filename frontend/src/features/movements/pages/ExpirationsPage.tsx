@@ -68,6 +68,9 @@ export default function ExpirationsPage() {
   const { me } = useAuth();
   const { can } = useAccess();
   const { isAll, scopeLabel } = useBranch();
+  // Solo la etiqueta genérica ("Todas las sucursales") va en minúscula dentro de la frase; el nombre de
+  // una sucursal es un nombre propio y conserva sus mayúsculas ("de Sucursal Centro").
+  const scopeText = isAll ? scopeLabel.toLowerCase() : scopeLabel;
   // El jefe ve los vencimientos pero no descarta (SPEC §3.3): sin botones de descarte.
   const canDiscard = can('expirations.discard');
   const canViewProduct = can('products.view');
@@ -269,7 +272,7 @@ export default function ExpirationsPage() {
       <PageHeader
         title="Vencimientos"
         icon={CalendarClock}
-        description={`Lotes por vencer y vencidos de ${scopeLabel.toLowerCase()}.`}
+        description={`Lotes por vencer y vencidos de ${scopeText}.`}
         actions={
           canDiscard ? (
             <Button
@@ -398,7 +401,7 @@ export default function ExpirationsPage() {
                 totals.expired.lots === 1 ? 'lote vencido' : 'lotes vencidos'
               } con ${formatNumber(totals.expired.units)} u. por ${formatMoney(
                 totals.expired.costValue,
-              )} a costo en ${scopeLabel.toLowerCase()}. Esta acción no se puede deshacer.`
+              )} a costo en ${scopeText}. Esta acción no se puede deshacer.`
             : undefined
         }
         confirmLabel="Descartar los vencidos"

@@ -9,6 +9,8 @@ import com.gondolia.security.CurrentUser;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -81,14 +83,22 @@ public class MovementSupport {
         return names;
     }
 
-    /** Comienzo del día {@code from} en hora de negocio, o null. */
-    public Instant startOfDay(LocalDate from) {
-        return from == null ? null : from.atStartOfDay(clock.getZone()).toInstant();
+    /**
+     * Comienzo del día {@code from} en hora de negocio, o null. Se devuelve como {@link OffsetDateTime}
+     * porque es un parámetro de JDBC: el driver de PostgreSQL no sabe qué tipo SQL usar para un
+     * {@link Instant} suelto ("Can't infer the SQL type…") y la consulta termina en 500.
+     */
+    public OffsetDateTime startOfDay(LocalDate from) {
+        return from == null ? null : atStartOfDay(from);
     }
 
-    /** Fin (exclusivo) del día {@code to} en hora de negocio, o null. */
-    public Instant endOfDay(LocalDate to) {
-        return to == null ? null : to.plusDays(1).atStartOfDay(clock.getZone()).toInstant();
+    /** Fin (exclusivo) del día {@code to} en hora de negocio, o null; ver {@link #startOfDay}. */
+    public OffsetDateTime endOfDay(LocalDate to) {
+        return to == null ? null : atStartOfDay(to.plusDays(1));
+    }
+
+    private OffsetDateTime atStartOfDay(LocalDate date) {
+        return OffsetDateTime.ofInstant(date.atStartOfDay(clock.getZone()).toInstant(), ZoneOffset.UTC);
     }
 
     /** Valida que {@code from} no sea posterior a {@code to}. */
