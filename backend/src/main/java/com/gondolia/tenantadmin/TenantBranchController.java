@@ -22,8 +22,9 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Sucursales del comercio (SPEC §6.9). El listado y el límite los puede ver cualquier usuario del comercio
- * (necesitan saber en qué sucursal trabajan); el alta, la edición y los cambios de estado son del administrador.
+ * Sucursales del comercio (SPEC §6.9). El listado lo puede ver cualquier usuario del comercio (necesitan saber en qué
+ * sucursal trabajan); el límite de sucursales, el alta, la edición y los cambios de estado son del administrador
+ * (solo los usa su pantalla de Sucursales).
  */
 @Tag(name = "Administración del comercio · Sucursales")
 @RestController
@@ -44,7 +45,7 @@ public class TenantBranchController {
     @Operation(summary = "Límite de sucursales del plan",
             description = "Máximo efectivo: el del plan si Multi-sucursal está habilitado, si no 1.")
     @GetMapping("/limits")
-    @PreAuthorize(Roles.TENANT_ANY)
+    @PreAuthorize(Roles.TENANT_ADMIN)
     public BranchLimitsDto limits() {
         return branchService.limits();
     }

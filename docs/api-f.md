@@ -16,8 +16,8 @@ Endpoints de `com.gondolia.tenantadmin` (SPEC §6.9, §3.3, §3.5, §14) y panta
 | Endpoint | BOSS | ADMIN | EMPLOYEE | CASHIER |
 |---|:-:|:-:|:-:|:-:|
 | `/api/tenant/users/**` | ✘ | ✔ | ✘ | ✘ |
-| `GET /api/tenant/branches`, `GET /api/tenant/branches/limits` | ✔ | ✔ | ✔ | ✔ |
-| `POST/PUT /api/tenant/branches`, `/activate`, `/deactivate` | ✘ | ✔ | ✘ | ✘ |
+| `GET /api/tenant/branches` | ✔ | ✔ | ✔ | ✔ |
+| `GET /api/tenant/branches/limits`, `POST/PUT /api/tenant/branches`, `/activate`, `/deactivate` | ✘ | ✔ | ✘ | ✘ |
 | `GET/PUT /api/tenant/settings` | ✘ | ✔ | ✘ | ✘ |
 | `GET /api/tenant/account` | ✔ | ✔ | ✘ | ✘ |
 
@@ -106,8 +106,10 @@ Reglas:
 3. **Cambio de rol o desactivación cierran la sesión**: se incrementa `token_version` (los JWT viejos dejan de
    valer, porque el rol viaja en el token) y se llama a `SessionTerminationService.forceLogoutUser`, así las
    pestañas abiertas reciben `FORCE_LOGOUT` por `/user/queue/session` con el código `USER_DISABLED` o
-   `ROLE_CHANGED`. Cambiar solo el nombre o las sucursales **no** corta la sesión: el acceso por sucursal se
-   resuelve contra la base en cada request.
+   `ROLE_CHANGED`. Un cliente que no estaba conectado (un celular que se despierta) se entera en su próximo
+   request: el usuario desactivado recibe 401 `USER_DISABLED` (el estado se mira antes que la versión del token) y el
+   que cambió de rol, 401 `UNAUTHORIZED`. Cambiar solo el nombre o las sucursales **no** corta la sesión: el acceso
+   por sucursal se resuelve contra la base en cada request.
 
 ### 1.4 `POST /api/tenant/users/{id}/reset-password`
 
@@ -150,7 +152,10 @@ perfil."): el administrador usa `POST /api/auth/change-password`.
 - `hasStock`: hay lotes `ACTIVE` o `RECALLED` con remanente (`LotRepository.hasPhysicalStock`). La pantalla lo usa
   para explicar por qué el botón "Desactivar" está apagado antes de que el usuario lo intente.
 
-### 2.2 `GET /api/tenant/branches/limits`
+### 2.2 `GET /api/tenant/branches/limits` (solo administrador)
+
+Lo usa únicamente la pantalla de Sucursales del administrador; los demás roles reciben 403 `FORBIDDEN` (el plan y el
+máximo efectivo ya viajan en `/api/auth/me` para todos).
 
 ```json
 {"plan": "BASICO", "maxBranches": 3, "planMaxBranches": 3, "multiBranchEnabled": true,

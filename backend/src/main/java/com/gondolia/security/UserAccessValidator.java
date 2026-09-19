@@ -32,13 +32,20 @@ public class UserAccessValidator {
     /**
      * Valida un token ya verificado criptográficamente.
      *
-     * @throws ApiException 401 {@code UNAUTHORIZED} si el usuario no existe o el token fue revocado,
-     *                      401 {@code USER_DISABLED}, 403 {@code TENANT_DISABLED} / {@code TENANT_CANCELLED}
+     * <p>El estado del usuario se mira <b>antes</b> que la versión de token (SPEC §5.3): desactivar un usuario también
+     * incrementa {@code token_version}, y si la versión se chequeara primero, un cliente que no estaba conectado por
+     * STOMP (un celular que se despierta) recibiría el genérico "tu sesión expiró" en lugar de {@code USER_DISABLED}.
+     * Solo el propio usuario puede tener un JWT firmado con su id, así que decirle que está deshabilitado no filtra
+     * nada.
+     *
+     * @throws ApiException 401 {@code USER_DISABLED} si el usuario está desactivado, 401 {@code UNAUTHORIZED} si no
+     *                      existe o el token fue revocado, 403 {@code TENANT_DISABLED} / {@code TENANT_CANCELLED}
      */
     @Transactional(readOnly = true)
     public AuthUser validate(Long userId, int tokenVersion) {
         User user = userRepository.findById(userId)
                 .orElseThrow(UserAccessValidator::sessionInvalid);
+        requireUserActive(user);
         if (user.getTokenVersion() != tokenVersion) {
             throw sessionInvalid();
         }
@@ -50,9 +57,7 @@ public class UserAccessValidator {
      */
     @Transactional(readOnly = true)
     public AuthUser checkAccess(User user) {
-        if (!user.isActive()) {
-            throw new ApiException(HttpStatus.UNAUTHORIZED, ErrorCodes.USER_DISABLED, MSG_USER_DISABLED);
-        }
+        requireUserActive(user);
         if (user.getRole().isTenantRole()) {
             TenantStatus status = user.getTenantId() == null
                     ? null
@@ -80,6 +85,12 @@ public class UserAccessValidator {
             case ACTIVE -> {
                 // acceso normal
             }
+        }
+    }
+
+    private static void requireUserActive(User user) {
+        if (!user.isActive()) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, ErrorCodes.USER_DISABLED, MSG_USER_DISABLED);
         }
     }
 
