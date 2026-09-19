@@ -33,7 +33,6 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
@@ -41,7 +40,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
  * eventos, catálogos, la simulación de 180 días y la escritura en bloque de lotes, movimientos y POS. Los avisos,
  * recalls, recomendaciones decididas, soporte e importación los completa {@link DemoStories}.
  */
-@Slf4j
 final class DemoWorldBuilder {
 
     /** Resultado de armar un comercio: ids y datos que usan las historias. */
@@ -504,9 +502,5 @@ final class DemoWorldBuilder {
         return array.toString();
     }
 
-    /** Fecha y hora de la demo para logs. */
-    String describeNow() {
-        return now.atZone(zone).toLocalDateTime().withNano(0).toString();
-    }
 
 }

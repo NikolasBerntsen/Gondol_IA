@@ -145,3 +145,8 @@ Don Pepe → otro comercio = 404; comercios deshabilitados o dados de baja → l
 - `DemoDataSeederIntegrationTest` (`mvn test -Dgondolia.it=true`): crea la base `gondolia_it_seed`, arranca la
   aplicación con la demo y verifica volumen, tiempo, idempotencia, invariantes de stock y de caja, historias, logins,
   aislamiento con la API real y el recall en vivo con `RecallMatchingService.matchAnnouncement`.
+
+> Para correr **toda** la suite de integración en la base compartida conviene achicar el pool:
+> `DB_POOL_SIZE=5 mvn test -Dgondolia.it=true` (408 pruebas en verde). Con el pool por defecto (20) los contextos de
+> Spring que la suite deja en caché llegan a `max_connections = 100` de PostgreSQL y las últimas pruebas HTTP fallan con
+> "too many clients"; pasa igual sin el módulo G (se verificó excluyendo `DemoDataSeederIntegrationTest`).
