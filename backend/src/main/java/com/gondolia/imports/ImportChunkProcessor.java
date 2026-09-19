@@ -19,6 +19,7 @@ import com.gondolia.imports.dto.ImportDtos;
 import com.gondolia.imports.parse.ImportRowParser;
 import com.gondolia.imports.parse.ImportValues;
 import com.gondolia.imports.parse.ParsedRow;
+import com.gondolia.imports.validate.BranchLookup;
 import com.gondolia.imports.validate.ImportOptions;
 import com.gondolia.notification.NotificationDraft;
 import com.gondolia.notification.NotificationService;
@@ -79,17 +80,11 @@ public class ImportChunkProcessor {
                              List<ImportRowStore.StoredRow> rows, Totals totals, Instant base) {
         ImportJob job = jobRepository.findById(jobId).orElseThrow();
         ImportOptions options = ImportOptions.fromJson(job.getOptions());
-        Map<String, Long> branchIdsBySlug = new HashMap<>();
-        for (BranchRef branch : branches) {
-            branchIdsBySlug.putIfAbsent(ImportValues.slug(branch.name()), branch.id());
-            if (branch.code() != null && !branch.code().isBlank()) {
-                branchIdsBySlug.putIfAbsent(ImportValues.slug(branch.code()), branch.id());
-            }
-        }
+        BranchLookup branchLookup = new BranchLookup(branches);
         CatalogCache cache = new CatalogCache(tenantId);
         for (ImportRowStore.StoredRow row : rows) {
             try {
-                applyRow(jobId, tenantId, userId, options, branchIdsBySlug, cache, row, totals, base);
+                applyRow(jobId, tenantId, userId, options, branchLookup, cache, row, totals, base);
             } catch (ApiException e) {
                 totals.rowsFailed++;
                 List<ImportDtos.RowMessageDto> messages = new ArrayList<>(row.messages());
@@ -103,7 +98,7 @@ public class ImportChunkProcessor {
     }
 
     private void applyRow(Long jobId, Long tenantId, Long userId, ImportOptions options,
-                          Map<String, Long> branchIdsBySlug, CatalogCache cache, ImportRowStore.StoredRow row,
+                          BranchLookup branchLookup, CatalogCache cache, ImportRowStore.StoredRow row,
                           Totals totals, Instant base) {
         ParsedRow parsed = ImportRowParser.parse(row.data(), options.dateFormat());
         if (parsed.name() == null) {
@@ -129,7 +124,7 @@ public class ImportChunkProcessor {
         Long lotId = null;
         int quantity = parsed.quantityOrZero();
         if (options.importStock() && quantity > 0) {
-            Long branchId = resolveBranch(parsed, options, branchIdsBySlug);
+            Long branchId = resolveBranch(parsed, options, branchLookup);
             if (branchId == null) {
                 throw new com.gondolia.common.error.BadRequestException(
                         com.gondolia.common.error.ErrorCodes.BRANCH_REQUIRED,
@@ -159,9 +154,10 @@ public class ImportChunkProcessor {
         return start.plusMillis(rowNumber);
     }
 
-    private Long resolveBranch(ParsedRow parsed, ImportOptions options, Map<String, Long> branchIdsBySlug) {
+    private Long resolveBranch(ParsedRow parsed, ImportOptions options, BranchLookup branchLookup) {
         if (parsed.branch() != null) {
-            return branchIdsBySlug.get(ImportValues.slug(parsed.branch()));
+            BranchRef branch = branchLookup.find(parsed.branch());
+            return branch == null ? null : branch.id();
         }
         return options.defaultBranchId();
     }

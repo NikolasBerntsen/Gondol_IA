@@ -21,7 +21,6 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -69,7 +68,7 @@ public class ImportValidator {
         private final Map<String, Product> productsByName = new HashMap<>();
         private final Set<String> categorySlugs = new LinkedHashSet<>();
         private final Set<String> supplierSlugs = new LinkedHashSet<>();
-        private final Map<String, BranchRef> branchesBySlug = new LinkedHashMap<>();
+        private final BranchLookup branchLookup;
         private final Map<Long, Map<Long, Integer>> stockByBranch;
         private final Map<String, List<RecallMatchingService.RecallInfo>> recallCache = new HashMap<>();
         private final Map<String, FirstOccurrence> firstOccurrences = new HashMap<>();
@@ -101,12 +100,7 @@ public class ImportValidator {
             for (Supplier supplier : supplierRepository.findByTenantIdOrderByNameAsc(tenantId)) {
                 supplierSlugs.add(ImportValues.slug(supplier.getName()));
             }
-            for (BranchRef branch : branches) {
-                branchesBySlug.putIfAbsent(ImportValues.slug(branch.name()), branch);
-                if (branch.code() != null && !branch.code().isBlank()) {
-                    branchesBySlug.putIfAbsent(ImportValues.slug(branch.code()), branch);
-                }
-            }
+            this.branchLookup = new BranchLookup(branches);
             this.defaultBranch = branches.stream()
                     .filter(b -> Objects.equals(b.id(), options.defaultBranchId()))
                     .findFirst()
@@ -341,20 +335,15 @@ public class ImportValidator {
 
         private BranchRef resolveBranch(ParsedRow parsed, List<RowValidation.Message> messages) {
             if (parsed.branch() != null) {
-                BranchRef branch = branchesBySlug.get(ImportValues.slug(parsed.branch()));
+                BranchRef branch = branchLookup.find(parsed.branch());
                 if (branch == null) {
                     messages.add(error(ImportField.BRANCH, "La sucursal «" + parsed.branch()
-                            + "» no existe o no tenés acceso. Sucursales válidas: " + branchNames() + "."));
+                            + "» no existe o no tenés acceso. Sucursales válidas: " + branchLookup.names() + "."));
                     return null;
                 }
                 return branch;
             }
             return defaultBranch;
-        }
-
-        private String branchNames() {
-            return branchesBySlug.values().stream().map(BranchRef::name).distinct()
-                    .reduce((a, b) -> a + ", " + b).orElse("ninguna");
         }
 
         private void checkStock(ParsedRow parsed, Product existing, BranchRef branch,
