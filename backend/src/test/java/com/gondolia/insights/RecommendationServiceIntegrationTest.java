@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.gondolia.analytics.BranchScopeService.Scope;
 import com.gondolia.analytics.DashboardService;
+import com.gondolia.analytics.StatisticsService;
 import com.gondolia.analytics.dto.ReorderRow;
 import com.gondolia.common.error.ApiException;
 import com.gondolia.domain.ai.RecommendationStatus;
@@ -68,6 +69,8 @@ class RecommendationServiceIntegrationTest {
     private LotRepository lotRepository;
     @Autowired
     private DashboardService dashboardService;
+    @Autowired
+    private StatisticsService statisticsService;
     @Autowired
     private InsightsService insightsService;
     @Autowired
@@ -244,6 +247,9 @@ class RecommendationServiceIntegrationTest {
         ReorderRow row = yerbaRow();
         assertThat(row.orderedQuantity()).isEqualTo(25);
         assertThat(row.orderedAt()).isNotNull();
+
+        // Es un pedido anotado a mano, no una sugerencia de la IA: no cuenta en la tasa de aceptación.
+        assertThat(statisticsService.overview(tenant, scopeAll, 30).ai().recommendations().total()).isZero();
 
         // Entra la mercadería: la fila vuelve a ofrecer "Comprar".
         jdbc.update("""
