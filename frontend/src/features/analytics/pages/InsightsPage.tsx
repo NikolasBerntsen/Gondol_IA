@@ -227,9 +227,10 @@ function ProductDetail({
       band: point.lo != null && point.hi != null ? [point.lo, point.hi] : null,
       stockout: false,
     }));
-    // El último día real también arranca la línea del pronóstico, así no queda un hueco entre las dos series.
+    // El último día real también arranca la línea del pronóstico, así no queda un hueco entre las dos series
+    // (salvo que ese día no hubo stock: el pronóstico no sale de un 0 que no muestra la demanda).
     const bridge = history.length ? history[history.length - 1] : undefined;
-    if (bridge && forecast.length) bridge.yhat = bridge.units;
+    if (bridge && forecast.length && !bridge.stockout) bridge.yhat = bridge.units;
     return [...history, ...forecast];
   }, [detail]);
 
