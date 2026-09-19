@@ -28,6 +28,7 @@ import com.gondolia.domain.tenant.TenantSettings;
 import com.gondolia.domain.tenant.TenantSettingsRepository;
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -69,6 +70,12 @@ public class InsightsStore {
     static final int FEEDBACK_DAYS = 90;
 
     private static final int MAX_FEEDBACK_ROWS = 200;
+
+    /**
+     * Días en que una recomendación descartada no se vuelve a sugerir en esa sucursal (misma {@code dedupeKey}),
+     * igual que las alertas descartadas: "Descartar" la saca de la bandeja y el próximo análisis no la repite.
+     */
+    static final int DISCARD_QUIET_DAYS = 7;
 
     /** Campo propio dentro de {@code recommendations.outcome} con el descuento realmente aplicado. */
     static final String APPLIED_DISCOUNT_FIELD = "appliedDiscountPct";
@@ -282,7 +289,8 @@ public class InsightsStore {
 
     /**
      * Guarda los patrones por producto, hace el upsert de las recomendaciones PENDING (dedupe por sucursal) y expira
-     * las que ya no aplican.
+     * las que ya no aplican. Una recomendación descartada en los últimos {@value #DISCARD_QUIET_DAYS} días no se
+     * vuelve a crear.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public ApplyResult applyResults(AiRun run, AnalyzeResponse response, AnalyzeInput input) {
@@ -321,6 +329,7 @@ public class InsightsStore {
         }
 
         Set<String> keys = new HashSet<>();
+        Set<String> recentlyDiscarded = recentlyDiscarded(tenantId, branchId);
         int created = 0;
         int updated = 0;
         for (RecommendationResult result : response.recommendations()) {
@@ -334,9 +343,12 @@ public class InsightsStore {
                 continue;
             }
             String dedupeKey = trim(result.dedupeKey(), 150);
-            keys.add(dedupeKey);
             Optional<Recommendation> existing = recommendationRepository
                     .findByBranchIdAndDedupeKeyAndStatus(branchId, dedupeKey, RecommendationStatus.PENDING);
+            if (existing.isEmpty() && recentlyDiscarded.contains(dedupeKey)) {
+                continue;
+            }
+            keys.add(dedupeKey);
             Recommendation recommendation = existing.orElseGet(Recommendation::new);
             boolean isNew = existing.isEmpty();
             recommendation.setTenantId(tenantId);
@@ -377,6 +389,19 @@ public class InsightsStore {
             expired++;
         }
         return new ApplyResult(analyzed, created, updated, expired);
+    }
+
+    /** Claves de las recomendaciones de la sucursal descartadas dentro del período de silencio. */
+    private Set<String> recentlyDiscarded(long tenantId, long branchId) {
+        return new HashSet<>(jdbc.queryForList("""
+                select distinct dedupe_key from recommendations
+                where tenant_id = :tenantId and branch_id = :branchId and status = 'DISCARDED'
+                  and decided_at >= :since
+                """, new MapSqlParameterSource()
+                .addValue("tenantId", tenantId)
+                .addValue("branchId", branchId)
+                .addValue("since", utc(clock.instant().minus(Duration.ofDays(DISCARD_QUIET_DAYS)))),
+                String.class));
     }
 
     // ------------------------------------------------------------------ utilidades

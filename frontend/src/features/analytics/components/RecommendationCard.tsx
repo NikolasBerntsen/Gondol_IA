@@ -245,7 +245,7 @@ export function RecommendationCard({
         open={discardOpen}
         onClose={() => setDiscardOpen(false)}
         title="Descartar la recomendación"
-        description="La IA la vuelve a evaluar en el próximo análisis."
+        description="La IA no vuelve a sugerir lo mismo durante 7 días."
         size="sm"
         footer={
           <>

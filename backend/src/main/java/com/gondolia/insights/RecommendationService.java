@@ -299,7 +299,10 @@ public class RecommendationService {
                 orderedQuantity, whatsappText, whatsappUrl);
     }
 
-    /** Descarta la recomendación: la IA la vuelve a evaluar en el próximo análisis. */
+    /**
+     * Descarta la recomendación. La IA no vuelve a sugerir la misma ({@code dedupeKey}) en esa sucursal durante
+     * {@value InsightsStore#DISCARD_QUIET_DAYS} días, y el descarte viaja como {@code feedback}.
+     */
     @Transactional
     public RecommendationDecisionDto discard(Long tenantId, Long id, Long userId, Scope scope, String note) {
         Recommendation recommendation = load(tenantId, id);
@@ -309,7 +312,8 @@ public class RecommendationService {
         recommendation.setDecisionNote(trim(note));
         recommendationRepository.saveAndFlush(recommendation);
         return new RecommendationDecisionDto(byId(tenantId, id, scope),
-                "Descartamos la recomendación. La IA la vuelve a evaluar en el próximo análisis.",
+                "Descartamos la recomendación. La IA no la vuelve a sugerir durante %d días."
+                        .formatted(InsightsStore.DISCARD_QUIET_DAYS),
                 null, null, null, null, null);
     }
 

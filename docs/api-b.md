@@ -291,6 +291,7 @@ Sin sucursales accesibles → 400 `BRANCH_REQUIRED`.
 2. La llamada HTTP a la IA (hasta 120 s) ocurre **fuera de toda transacción**.
 3. `applyResults` guarda `product_insights` (uno por producto y sucursal), hace **upsert** de las
    recomendaciones `PENDING` por `(branchId, dedupeKey)` y **expira** las `PENDING` que la IA dejó de sugerir.
+   No recrea las que el comercio descartó en los últimos 7 días (§5.3).
    Se descartan las respuestas que mencionan productos o lotes que no estaban en el pedido.
 4. `finishRun` cierra el `ai_runs` con el resumen del modelo; un fallo lo deja en `ERROR` con el mensaje.
 5. Si hubo recomendaciones nuevas se notifica a los administradores de esa sucursal (`RECOMMENDATION`,
@@ -353,8 +354,10 @@ Errores: 404 `NOT_FOUND` (recomendación de otro comercio), 403 `BRANCH_FORBIDDE
 
 ### 5.3 `POST /{id}/discard` (jefe + admin)
 
-Body opcional `{"note":"Fue una promo puntual"}`. La deja en `DISCARDED`; la IA la vuelve a evaluar en el próximo
-análisis (y el descarte viaja como `feedback`).
+Body opcional `{"note":"Fue una promo puntual"}`. La deja en `DISCARDED` y el descarte viaja como `feedback`. Durante
+**7 días** (`InsightsStore.DISCARD_QUIET_DAYS`, como las alertas descartadas) los análisis de esa sucursal no vuelven a
+crear una recomendación con la misma `dedupeKey`: "Descartar" la saca de la bandeja aunque la IA la siga calculando.
+Pasado ese plazo, si la situación sigue, vuelve a aparecer.
 
 ### 5.4 Medición del resultado (`RecommendationOutcomeJob`)
 
@@ -402,8 +405,9 @@ Las query keys de datos por sucursal usan `useBranchQueryKey`, así que al cambi
    resultados) es una transacción corta propia: la llamada HTTP de hasta 120 s nunca mantiene una transacción
    abierta.
 5. **Dedupe de recomendaciones por sucursal.** El `dedupeKey` de §8.2 (`DISCOUNT:{lotId}`, `REORDER:{productId}`…)
-   es único junto con `branchId` y solo entre las `PENDING`: una recomendación aceptada o descartada no bloquea la
-   que genere el próximo análisis si la situación vuelve a darse.
+   es único junto con `branchId` y solo entre las `PENDING`: una recomendación aceptada no bloquea la que genere el
+   próximo análisis si la situación vuelve a darse. Una **descartada** sí: su clave queda en silencio 7 días en esa
+   sucursal (§5.3), para que "Descartar" no reaparezca con el próximo "Recalcular IA".
 6. **Aceptar un descuento cambia el orden de venta.** Al poner `discount_pct` el lote pasa al frente de la
    rotación (SPEC §4.2), así que el descuento realmente acelera su salida: eso es lo que después mide el job de
    resultados.
