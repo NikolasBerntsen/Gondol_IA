@@ -19,6 +19,7 @@ import {
   Alert,
   Badge,
   Button,
+  ButtonLink,
   Card,
   CardHeader,
   EmptyState,
@@ -39,6 +40,7 @@ import { useBranch, useBranchQueryKey } from '@/branches/BranchContext';
 import { useBranchColumn } from '@/branches/branchColumn';
 import { useCurrentUser } from '@/auth/AuthContext';
 import { useAccess } from '@/auth/useAccess';
+import { isApiError } from '@/api/client';
 import { RECOMMENDATION_TYPE_LABELS, SALES_PATTERN_LABELS } from '@/api/types';
 import type { RecommendationType, SalesPattern } from '@/api/types';
 import { useDebounce } from '@/lib/useDebounce';
@@ -218,6 +220,7 @@ function ProductDetail({
   readOnly: boolean;
 }) {
   const me = useCurrentUser();
+  const { canOpen } = useAccess();
   const rotation = me.tenant?.stockRotation ?? 'FIFO';
   const query = useQuery({
     queryKey: useBranchQueryKey('insights', 'detail', productId, branchId),
@@ -255,6 +258,32 @@ function ProductDetail({
       <div className="flex flex-col gap-4">
         <Skeleton className="h-10 w-48" />
         <Skeleton className="h-[280px] w-full" />
+      </div>
+    );
+  }
+  if (isApiError(query.error, 'NOT_FOUND')) {
+    // Producto sin análisis en esa sucursal (p. ej. un pedido anotado a mano antes de que corra la IA).
+    const productPath = `/app/products/${productId}`;
+    return (
+      <div className="flex flex-col gap-5">
+        <div>
+          <Button variant="ghost" size="sm" leftIcon={<ArrowLeft aria-hidden="true" />} onClick={onBack}>
+            {backLabel}
+          </Button>
+        </div>
+        <EmptyState
+          bordered
+          icon={Sparkles}
+          title="Todavía no hay análisis de este producto"
+          description="La IA lo analiza cuando tiene ventas en la sucursal: el próximo análisis corre esta noche."
+          action={
+            canOpen(productPath) ? (
+              <ButtonLink to={productPath} variant="outline">
+                Ver la ficha del producto
+              </ButtonLink>
+            ) : undefined
+          }
+        />
       </div>
     );
   }
