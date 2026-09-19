@@ -76,11 +76,19 @@ public class DemoDataSeeder implements ApplicationRunner {
             return;
         }
         long millis = (System.nanoTime() - started) / 1_000_000;
+        lastDurationMillis = millis;
         if (summary != null) {
             log.info("Datos demo listos en {} ms: {} comercios, {} lotes, {} movimientos, {} tickets del POS, "
                             + "{} turnos de caja ({} filas en bloque)", millis, summary.tenants(), summary.lots(),
                     summary.movements(), summary.sales(), summary.sessions(), summary.bulkRows());
         }
+    }
+
+    private volatile long lastDurationMillis;
+
+    /** Duración de la última siembra en milisegundos (0 si en este arranque no se sembró nada). */
+    public long lastDurationMillis() {
+        return lastDurationMillis;
     }
 
     /** Cantidades sembradas (para el log y las pruebas). */
