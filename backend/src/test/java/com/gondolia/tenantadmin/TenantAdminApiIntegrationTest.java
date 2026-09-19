@@ -101,6 +101,61 @@ class TenantAdminApiIntegrationTest extends PostgresIntegrationTest {
                 .andExpect(jsonPath("$.stockRotation").value("FIFO"));
     }
 
+    @Test
+    void onlyTheAdminSeesTheBranchLimits() throws Exception {
+        AuthUser boss = data.user(tenant, Role.TENANT_BOSS, true);
+
+        mockMvc.perform(get("/api/tenant/branches/limits").headers(auth(admin)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.activeBranches").value(2));
+
+        for (AuthUser other : new AuthUser[] {boss, employee, cashier}) {
+            mockMvc.perform(get("/api/tenant/branches/limits").headers(auth(other)))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+        }
+    }
+
+    // ------------------------------------------------------------------ cierre de sesión por cambios del admin
+
+    @Test
+    void deactivatedUserGetsUserDisabledWithTheTokenItAlreadyHad() throws Exception {
+        HttpHeaders employeeToken = auth(employee);
+        mockMvc.perform(get("/api/auth/me").headers(employeeToken)).andExpect(status().isOk());
+
+        mockMvc.perform(put("/api/tenant/users/" + employee.id())
+                        .headers(auth(admin))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"fullName":"Empleado","role":"TENANT_EMPLOYEE","active":false,"branchIds":[%d]}"""
+                                .formatted(centro)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(false));
+
+        // Desactivar también incrementa token_version: igual tiene que ver "usuario deshabilitado", no "sesión
+        // expirada" (SPEC §5.3, §9.6).
+        mockMvc.perform(get("/api/auth/me").headers(employeeToken))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("USER_DISABLED"));
+    }
+
+    @Test
+    void roleChangeRevokesTheOldTokenAsAnExpiredSession() throws Exception {
+        HttpHeaders employeeToken = auth(employee);
+
+        mockMvc.perform(put("/api/tenant/users/" + employee.id())
+                        .headers(auth(admin))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"fullName":"Empleado","role":"TENANT_CASHIER","active":true,"branchIds":[%d]}"""
+                                .formatted(centro)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/auth/me").headers(employeeToken))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
     // ------------------------------------------------------------------ aislamiento entre comercios
 
     @Test

@@ -46,6 +46,23 @@ function deactivationBlocker(branch: TenantBranch, activeBranches: number): Bloc
   return null;
 }
 
+/**
+ * Por qué no se pueden sumar sucursales activas (SPEC §3.5, §14.1). Sin el módulo Multi-sucursal el techo es 1 aunque
+ * el plan permita más: en ese caso el límite lo pone el módulo, no el plan, y el texto tiene que decirlo.
+ */
+function limitReached(limits: BranchLimits): Blocker {
+  if (!limits.multiBranchEnabled && limits.planMaxBranches > limits.maxBranches) {
+    return {
+      short: 'falta el módulo Multi-sucursal',
+      full: 'Sin el módulo Multi-sucursal tu comercio trabaja con una sola sucursal activa. Contactá a GondolIA para activarlo.',
+    };
+  }
+  return {
+    short: 'llegaste al máximo de tu plan',
+    full: `Llegaste al máximo de sucursales activas de tu plan ${PLAN_LABELS[limits.plan]}.`,
+  };
+}
+
 export default function BranchesPage() {
   const queryClient = useQueryClient();
   const [showInactive, setShowInactive] = useState(false);
@@ -68,6 +85,8 @@ export default function BranchesPage() {
   );
   const inactiveCount = branches.length - activeBranches;
   const canCreate = !!limits && limits.activeBranches < limits.maxBranches;
+  /** Motivo del límite; `null` mientras cargan los límites o si todavía hay lugar. */
+  const limitBlocker = limits && !canCreate ? limitReached(limits) : null;
 
   const deactivate = useMutation({
     mutationFn: (branch: TenantBranch) => branchesApi.deactivate(branch.id),
@@ -188,7 +207,7 @@ export default function BranchesPage() {
                   leftIcon={<Power aria-hidden="true" />}
                   loading={activate.isPending && activate.variables?.id === branch.id}
                   disabled={!canCreate}
-                  title={canCreate ? undefined : 'Llegaste al máximo de sucursales activas.'}
+                  title={limitBlocker?.full}
                   onClick={() => activate.mutate(branch)}
                 >
                   Reactivar
@@ -198,8 +217,8 @@ export default function BranchesPage() {
             {branch.active && blocker && (
               <span className="text-right text-xs text-muted-foreground">No se puede: {blocker.short.toLowerCase()}</span>
             )}
-            {!branch.active && !canCreate && (
-              <span className="text-right text-xs text-muted-foreground">No se puede: llegaste al máximo del plan</span>
+            {!branch.active && limitBlocker && (
+              <span className="text-right text-xs text-muted-foreground">No se puede: {limitBlocker.short}</span>
             )}
           </div>
         );
@@ -218,7 +237,7 @@ export default function BranchesPage() {
             onClick={openCreate}
             leftIcon={<Plus aria-hidden="true" />}
             disabled={!canCreate}
-            title={canCreate ? undefined : 'Llegaste al máximo de sucursales activas de tu plan.'}
+            title={limitBlocker?.full}
           >
             Crear sucursal
           </Button>
@@ -295,6 +314,7 @@ function PlanLimitPanel({ limits, loading }: { limits: BranchLimits | undefined;
   const max = limits.maxBranches;
   const pct = max > 0 ? Math.min(100, Math.round((used / max) * 100)) : 100;
   const full = used >= max;
+  const byModule = !limits.multiBranchEnabled && limits.planMaxBranches > max;
 
   return (
     <Card>
@@ -319,16 +339,26 @@ function PlanLimitPanel({ limits, loading }: { limits: BranchLimits | undefined;
             />
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            {full ? 'Llegaste al máximo de tu plan.' : `Podés crear ${max - used} más.`}
+            {!full
+              ? `Podés crear ${max - used} más.`
+              : byModule
+                ? 'Sin Multi-sucursal, tu comercio trabaja con una sola.'
+                : 'Llegaste al máximo de tu plan.'}
           </p>
         </div>
       </div>
 
-      {!limits.multiBranchEnabled && (
+      {byModule && (
         <Alert tone="info" title="Multi-sucursal no está habilitado" icon={PackageX} className="mt-4">
           Tu comercio funciona con una sola sucursal. Tu plan {PLAN_LABELS[limits.plan]} permite hasta{' '}
           <strong>{limits.planMaxBranches}</strong>: contactá a GondolIA para activar el módulo Multi-sucursal y sumar
           locales, transferencias entre sucursales y la vista consolidada.
+        </Alert>
+      )}
+      {!limits.multiBranchEnabled && !byModule && (
+        <Alert tone="info" title="Tu plan incluye una sola sucursal" icon={PackageX} className="mt-4">
+          Para sumar locales, transferencias entre sucursales y la vista consolidada, contactá a GondolIA para pasar a un
+          plan con más sucursales y activar el módulo Multi-sucursal.
         </Alert>
       )}
       {limits.multiBranchEnabled && full && (
