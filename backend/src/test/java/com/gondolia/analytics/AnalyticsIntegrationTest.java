@@ -158,6 +158,31 @@ class AnalyticsIntegrationTest {
     }
 
     @Test
+    void recallMatchesCountUntilTheRemovalIsResolved() {
+        // Un recall con tres lotes alcanzados en Centro: sin confirmar, "Entendido" (sigue en cuarentena) y resuelto.
+        String barcode = data.barcode();
+        long sopa = data.product(tenant, barcode, "Sopa de tomate", "900", "1500");
+        long recall = data.recall(barcode, true, null, null, "PUBLISHED");
+        LocalDate today = LocalDate.now(clock);
+        long open = data.lot(tenant, centro, sopa, "S1", "S1", today.plusDays(90), 5, "RECALLED", 3);
+        long acknowledged = data.lot(tenant, centro, sopa, "S2", "S2", today.plusDays(90), 6, "RECALLED", 3);
+        long resolved = data.lot(tenant, centro, sopa, "S3", "S3", today.plusDays(90), 0, "RECALLED", 3);
+        recallMatch(recall, centro, sopa, open, "OPEN");
+        recallMatch(recall, centro, sopa, acknowledged, "ACKNOWLEDGED");
+        recallMatch(recall, centro, sopa, resolved, "RESOLVED");
+
+        // El Inicio sigue mostrando la confirmada: el lote no se vende hasta que se resuelva el retiro.
+        assertThat(dashboardService.summary(tenant, scopeCentro).openRecallMatchesCount()).isEqualTo(2);
+        assertThat(dashboardService.summary(tenant, scopeAll).openRecallMatchesCount()).isEqualTo(2);
+        Scope soloNorte = new Scope(List.of(norte), Map.of(norte, "Sucursal Norte"), false);
+        assertThat(dashboardService.summary(tenant, soloNorte).openRecallMatchesCount()).isZero();
+
+        jdbc.update("update recall_matches set status = 'RESOLVED', resolved_at = now() where lot_id in (?, ?)",
+                open, acknowledged);
+        assertThat(dashboardService.summary(tenant, scopeCentro).openRecallMatchesCount()).isZero();
+    }
+
+    @Test
     void emptyScopeAnswersZeroInsteadOfFailing() {
         DashboardSummary empty = dashboardService.summary(tenant, new Scope(List.of(), Map.of(), true));
         assertThat(empty.branchCount()).isZero();
@@ -211,6 +236,18 @@ class AnalyticsIntegrationTest {
         assertThat(rows.getFirst().branchName()).isEqualTo("Sucursal Centro");
         assertThat(rows).isSortedAccordingTo((a, b) -> a.expiryDate().compareTo(b.expiryDate()));
         assertThat(rows).allSatisfy(row -> assertThat(row.branchId()).isIn(centro, norte));
+    }
+
+    @Test
+    void upcomingExpirationsOnlyListSellableLots() {
+        List<UpcomingExpirationRow> rows = dashboardService.upcomingExpirations(tenant, scopeAll, 100);
+
+        // El lote Y0 venció hace 2 días: no se vende, se informa aparte como "vencido sin descartar".
+        assertThat(rows).extracting(UpcomingExpirationRow::lotNumber).doesNotContain("Y0").contains("Y1");
+        assertThat(rows).allSatisfy(row -> {
+            assertThat(row.daysLeft()).isNotNegative();
+            assertThat(row.bucket()).isNotEqualTo("EXPIRED");
+        });
     }
 
     @Test
@@ -296,6 +333,14 @@ class AnalyticsIntegrationTest {
 
     private void waste(long branchId, long productId, Long lotId, int quantity, String cost, int daysAgo) {
         movement(tenant, branchId, productId, lotId, "WASTE_EXPIRED", quantity, cost, daysAgo, "A-TEST");
+    }
+
+    private void recallMatch(long announcementId, long branchId, long productId, long lotId, String status) {
+        jdbc.update("""
+                insert into recall_matches (announcement_id, tenant_id, branch_id, product_id, lot_id,
+                                            quantity_at_match, status)
+                values (?, ?, ?, ?, ?, 5, ?)
+                """, announcementId, tenant, branchId, productId, lotId, status);
     }
 
     private void movement(long tenantId, long branchId, long productId, Long lotId, String type, int quantity,

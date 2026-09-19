@@ -48,27 +48,32 @@ public class DashboardController {
     @Operation(summary = "Tendencia de ventas netas y stock total")
     @GetMapping("/sales-stock-trend")
     public List<SalesStockPoint> salesStockTrend(
-            @RequestParam(defaultValue = "30") @Min(1) @Max(DashboardService.MAX_TREND_DAYS) int days) {
+            @RequestParam(defaultValue = "30") @Min(value = 1, message = ParamMessages.MIN)
+            @Max(value = DashboardService.MAX_TREND_DAYS, message = ParamMessages.MAX) int days) {
         return dashboardService.salesStockTrend(CurrentUser.tenantId(), scope(), days);
     }
 
     @Operation(summary = "Comparación entre sucursales del alcance")
     @GetMapping("/branch-comparison")
     public List<BranchComparisonRow> branchComparison(
-            @RequestParam(defaultValue = "30") @Min(1) @Max(DashboardService.MAX_TREND_DAYS) int days) {
+            @RequestParam(defaultValue = "30") @Min(value = 1, message = ParamMessages.MIN)
+            @Max(value = DashboardService.MAX_TREND_DAYS, message = ParamMessages.MAX) int days) {
         return dashboardService.branchComparison(CurrentUser.tenantId(), scope(), days);
     }
 
     @Operation(summary = "Próximos vencimientos (30 días)")
     @GetMapping("/upcoming-expirations")
     public List<UpcomingExpirationRow> upcomingExpirations(
-            @RequestParam(defaultValue = "8") @Min(1) @Max(100) int limit) {
+            @RequestParam(defaultValue = "8") @Min(value = 1, message = ParamMessages.MIN)
+            @Max(value = 100, message = ParamMessages.MAX) int limit) {
         return dashboardService.upcomingExpirations(CurrentUser.tenantId(), scope(), limit);
     }
 
     @Operation(summary = "Artículos a reponer (una fila por producto y sucursal)")
     @GetMapping("/reorder")
-    public List<ReorderRow> reorder(@RequestParam(defaultValue = "8") @Min(1) @Max(200) int limit) {
+    public List<ReorderRow> reorder(
+            @RequestParam(defaultValue = "8") @Min(value = 1, message = ParamMessages.MIN)
+            @Max(value = 200, message = ParamMessages.MAX) int limit) {
         return dashboardService.reorder(CurrentUser.tenantId(), scope(), limit);
     }
 }

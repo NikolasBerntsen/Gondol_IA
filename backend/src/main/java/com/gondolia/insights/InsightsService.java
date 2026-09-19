@@ -172,15 +172,26 @@ public class InsightsService {
                 });
 
         List<AiRunDto> runs = latestRuns(tenantId, scope);
-        Instant lastRunAt = runs.stream().filter(run -> run.status() == AiRunStatus.OK)
-                .map(AiRunDto::finishedAt).filter(java.util.Objects::nonNull)
-                .max(Instant::compareTo).orElse(null);
+        Instant lastRunAt = lastOkRunAt(params);
         boolean running = runs.stream().anyMatch(run -> run.status() == AiRunStatus.RUNNING);
 
         return new InsightsSummaryDto(scope.label(), scope.branchIds().size(), analyzed, lastRunAt, running,
                 aiAvailable(), patternCounts, abcCounts, pending, byType,
                 atRisk == null ? BigDecimal.ZERO : atRisk.setScale(2, java.math.RoundingMode.HALF_UP),
                 stockouts, anomalies, topRisks, runs);
+    }
+
+    /**
+     * Fin del último análisis {@code OK} del alcance (api-b §4.1). Se busca en toda la historia y no solo en el último
+     * run de cada sucursal: mientras corre un análisis nuevo (o después de uno fallido) el resultado vigente sigue
+     * siendo el del último que terminó bien.
+     */
+    private Instant lastOkRunAt(MapSqlParameterSource params) {
+        OffsetDateTime finished = jdbc.queryForObject("""
+                select max(coalesce(finished_at, started_at)) from ai_runs
+                where tenant_id = :tenantId and branch_id in (:branchIds) and status = 'OK'
+                """, params, OffsetDateTime.class);
+        return finished == null ? null : finished.toInstant();
     }
 
     // ------------------------------------------------------------------ listado de patrones

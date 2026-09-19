@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CalendarClock, Check, Lightbulb, Package, Trash2, TrendingDown } from 'lucide-react';
+import { ArrowRight, CalendarClock, Check, Lightbulb, Package, Trash2, TrendingDown } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Button, Field, Input, Modal, Textarea } from '@/components/ui';
 import { StatusPill } from '@/components/gondola';
@@ -25,12 +25,14 @@ export interface AcceptValues {
 
 export interface RecommendationCardProps {
   recommendation: RecommendationRow;
-  /** El jefe solo lee (SPEC §3.3). */
+  /** Sin permiso para aceptar o descartar (SPEC §3.3: deciden el jefe y el administrador). */
   readOnly: boolean;
   showBranch: boolean;
   busy?: boolean;
   onAccept: (values: AcceptValues) => void;
   onDiscard: (note?: string) => void;
+  /** Abre el análisis del producto (pronóstico, lotes y anomalías) para decidir con más datos. */
+  onOpenProduct?: () => void;
   className?: string;
 }
 
@@ -45,6 +47,7 @@ export function RecommendationCard({
   busy = false,
   onAccept,
   onDiscard,
+  onOpenProduct,
   className,
 }: RecommendationCardProps) {
   const [acceptOpen, setAcceptOpen] = useState(false);
@@ -177,6 +180,17 @@ export function RecommendationCard({
             </Button>
           </>
         )}
+        {onOpenProduct ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="ml-auto"
+            rightIcon={<ArrowRight aria-hidden="true" />}
+            onClick={onOpenProduct}
+          >
+            Ver producto
+          </Button>
+        ) : null}
       </div>
 
       <Modal

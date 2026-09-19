@@ -2,6 +2,7 @@ package com.gondolia.insights;
 
 import com.gondolia.analytics.BranchScopeService;
 import com.gondolia.analytics.BranchScopeService.Scope;
+import com.gondolia.analytics.ParamMessages;
 import com.gondolia.common.PageResponse;
 import com.gondolia.common.error.BadRequestException;
 import com.gondolia.common.error.ErrorCodes;
@@ -60,8 +61,9 @@ public class InsightsController {
             @RequestParam(required = false) String pattern,
             @RequestParam(required = false) String abc,
             @RequestParam(required = false) String q,
-            @RequestParam(defaultValue = "0") @Min(0) int page,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+            @RequestParam(defaultValue = "0") @Min(value = 0, message = ParamMessages.MIN) int page,
+            @RequestParam(defaultValue = "20") @Min(value = 1, message = ParamMessages.MIN)
+            @Max(value = 100, message = ParamMessages.MAX) int size) {
         InsightQuery query = new InsightQuery(parsePattern(pattern), parseAbc(abc), q, page, size);
         return insightsService.products(CurrentUser.tenantId(), scope(), query);
     }

@@ -94,3 +94,49 @@ export function ChartFrame({
 }
 
 export const tickNumber = (value: number) => formatNumber(value);
+
+/** Pasos "redondos" de un eje (× potencia de 10): 1, 2, 2,5, 3, 4, 5. */
+const NICE_FACTORS = [1, 2, 2.5, 3, 4, 5, 10] as const;
+
+/** El menor paso redondo ≥ `raw`, entero (son unidades o pesos: nunca "2,5 u."). */
+function niceStep(raw: number): number {
+  if (raw <= 1) return 1;
+  const base = 10 ** Math.floor(Math.log10(raw));
+  for (const factor of NICE_FACTORS) {
+    const step = factor * base;
+    if (step >= raw && Number.isInteger(step)) return step;
+  }
+  return 10 * base;
+}
+
+export interface NiceAxis {
+  /** Tope del dominio: `ticks` termina acá. */
+  max: number;
+  ticks: number[];
+}
+
+function axisFor(target: number, intervals: number): NiceAxis {
+  const step = niceStep(target / intervals);
+  return { max: step * intervals, ticks: Array.from({ length: intervals + 1 }, (_, i) => i * step) };
+}
+
+/**
+ * Ejes con marcas redondas y parejas (0 · 4.000 · 8.000 · 12.000) para varios valores máximos que comparten el mismo
+ * gráfico. Todos los ejes usan la misma cantidad de intervalos, así las marcas de un eje secundario caen sobre las
+ * líneas de la grilla del principal. `headroom` deja aire arriba del valor más alto (0,05 = 5 %).
+ */
+export function niceAxes(maxima: number[], { headroom = 0.05 } = {}): NiceAxis[] {
+  const targets = maxima.map((value) => Math.max(1, value * (1 + headroom)));
+  let best: NiceAxis[] = [];
+  let bestFill = -1;
+  for (const intervals of [4, 3, 5]) {
+    const axes = targets.map((target) => axisFor(target, intervals));
+    // Cuánto del alto aprovecha cada serie: gana la cantidad de intervalos que menos espacio desperdicia.
+    const fill = axes.reduce((sum, axis, i) => sum + targets[i]! / axis.max, 0);
+    if (fill > bestFill + 1e-9) {
+      best = axes;
+      bestFill = fill;
+    }
+  }
+  return best;
+}

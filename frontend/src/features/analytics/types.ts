@@ -79,6 +79,12 @@ export interface ReorderRow extends BranchScoped {
   suggestedQuantity: number;
   status: ReorderStatus;
   predictedStockoutDate: string | null;
+  /**
+   * Último pedido anotado ("Comprar N" o una `REORDER` aceptada) que todavía no llegó: sin ingresos de ese producto
+   * en esa sucursal desde que se anotó. `null` si no hay.
+   */
+  orderedQuantity: number | null;
+  orderedAt: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -482,4 +488,12 @@ export interface AcceptBody {
   note?: string;
   quantity?: number;
   discountPct?: number;
+}
+
+/** "Comprar N" de "Artículos a reponer": acepta la `REORDER` pendiente o anota una nueva. */
+export interface RestockBody {
+  branchId: number;
+  productId: number;
+  quantity: number;
+  note?: string;
 }

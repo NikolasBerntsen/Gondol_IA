@@ -12,6 +12,8 @@ autenticación son los del núcleo.
   (una, o todas las accesibles si falta o es `all`). Toda fila por sucursal trae `branchId` y `branchName`.
   El `tenantId` **siempre** sale del token. Una sucursal de otro comercio da 403 `BRANCH_FORBIDDEN`; un id de otro
   comercio en la ruta da 404 `NOT_FOUND`.
+- **Validación**: un parámetro fuera de rango (`days`, `limit`, `page`, `size`, cantidades de un body) responde
+  400 `VALIDATION_ERROR` con `fieldErrors` en castellano (`{"field":"days","message":"tiene que ser al menos 7"}`).
 - **Ventas netas**: todas las métricas de venta de este módulo descuentan los movimientos `SALE_VOID`
   (anulaciones del POS, SPEC §15.1). Los faltantes (`SALE` con `lotId` null) **cuentan como venta** en la
   facturación y además se informan aparte como "ventas perdidas".
@@ -38,6 +40,7 @@ autenticación son los del núcleo.
 | `expiredCount` | Lotes `ACTIVE` con remanente ya vencidos (hay que descartarlos). |
 | `lowStockCount` / `outOfStockCount` | Combinaciones producto × sucursal con stock vendible ≤ `min_stock` / = 0. El segundo es un subconjunto del primero. |
 | `inventoryCostValue` / `inventorySaleValue` | Stock **físico** (`ACTIVE` + `RECALLED`) × `lots.cost_price` (o el costo del producto) / × `products.sale_price`. |
+| `openRecallMatchesCount` | Coincidencias de recall **sin resolver** (`OPEN` + `ACKNOWLEDGED`, el mismo conjunto que `GET /recall-matches?status=ACTIVE`): "Entendido" no las saca del Inicio, porque el lote sigue en cuarentena hasta que se resuelve el retiro. |
 | `todaySalesUnits` / `todaySalesAmount` | Ventas netas del día de negocio (`America/Argentina/Buenos_Aires`). |
 | `lastAiRunAt` | Fin del último `ai_runs` en `OK` del alcance. |
 
@@ -66,7 +69,9 @@ Una fila por sucursal del alcance (útil con "Todas las sucursales"):
 
 ### 1.4 `GET /upcoming-expirations?limit=8`
 
-Lotes vendibles que vencen dentro de los próximos 30 días, del más cercano al más lejano:
+Lotes **vendibles** (`ACTIVE`, con remanente y sin vencer) que vencen entre hoy y los próximos 30 días, del más
+cercano al más lejano. Los ya vencidos no se venden y no aparecen acá: se informan en `summary.expiredCount` ("lotes
+vencidos sin descartar") y en Vencimientos.
 
 ```json
 [{"lotId":24,"branchId":1,"branchName":"Sucursal Centro","productId":6,
@@ -74,7 +79,7 @@ Lotes vendibles que vencen dentro de los próximos 30 días, del más cercano al
   "daysLeft":2,"quantity":26,"bucket":"CRITICAL"}]
 ```
 
-`bucket`: `EXPIRED | CRITICAL | WARNING | UPCOMING | OK` según `tenant_settings` (SPEC §4.2).
+`bucket`: `CRITICAL | WARNING | UPCOMING | OK` según `tenant_settings` (SPEC §4.2); nunca `EXPIRED`.
 
 ### 1.5 `GET /reorder?limit=8`
 
@@ -83,19 +88,25 @@ Una fila **por producto y sucursal** con stock vendible por debajo del mínimo:
 ```json
 [{"productId":5,"productName":"Papas fritas Crocantes 150 g","brand":"Crocantes","branchId":2,
   "branchName":"Sucursal Norte","sellableStock":0,"minStock":18,"suggestedQuantity":58,
-  "status":"SIN_STOCK","predictedStockoutDate":null}]
+  "status":"SIN_STOCK","predictedStockoutDate":null,"orderedQuantity":58,
+  "orderedAt":"2026-09-17T14:02:11.5Z"}]
 ```
 
 - `status`: `SIN_STOCK` (0), `CRITICO` (≤ 50 % del mínimo), `BAJO` (≤ mínimo).
 - `suggestedQuantity`: cubrir `targetCoverageDays + leadTimeDays` con la demanda de los últimos 28 días, menos el
   stock actual; nunca menos que lo que falta para llegar al mínimo.
 - `predictedStockoutDate`: el del análisis de IA de ese producto en esa sucursal, si existe.
+- `orderedQuantity` / `orderedAt`: el último pedido anotado (una `REORDER` aceptada, desde "Comprar N" del Inicio o
+  desde la recomendación) de los últimos 30 días que **todavía no llegó**, es decir, sin `ENTRY` ni `TRANSFER_IN` de ese
+  producto en esa sucursal desde que se anotó. `null` si no hay. El Inicio muestra "Pedido: N u." en vez de "Comprar N".
 
 ---
 
 ## 2. Estadísticas — `GET /api/tenant/statistics/overview?days=90`
 
-`days` entre 7 y 365. Devuelve cuatro bloques: `sales`, `products`, `losses` y `ai`.
+`days` entre 7 y 365. Devuelve cuatro bloques: `sales`, `products`, `losses` y `ai`. Los contadores de
+`ai.recommendations` son de las sugerencias de la IA: no cuentan los pedidos anotados a mano desde el Inicio
+(`outcome.source = "DASHBOARD"`, §5.3).
 
 ```json
 {"scope":"BRANCH","branchCount":1,"days":30,"from":"2026-08-19","to":"2026-09-17",
@@ -190,8 +201,13 @@ Guardan `handled_by` y, salvo en "vista", `resolved_at`. Alerta de otro comercio
   `EXPIRING_SOON:{branchId}:{lotId}`) y se inserta con `OpenAlertWriter.openIfAbsent`. Lo que ya no aplica pasa a
   `RESOLVED` solo.
 - **Descartes**: una alerta `DISMISSED` no se vuelve a abrir por 7 días aunque la condición siga.
-- **Notificaciones**: al abrirse una `CRITICAL` nueva se notifica a los administradores; las de vencimiento
-  (`EXPIRED`, `EXPIRING_SOON`) también a los empleados de esa sucursal (`notifyBranchUsers`, link `/app/alerts`).
+- **Anomalías**: una `ANOMALY` es un hecho puntual (el pico o la caída de un día, que sigue dentro de la ventana de 7
+  días). Si una persona la **resuelve** o la **descarta**, no se vuelve a abrir mientras siga en la ventana: su
+  `dedupe_key` (`ANOMALY:{branchId}:{productId}:{día}`) queda cerrado. Una anomalía de otro día abre una alerta nueva.
+- **Mensajes**: los números van con formato es-AR (`9,7 u.`, fechas `17/09/2026`).
+- **Notificaciones**: al abrirse una `CRITICAL` nueva se notifica a los administradores (link `/app/alerts`); las de
+  vencimiento (`EXPIRED`, `EXPIRING_SOON`) también a los empleados de esa sucursal, con link `/app/expirations`
+  (el empleado no puede abrir la bandeja de alertas, SPEC §3.3).
 
 ---
 
@@ -216,7 +232,12 @@ Guardan `handled_by` y, salvo en "vista", `resolved_at`. Alerta de otro comercio
 ```
 
 `aiAvailable` es el `/health` del servicio de IA, con 30 s de caché. `running` es `true` mientras haya un
-`ai_runs` en `RUNNING` en el alcance (el frontend refresca cada 4 s mientras dure).
+`ai_runs` en `RUNNING` en el alcance (el frontend refresca cada 4 s mientras dure). `lastRunAt` es el fin del último
+análisis `OK` del alcance en toda la historia: mientras corre uno nuevo (o después de uno fallido) sigue siendo el del
+último que terminó bien, no `null`.
+
+`topRisks[].riskLevel`: `EXPIRED` (el lote ya venció), `HIGH`, `MEDIUM` o `LOW` (docs/ai-service.md). La pantalla
+muestra `EXPIRED` como "Vencido" en rojo.
 
 ### 4.2 `GET /products?pattern=&abc=&q=&page=&size=`
 
@@ -351,12 +372,26 @@ el proveedor no lo cargó. Si el teléfono no sirve, `whatsappUrl` es `null` y q
 Errores: 404 `NOT_FOUND` (recomendación de otro comercio), 403 `BRANCH_FORBIDDEN` (sucursal sin acceso),
 409 `CONFLICT` ("Esa recomendación ya fue decidida" o "El lote de la recomendación ya no tiene stock").
 
-### 5.3 `POST /{id}/discard` (jefe + admin)
+### 5.3 `POST /reorder` (jefe + admin) — "Comprar N" del Inicio
+
+Body: `{"branchId":2,"productId":5,"quantity":58,"note":"opcional"}`. Deja el pedido **registrado** para que el
+Inicio lo siga mostrando al recargar:
+
+- si la IA tiene una `REORDER` `PENDING` de ese producto en esa sucursal, la **acepta** con esa cantidad (igual que
+  `POST /{id}/accept`);
+- si no, crea una `REORDER` ya `ACCEPTED` (`dedupeKey` `REORDER:{productId}`, `decidedBy` = quien la anotó,
+  `outcome = {"orderedQuantity":58,"source":"DASHBOARD"}`).
+
+Devuelve la misma `RecommendationDecisionDto` que aceptar una `REORDER` (mensaje, `orderedQuantity`, texto del pedido y
+link de WhatsApp si el proveedor tiene teléfono). Errores: 400 `VALIDATION_ERROR` (falta un campo o `quantity` < 1),
+403 `BRANCH_FORBIDDEN` (sucursal sin acceso), 404 `NOT_FOUND` (producto de otro comercio).
+
+### 5.4 `POST /{id}/discard` (jefe + admin)
 
 Body opcional `{"note":"Fue una promo puntual"}`. La deja en `DISCARDED`; la IA la vuelve a evaluar en el próximo
 análisis (y el descarte viaja como `feedback`).
 
-### 5.4 Medición del resultado (`RecommendationOutcomeJob`)
+### 5.5 Medición del resultado (`RecommendationOutcomeJob`)
 
 Todos los días a las **02:30** (antes del análisis de las 03:00) se miden las recomendaciones `DISCOUNT`
 aceptadas hace 7 días o más que todavía no tienen resultado. Se guarda en `recommendations.outcome`:
@@ -377,9 +412,9 @@ aceptadas hace 7 días o más que todavía no tienen resultado. Se guarda en `re
 
 | Ruta | Página | Qué muestra |
 |---|---|---|
-| `/app/dashboard` | `DashboardPage` | "Para hoy" (lo urgente, por severidad), 4 KPI, "Ventas y stock" de 30 días, comparación de sucursales (solo en consolidado), próximos vencimientos, artículos a reponer con "Comprar N" y las recomendaciones de la IA. Comercio sin productos → estado vacío con links a `/app/imports` y `/app/intake` (solo para quien puede usarlos). "Ver todos" de Próximos vencimientos → `/app/expirations`; "Ver todos" de Artículos a reponer → `/app/inventory?stockStatus=LOW`; cada producto → `/app/products/:id`. |
+| `/app/dashboard` | `DashboardPage` | "Para hoy" (lo urgente, por severidad), 4 KPI, "Ventas y stock" de 30 días (ejes con marcas redondas), comparación de sucursales (solo en consolidado), próximos vencimientos (solo lotes vendibles; el texto sigue la rotación FIFO/FEFO del comercio), artículos a reponer con "Comprar N" (`POST /recommendations/reorder`: queda como "Pedido: N u." hasta que entra mercadería) y las 3 recomendaciones más prioritarias de la IA. Comercio sin productos → estado vacío con links a `/app/imports` y `/app/intake` (solo para quien puede usarlos). "Ver todos" de Próximos vencimientos → `/app/expirations`; "Ver todos" de Artículos a reponer → `/app/inventory?stockStatus=LOW`; "Ver las N" recomendaciones → `/app/insights?tab=recomendaciones`; cada producto → `/app/products/:id`. |
 | `/app/statistics` | `StatisticsPage` | Pestañas **Ventas**, **Rotación y ABC** y **Pérdidas e impacto**, con selector de período. |
-| `/app/insights` | `InsightsPage` | Resumen, estado de los análisis por sucursal, lotes con más riesgo, tabla de patrones con filtros y la ficha de cada producto (90 días + pronóstico + anomalías + lotes + recomendaciones). "Recalcular IA" para el jefe y el administrador. |
+| `/app/insights` | `InsightsPage` | Pestaña **Patrones y riesgo**: resumen, estado de los análisis por sucursal, lotes con más riesgo (un lote vencido dice "Vencido"), tabla de patrones con filtros y la ficha de cada producto (90 días + pronóstico + anomalías + lotes + recomendaciones). Pestaña **Recomendaciones** (`?tab=recomendaciones`): todas las recomendaciones del alcance, paginadas, con filtros por estado, tipo y texto, aceptar/descartar y "Ver producto". "Recalcular IA" para el jefe y el administrador. |
 | `/app/alerts` | `AlertsPage` | Bandeja con filtros por estado, tipo y severidad, franja de severidad por fila y las acciones vista / resolver / descartar. |
 
 El **jefe** usa las cuatro pantallas igual que el administrador: acepta y descarta recomendaciones, marca alertas y

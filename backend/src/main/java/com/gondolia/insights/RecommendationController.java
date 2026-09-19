@@ -2,6 +2,7 @@ package com.gondolia.insights;
 
 import com.gondolia.analytics.BranchScopeService;
 import com.gondolia.analytics.BranchScopeService.Scope;
+import com.gondolia.analytics.ParamMessages;
 import com.gondolia.common.PageResponse;
 import com.gondolia.common.error.BadRequestException;
 import com.gondolia.common.error.ErrorCodes;
@@ -9,6 +10,7 @@ import com.gondolia.domain.ai.RecommendationStatus;
 import com.gondolia.domain.ai.RecommendationType;
 import com.gondolia.insights.RecommendationService.AcceptRequest;
 import com.gondolia.insights.RecommendationService.RecommendationQuery;
+import com.gondolia.insights.RecommendationService.RestockRequest;
 import com.gondolia.insights.dto.RecommendationDecisionDto;
 import com.gondolia.insights.dto.RecommendationDto;
 import com.gondolia.security.CurrentUser;
@@ -18,6 +20,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
@@ -46,13 +49,26 @@ public class RecommendationController {
     private final BranchScopeService branchScope;
 
     /** Cuerpo de aceptar: nota opcional, cantidad opcional y descuento opcional. */
-    public record AcceptBody(@Size(max = 500) String note,
-                             @Min(1) @Max(100_000) Integer quantity,
-                             @Min(1) @Max(100) Integer discountPct) {
+    public record AcceptBody(@Size(max = RecommendationService.MAX_NOTE_LENGTH, message = ParamMessages.SIZE_MAX)
+                             String note,
+                             @Min(value = 1, message = ParamMessages.MIN)
+                             @Max(value = 100_000, message = ParamMessages.MAX) Integer quantity,
+                             @Min(value = 1, message = ParamMessages.MIN)
+                             @Max(value = 100, message = ParamMessages.MAX) Integer discountPct) {
     }
 
     /** Cuerpo de descartar. */
-    public record DiscardBody(@Size(max = 500) String note) {
+    public record DiscardBody(
+            @Size(max = RecommendationService.MAX_NOTE_LENGTH, message = ParamMessages.SIZE_MAX) String note) {
+    }
+
+    /** Cuerpo de "Comprar N" de "Artículos a reponer" del Inicio. */
+    public record RestockBody(@NotNull(message = "es obligatoria") Long branchId,
+                              @NotNull(message = "es obligatorio") Long productId,
+                              @NotNull(message = "es obligatoria") @Min(value = 1, message = ParamMessages.MIN)
+                              @Max(value = 100_000, message = ParamMessages.MAX) Integer quantity,
+                              @Size(max = RecommendationService.MAX_NOTE_LENGTH, message = ParamMessages.SIZE_MAX)
+                              String note) {
     }
 
     private Scope scope() {
@@ -66,8 +82,9 @@ public class RecommendationController {
             @RequestParam(required = false) String type,
             @RequestParam(required = false) Long productId,
             @RequestParam(required = false) String q,
-            @RequestParam(defaultValue = "0") @Min(0) int page,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+            @RequestParam(defaultValue = "0") @Min(value = 0, message = ParamMessages.MIN) int page,
+            @RequestParam(defaultValue = "20") @Min(value = 1, message = ParamMessages.MIN)
+            @Max(value = 100, message = ParamMessages.MAX) int size) {
         RecommendationQuery query = new RecommendationQuery(parseStatus(status), parseType(type), productId, q,
                 page, size);
         return recommendationService.list(CurrentUser.tenantId(), scope(), query);
@@ -81,6 +98,14 @@ public class RecommendationController {
         AcceptRequest request = body == null ? new AcceptRequest(null, null, null)
                 : new AcceptRequest(body.note(), body.quantity(), body.discountPct());
         return recommendationService.accept(CurrentUser.tenantId(), id, CurrentUser.id(), scope(), request);
+    }
+
+    @Operation(summary = "Anotar un pedido de reposición desde el Inicio (acepta la REORDER pendiente o crea una)")
+    @PostMapping("/reorder")
+    @PreAuthorize(Roles.TENANT_DASHBOARD)
+    public RecommendationDecisionDto reorder(@RequestBody @Valid RestockBody body) {
+        return recommendationService.orderRestock(CurrentUser.tenantId(), CurrentUser.id(), scope(),
+                new RestockRequest(body.branchId(), body.productId(), body.quantity(), body.note()));
     }
 
     @Operation(summary = "Descartar la recomendación")

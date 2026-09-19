@@ -72,6 +72,16 @@ public class RecommendationService {
     static final String MSG_ALREADY_DECIDED = "Esa recomendación ya fue decidida";
     static final String MSG_LOT_GONE = "El lote de la recomendación ya no tiene stock";
     static final String MSG_NO_LOT = "La recomendación no apunta a ningún lote";
+    static final String MSG_PRODUCT_NOT_FOUND = "No encontramos ese producto";
+
+    /** Largo máximo de {@code recommendations.decision_note} (V1: {@code VARCHAR(300)}). */
+    public static final int MAX_NOTE_LENGTH = 300;
+
+    /** Prefijo de la {@code dedupe_key} de reposición (SPEC §8.2: {@code REORDER:{productId}}). */
+    static final String REORDER_KEY_PREFIX = "REORDER:";
+
+    /** Marca en {@code outcome.source} de los pedidos que se anotan desde el Inicio sin sugerencia previa. */
+    static final String SOURCE_DASHBOARD = "DASHBOARD";
 
     /** Ventana de medición del resultado de un descuento (SPEC §6.5). */
     static final int OUTCOME_WINDOW_DAYS = 7;
@@ -122,6 +132,10 @@ public class RecommendationService {
 
     /** Cuerpo de {@code POST /api/tenant/recommendations/{id}/accept}. */
     public record AcceptRequest(String note, Integer quantity, Integer discountPct) {
+    }
+
+    /** Cuerpo de {@code POST /api/tenant/recommendations/reorder}: "Comprar N" de "Artículos a reponer" del Inicio. */
+    public record RestockRequest(Long branchId, Long productId, int quantity, String note) {
     }
 
     // ------------------------------------------------------------------ lectura
@@ -276,10 +290,7 @@ public class RecommendationService {
                 Order order = buildOrder(tenantId, recommendation, quantity, scope);
                 whatsappText = order.text();
                 whatsappUrl = order.url();
-                message = order.supplierName() == null
-                        ? "Anotamos el pedido de %d unidades. Copiá el texto para mandárselo al proveedor.".formatted(
-                                quantity)
-                        : "Anotamos el pedido de %d unidades a %s.".formatted(quantity, order.supplierName());
+                message = orderMessage(quantity, order);
             }
             case REVIEW_ANOMALY -> message = "Anotamos que ya revisaste la anomalía.";
             case REDUCE_PURCHASE -> message = "Anotamos que vas a comprar menos de este producto.";
@@ -297,6 +308,56 @@ public class RecommendationService {
 
         return new RecommendationDecisionDto(byId(tenantId, id, scope), message, appliedDiscount, discardedQuantity,
                 orderedQuantity, whatsappText, whatsappUrl);
+    }
+
+    /**
+     * "Comprar N" desde "Artículos a reponer" del Inicio: deja el pedido <strong>registrado</strong> como una
+     * recomendación {@code REORDER} aceptada, así sobrevive a recargar la página y el Inicio lo muestra como pedido
+     * hasta que entre mercadería. Si la IA ya tenía una {@code REORDER} pendiente para ese producto en esa sucursal, se
+     * acepta esa; si no, se crea una nueva ya aceptada. En los dos casos se arma el texto del pedido al proveedor.
+     */
+    @Transactional
+    public RecommendationDecisionDto orderRestock(Long tenantId, Long userId, Scope scope, RestockRequest request) {
+        if (request.quantity() <= 0) {
+            throw new BadRequestException(ErrorCodes.VALIDATION_ERROR, "Indicá cuántas unidades vas a pedir");
+        }
+        branchAccess.assertAccess(request.branchId());
+        Product product = productRepository.findByIdAndTenantId(request.productId(), tenantId)
+                .orElseThrow(() -> new NotFoundException(MSG_PRODUCT_NOT_FOUND));
+        String dedupeKey = REORDER_KEY_PREFIX + product.getId();
+
+        Optional<Recommendation> pending = recommendationRepository
+                .findByBranchIdAndDedupeKeyAndStatus(request.branchId(), dedupeKey, RecommendationStatus.PENDING)
+                .filter(recommendation -> tenantId.equals(recommendation.getTenantId()));
+        if (pending.isPresent()) {
+            return accept(tenantId, pending.get().getId(), userId, scope,
+                    new AcceptRequest(request.note(), request.quantity(), null));
+        }
+
+        int sellable = sellableStock(tenantId, request.branchId(), product.getId());
+        Recommendation recommendation = new Recommendation();
+        recommendation.setTenantId(tenantId);
+        recommendation.setBranchId(request.branchId());
+        recommendation.setType(RecommendationType.REORDER);
+        recommendation.setStatus(RecommendationStatus.ACCEPTED);
+        recommendation.setProductId(product.getId());
+        recommendation.setTitle(abbreviate("Reponer " + product.getName(), 200));
+        recommendation.setExplanation(("Pedido anotado desde «Artículos a reponer» del Inicio: quedaban %d u. "
+                + "vendibles y el mínimo es %d u.").formatted(sellable, product.getMinStock()));
+        recommendation.setSuggestedQuantity(request.quantity());
+        recommendation.setDedupeKey(dedupeKey);
+        recommendation.setDecidedBy(userId);
+        recommendation.setDecidedAt(clock.instant());
+        recommendation.setDecisionNote(trim(request.note()));
+        ObjectNode outcome = objectMapper.createObjectNode();
+        outcome.put("orderedQuantity", request.quantity());
+        outcome.put("source", SOURCE_DASHBOARD);
+        recommendation.setOutcome(outcome);
+        recommendationRepository.saveAndFlush(recommendation);
+
+        Order order = buildOrder(tenantId, recommendation, request.quantity(), scope);
+        return new RecommendationDecisionDto(byId(tenantId, recommendation.getId(), scope),
+                orderMessage(request.quantity(), order), null, null, request.quantity(), order.text(), order.url());
     }
 
     /** Descarta la recomendación: la IA la vuelve a evaluar en el próximo análisis. */
@@ -391,6 +452,26 @@ public class RecommendationService {
         return new Order(supplier == null ? null : supplier.getName(), body, url);
     }
 
+    private static String orderMessage(int quantity, Order order) {
+        return order.supplierName() == null
+                ? "Anotamos el pedido de %d unidades. Copiá el texto para mandárselo al proveedor.".formatted(quantity)
+                : "Anotamos el pedido de %d unidades a %s.".formatted(quantity, order.supplierName());
+    }
+
+    /** Stock vendible de un producto en una sucursal (SPEC §4.2: ACTIVE, con remanente y sin vencer). */
+    private int sellableStock(Long tenantId, Long branchId, Long productId) {
+        Integer units = jdbc.queryForObject("""
+                select coalesce(sum(l.quantity), 0)::int from lots l
+                where l.tenant_id = :tenantId and l.branch_id = :branchId and l.product_id = :productId
+                  and l.status = 'ACTIVE' and l.quantity > 0
+                  and (l.expiry_date is null or l.expiry_date >= :today)
+                """, new MapSqlParameterSource("tenantId", tenantId)
+                .addValue("branchId", branchId)
+                .addValue("productId", productId)
+                .addValue("today", Date.valueOf(LocalDate.now(clock))), Integer.class);
+        return units == null ? 0 : units;
+    }
+
     /** Unidades netas vendidas de un producto en una sucursal entre dos fechas (inclusive/exclusive). */
     int unitsSold(Long branchId, Long productId, LocalDate from, LocalDate to) {
         if (productId == null || branchId == null) {
@@ -480,6 +561,10 @@ public class RecommendationService {
         if (stripped.isEmpty()) {
             return null;
         }
-        return stripped.length() <= 500 ? stripped : stripped.substring(0, 500);
+        return abbreviate(stripped, MAX_NOTE_LENGTH);
+    }
+
+    private static String abbreviate(String value, int max) {
+        return value.length() <= max ? value : value.substring(0, max);
     }
 }

@@ -403,6 +403,8 @@ public class StatisticsService {
                        coalesce(sum(expected_impact) filter (where status = 'ACCEPTED'), 0) as impact
                 from recommendations
                 where tenant_id = :tenantId and branch_id in (:branchIds) and created_at >= :from
+                  -- Los pedidos anotados a mano desde el Inicio ("Comprar N") no son sugerencias de la IA.
+                  and coalesce(outcome ->> 'source', '') <> 'DASHBOARD'
                 """, params);
         long accepted = toLong(counts.get("accepted"));
         long discarded = toLong(counts.get("discarded"));

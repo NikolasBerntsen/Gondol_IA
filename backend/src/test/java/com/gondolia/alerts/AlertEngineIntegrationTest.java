@@ -145,6 +145,44 @@ class AlertEngineIntegrationTest extends PostgresIntegrationTest {
                 """, Long.class, tenant, centro)).isZero();
     }
 
+    @Test
+    void aResolvedAnomalyIsNotReopenedByTheNextPass() {
+        LocalDate spike = LocalDate.now(clock).minusDays(2);
+        jdbc.update("""
+                insert into product_insights (tenant_id, branch_id, product_id, anomalies)
+                values (?, ?, ?, ?::jsonb)
+                """, tenant, centro, leche, """
+                [{"date":"%s","quantity":45,"expected":9.7,"score":4.2,"kind":"SPIKE"}]
+                """.formatted(spike));
+
+        alertEngine.evaluateBranch(tenant, centro);
+        as(admin, String.valueOf(centro));
+        AlertDto anomaly = firstOfType(AlertType.ANOMALY);
+        // Números con coma decimal, como en el resto de la app.
+        assertThat(anomaly.message()).contains("(9,7 u.)").doesNotContain("9.7");
+
+        alertService.resolve(tenant, anomaly.id(), admin.id(), scopeCentro);
+        Evaluation next = alertEngine.evaluateBranch(tenant, centro);
+
+        // La anomalía es un hecho pasado: resolverla la cierra aunque siga dentro de la ventana de 7 días.
+        assertThat(jdbc.queryForObject("""
+                select count(*) from alerts where tenant_id = ? and branch_id = ? and type = 'ANOMALY'
+                """, Long.class, tenant, centro)).isEqualTo(1);
+        assertThat(alertTypes(centro)).doesNotContain(AlertType.ANOMALY.name());
+        assertThat(next.opened()).isZero();
+    }
+
+    @Test
+    void expiryNotificationsTakeEachRoleToAScreenItCanOpen() {
+        AuthUser employee = data.user(tenant, Role.TENANT_EMPLOYEE, true, centro);
+
+        alertEngine.evaluateBranch(tenant, centro);
+
+        // Vencimiento crítico (lote Y0 vencido): el admin va a la bandeja y el empleado a Vencimientos.
+        assertThat(notificationLinks(admin.id())).isNotEmpty().containsOnly(AlertEvaluator.ADMIN_ALERT_LINK);
+        assertThat(notificationLinks(employee.id())).isNotEmpty().containsOnly(AlertEvaluator.EMPLOYEE_EXPIRY_LINK);
+    }
+
     // ------------------------------------------------------------------ bandeja
 
     @Test
@@ -236,6 +274,11 @@ class AlertEngineIntegrationTest extends PostgresIntegrationTest {
         return jdbc.queryForList("""
                 select type from alerts where tenant_id = ? and branch_id = ? and status in ('OPEN', 'ACKNOWLEDGED')
                 """, String.class, tenant, branchId);
+    }
+
+    private List<String> notificationLinks(long userId) {
+        return jdbc.queryForList("select link from notifications where user_id = ? and type = 'ALERT'",
+                String.class, userId);
     }
 
     private long openAlerts(long branchId) {

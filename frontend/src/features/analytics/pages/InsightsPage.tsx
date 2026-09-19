@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
@@ -18,6 +19,7 @@ import {
   Alert,
   Badge,
   Button,
+  ButtonLink,
   Card,
   CardHeader,
   EmptyState,
@@ -29,6 +31,7 @@ import {
   Skeleton,
   StatCard,
   Table,
+  Tabs,
   pageInfo,
 } from '@/components/ui';
 import type { TableColumn } from '@/components/ui';
@@ -37,8 +40,9 @@ import { useBranch, useBranchQueryKey } from '@/branches/BranchContext';
 import { useBranchColumn } from '@/branches/branchColumn';
 import { useCurrentUser } from '@/auth/AuthContext';
 import { useAccess } from '@/auth/useAccess';
-import { SALES_PATTERN_LABELS } from '@/api/types';
-import type { SalesPattern } from '@/api/types';
+import { isApiError } from '@/api/client';
+import { RECOMMENDATION_TYPE_LABELS, SALES_PATTERN_LABELS } from '@/api/types';
+import type { RecommendationType, SalesPattern } from '@/api/types';
 import { useDebounce } from '@/lib/useDebounce';
 import {
   formatDate,
@@ -54,6 +58,7 @@ import { insightsApi, recommendationsApi } from '../api';
 import type { AiRun, ProductInsightRow } from '../types';
 import { RecommendationCard } from '../components/RecommendationCard';
 import type { AcceptValues } from '../components/RecommendationCard';
+import { showDecisionToast } from '../components/decisionToast';
 import {
   AXIS_TICK,
   AXIS_TICK_MONO,
@@ -82,7 +87,61 @@ const ABC_OPTIONS = [
   { value: 'C', label: 'Clase C' },
 ];
 
-const RISK_TONE: Record<string, 'crit' | 'warn' | 'info'> = { HIGH: 'crit', MEDIUM: 'warn', LOW: 'info' };
+type RiskTone = 'crit' | 'warn' | 'info';
+
+/** Niveles de riesgo por lote de la IA (docs/ai-service.md): `EXPIRED` es un lote que ya venció. */
+const RISK_LEVELS: Record<string, { label: string; tone: RiskTone }> = {
+  EXPIRED: { label: 'Vencido', tone: 'crit' },
+  HIGH: { label: 'Alto', tone: 'crit' },
+  MEDIUM: { label: 'Medio', tone: 'warn' },
+  LOW: { label: 'Bajo', tone: 'info' },
+};
+
+/**
+ * Etiqueta y tono de un nivel de riesgo. Un lote con vencimiento pasado es "Vencido" aunque el análisis sea anterior; un
+ * nivel desconocido nunca se muestra como "Bajo".
+ */
+function riskLevel(level: string | null, daysToExpiry: number | null): { label: string; tone: RiskTone } {
+  if (daysToExpiry != null && daysToExpiry < 0) return RISK_LEVELS.EXPIRED;
+  return (level && RISK_LEVELS[level]) || { label: 'En riesgo', tone: 'warn' };
+}
+
+type InsightsTab = 'patrones' | 'recomendaciones';
+
+const RECOMMENDATIONS_PAGE_SIZE = 12;
+
+const RECOMMENDATION_STATUS_OPTIONS = [
+  { value: 'PENDING', label: 'Pendientes' },
+  { value: 'ACCEPTED', label: 'Aceptadas' },
+  { value: 'DISCARDED', label: 'Descartadas' },
+  { value: 'EXPIRED', label: 'Vencidas' },
+  { value: 'ALL', label: 'Todos los estados' },
+];
+
+/** Aceptar y descartar recomendaciones, con los refrescos de todo lo que depende de ellas. */
+function useRecommendationDecisions() {
+  const queryClient = useQueryClient();
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ['insights'] });
+    void queryClient.invalidateQueries({ queryKey: ['recommendations'] });
+    void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+  };
+  const accept = useMutation({
+    mutationFn: ({ id, values }: { id: number; values: AcceptValues }) => recommendationsApi.accept(id, values),
+    onSuccess: (decision) => {
+      showDecisionToast(decision);
+      refresh();
+    },
+  });
+  const discard = useMutation({
+    mutationFn: ({ id, note }: { id: number; note?: string }) => recommendationsApi.discard(id, note),
+    onSuccess: (decision) => {
+      toast.success(decision.message);
+      refresh();
+    },
+  });
+  return { accept, discard, busy: accept.isPending || discard.isPending };
+}
 
 function runTone(run: AiRun): 'ok' | 'warn' | 'crit' | 'info' {
   if (run.status === 'OK') return 'ok';
@@ -151,38 +210,24 @@ function ProductDetail({
   productId,
   branchId,
   onBack,
+  backLabel,
   readOnly,
 }: {
   productId: number;
   branchId: number | null;
   onBack: () => void;
+  backLabel: string;
   readOnly: boolean;
 }) {
   const me = useCurrentUser();
+  const { canOpen } = useAccess();
   const rotation = me.tenant?.stockRotation ?? 'FIFO';
-  const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: useBranchQueryKey('insights', 'detail', productId, branchId),
     queryFn: () => insightsApi.productDetail(productId, branchId),
   });
 
-  const accept = useMutation({
-    mutationFn: ({ id, values }: { id: number; values: AcceptValues }) => recommendationsApi.accept(id, values),
-    onSuccess: (decision) => {
-      toast.success(decision.message);
-      void queryClient.invalidateQueries({ queryKey: ['insights'] });
-      void queryClient.invalidateQueries({ queryKey: ['recommendations'] });
-      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-    },
-  });
-  const discard = useMutation({
-    mutationFn: ({ id, note }: { id: number; note?: string }) => recommendationsApi.discard(id, note),
-    onSuccess: (decision) => {
-      toast.success(decision.message);
-      void queryClient.invalidateQueries({ queryKey: ['insights'] });
-      void queryClient.invalidateQueries({ queryKey: ['recommendations'] });
-    },
-  });
+  const { accept, discard, busy } = useRecommendationDecisions();
 
   const detail = query.data;
   const series = useMemo<SeriesPoint[]>(() => {
@@ -216,6 +261,32 @@ function ProductDetail({
       </div>
     );
   }
+  if (isApiError(query.error, 'NOT_FOUND')) {
+    // Producto sin análisis en esa sucursal (p. ej. un pedido anotado a mano antes de que corra la IA).
+    const productPath = `/app/products/${productId}`;
+    return (
+      <div className="flex flex-col gap-5">
+        <div>
+          <Button variant="ghost" size="sm" leftIcon={<ArrowLeft aria-hidden="true" />} onClick={onBack}>
+            {backLabel}
+          </Button>
+        </div>
+        <EmptyState
+          bordered
+          icon={Sparkles}
+          title="Todavía no hay análisis de este producto"
+          description="La IA lo analiza cuando tiene ventas en la sucursal: el próximo análisis corre esta noche."
+          action={
+            canOpen(productPath) ? (
+              <ButtonLink to={productPath} variant="outline">
+                Ver la ficha del producto
+              </ButtonLink>
+            ) : undefined
+          }
+        />
+      </div>
+    );
+  }
   if (query.isError || !detail) {
     return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
   }
@@ -226,7 +297,7 @@ function ProductDetail({
     <div className="flex flex-col gap-5">
       <div>
         <Button variant="ghost" size="sm" leftIcon={<ArrowLeft aria-hidden="true" />} onClick={onBack}>
-          Volver a los patrones
+          {backLabel}
         </Button>
       </div>
 
@@ -401,6 +472,8 @@ function ProductDetail({
             {detail.lots.length ? (
               detail.lots.map((lot) => {
                 const risk = detail.lotRisks?.find((item) => item.lotId === lot.lotId);
+                const level = risk ? riskLevel(risk.riskLevel, risk.daysToExpiry ?? lot.daysToExpiry) : null;
+                const expired = level === RISK_LEVELS.EXPIRED;
                 return (
                   <li key={lot.lotId} className="flex flex-wrap items-center justify-between gap-3 p-4">
                     <div className="flex min-w-0 flex-col gap-1.5">
@@ -413,10 +486,10 @@ function ProductDetail({
                         <span className="text-sm text-muted-foreground">{formatNumber(lot.quantity)} u.</span>
                       </div>
                     </div>
-                    {risk && risk.unitsAtRisk > 0 ? (
+                    {risk && level && risk.unitsAtRisk > 0 ? (
                       <div className="text-right">
-                        <Badge tone={RISK_TONE[risk.riskLevel ?? 'LOW'] ?? 'info'}>
-                          {formatNumber(risk.unitsAtRisk)} u. en riesgo
+                        <Badge tone={level.tone}>
+                          {formatNumber(risk.unitsAtRisk)} u. {expired ? 'vencidas' : 'en riesgo'}
                         </Badge>
                         {risk.recommendedDiscountPct ? (
                           <div className="mt-1 text-xs text-muted-foreground">
@@ -489,7 +562,7 @@ function ProductDetail({
                 recommendation={recommendation}
                 readOnly={readOnly}
                 showBranch={false}
-                busy={accept.isPending || discard.isPending}
+                busy={busy}
                 onAccept={(values) => accept.mutate({ id: recommendation.id, values })}
                 onDiscard={(note) => discard.mutate({ id: recommendation.id, note })}
               />
@@ -509,6 +582,149 @@ function ProductDetail({
   );
 }
 
+/**
+ * Todas las recomendaciones del alcance (SPEC §6.5): el Inicio muestra las 3 más prioritarias y esta lista permite
+ * revisar el resto, filtrar por estado y tipo (la sucursal sale del selector de la barra) y decidir sobre cada una.
+ */
+function RecommendationsPanel({
+  readOnly,
+  byType,
+  onOpenProduct,
+}: {
+  readOnly: boolean;
+  /** Pendientes por tipo (resumen de la IA) para los contadores del filtro. */
+  byType: Record<string, number> | undefined;
+  onOpenProduct: (productId: number, branchId: number) => void;
+}) {
+  const { isAll } = useBranch();
+  const [status, setStatus] = useState('PENDING');
+  const [type, setType] = useState('ALL');
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(0);
+  const q = useDebounce(search, 300);
+  const { accept, discard, busy } = useRecommendationDecisions();
+
+  const params = { status, type, q: q || undefined, page, size: RECOMMENDATIONS_PAGE_SIZE };
+  const query = useQuery({
+    queryKey: useBranchQueryKey('recommendations', 'list', params),
+    queryFn: () => recommendationsApi.list(params),
+    placeholderData: keepPreviousData,
+  });
+
+  const typeOptions = useMemo(
+    () => [
+      { value: 'ALL', label: 'Todos los tipos' },
+      ...(Object.keys(RECOMMENDATION_TYPE_LABELS) as RecommendationType[]).map((value) => ({
+        value,
+        label:
+          status === 'PENDING' && byType
+            ? `${RECOMMENDATION_TYPE_LABELS[value]} (${formatNumber(byType[value] ?? 0)})`
+            : RECOMMENDATION_TYPE_LABELS[value],
+      })),
+    ],
+    [status, byType],
+  );
+
+  const data = query.data;
+  const rows = data?.content ?? [];
+  const filtered = type !== 'ALL' || status !== 'PENDING' || !!q;
+
+  return (
+    <Card padding="none" aria-labelledby="recomendaciones-titulo">
+      <CardHeader
+        className="p-4 sm:p-5"
+        titleId="recomendaciones-titulo"
+        icon={Sparkles}
+        title="Recomendaciones de la IA"
+        description={
+          data
+            ? `${formatNumber(data.totalElements)} ${data.totalElements === 1 ? 'recomendación' : 'recomendaciones'}${
+                status === 'PENDING' ? ' para revisar' : ''
+              } · primero las más prioritarias`
+            : 'Reposición, descuentos por vencimiento, retiro de vencidos, anomalías y compras a reducir'
+        }
+      />
+      <div className="flex flex-col gap-3 border-t border-border p-4 md:flex-row">
+        <SearchInput
+          value={search}
+          onValueChange={(value) => {
+            setSearch(value);
+            setPage(0);
+          }}
+          placeholder="Buscar producto o recomendación…"
+          className="md:max-w-xs"
+        />
+        <Select
+          aria-label="Estado de la recomendación"
+          value={status}
+          options={RECOMMENDATION_STATUS_OPTIONS}
+          onChange={(event) => {
+            setStatus(event.target.value);
+            setPage(0);
+          }}
+          className="md:w-[200px]"
+        />
+        <Select
+          aria-label="Tipo de recomendación"
+          value={type}
+          options={typeOptions}
+          onChange={(event) => {
+            setType(event.target.value);
+            setPage(0);
+          }}
+          className="md:w-[220px]"
+        />
+      </div>
+      {query.isPending ? (
+        <div className="grid grid-cols-1 gap-4 border-t border-border p-4 md:grid-cols-2 xl:grid-cols-3">
+          <Skeleton className="h-48 w-full" />
+          <Skeleton className="h-48 w-full" />
+          <Skeleton className="h-48 w-full" />
+        </div>
+      ) : query.isError ? (
+        <ErrorState className="border-t border-border" error={query.error} onRetry={() => void query.refetch()} />
+      ) : rows.length ? (
+        <ul
+          className={cn(
+            'grid grid-cols-1 gap-3 border-t border-border bg-muted/40 p-3 sm:gap-4 sm:p-4 md:grid-cols-2 xl:grid-cols-3',
+            query.isPlaceholderData && 'opacity-70',
+          )}
+        >
+          {rows.map((recommendation) => (
+            <RecommendationCard
+              key={recommendation.id}
+              className="rounded-panel border border-border bg-card"
+              recommendation={recommendation}
+              readOnly={readOnly}
+              showBranch={isAll}
+              busy={busy}
+              onAccept={(values) => accept.mutate({ id: recommendation.id, values })}
+              onDiscard={(note) => discard.mutate({ id: recommendation.id, note })}
+              onOpenProduct={
+                recommendation.productId != null
+                  ? () => onOpenProduct(recommendation.productId!, recommendation.branchId)
+                  : undefined
+              }
+            />
+          ))}
+        </ul>
+      ) : (
+        <EmptyState
+          className="border-t border-border"
+          icon={Sparkles}
+          title={filtered ? 'Sin recomendaciones con esos filtros' : 'Sin recomendaciones pendientes'}
+          description={
+            filtered
+              ? 'Probá con otro estado o tipo, o quitá el buscador.'
+              : 'La IA vuelve a analizar las ventas y el stock esta noche. Si algo cambia, te avisamos.'
+          }
+        />
+      )}
+      {data && data.totalPages > 1 ? <Pagination {...pageInfo(data)} onPageChange={setPage} /> : null}
+    </Card>
+  );
+}
+
 export default function InsightsPage() {
   const me = useCurrentUser();
   const { can } = useAccess();
@@ -520,6 +736,21 @@ export default function InsightsPage() {
   const branchColumn = useBranchColumn<ProductInsightRow>();
 
   const [selected, setSelected] = useState<{ productId: number; branchId: number } | null>(null);
+  // Pestaña en la URL (?tab=recomendaciones): el Inicio enlaza directo a la lista completa de recomendaciones.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab: InsightsTab = searchParams.get('tab') === 'recomendaciones' ? 'recomendaciones' : 'patrones';
+  const changeTab = (next: InsightsTab) => {
+    setSelected(null);
+    setSearchParams(
+      (current) => {
+        const params = new URLSearchParams(current);
+        if (next === 'patrones') params.delete('tab');
+        else params.set('tab', next);
+        return params;
+      },
+      { replace: true },
+    );
+  };
   const [pattern, setPattern] = useState('ALL');
   const [abc, setAbc] = useState('ALL');
   const [search, setSearch] = useState('');
@@ -537,7 +768,7 @@ export default function InsightsPage() {
     queryKey: useBranchQueryKey('insights', 'products', params),
     queryFn: () => insightsApi.products(params),
     placeholderData: keepPreviousData,
-    enabled: selected == null,
+    enabled: selected == null && tab === 'patrones',
   });
 
   const run = useMutation({
@@ -658,7 +889,22 @@ export default function InsightsPage() {
             </Button>
           )
         }
-      />
+      >
+        <Tabs
+          ariaLabel="Secciones de Inteligencia IA"
+          value={tab}
+          onChange={changeTab}
+          tabs={[
+            { value: 'patrones', label: 'Patrones y riesgo', icon: Boxes },
+            {
+              value: 'recomendaciones',
+              label: 'Recomendaciones',
+              icon: Sparkles,
+              count: summary?.pendingRecommendations,
+            },
+          ]}
+        />
+      </PageHeader>
 
       {summary && !summary.aiAvailable ? (
         <Alert tone="warn" title="El servicio de IA no responde">
@@ -676,9 +922,21 @@ export default function InsightsPage() {
           productId={selected.productId}
           branchId={selected.branchId}
           readOnly={readOnly}
+          backLabel={tab === 'recomendaciones' ? 'Volver a las recomendaciones' : 'Volver a los patrones'}
           onBack={() => setSelected(null)}
         />
-      ) : (
+      ) : null}
+
+      {tab === 'recomendaciones' ? (
+        // Queda montada (oculta) mientras se ve la ficha de un producto: al volver conserva filtros y página.
+        <div hidden={selected != null}>
+          <RecommendationsPanel
+            readOnly={readOnly}
+            byType={summary?.recommendationsByType}
+            onOpenProduct={(productId, branchId) => setSelected({ productId, branchId })}
+          />
+        </div>
+      ) : selected ? null : (
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
@@ -756,7 +1014,12 @@ export default function InsightsPage() {
                       <div className="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                         <span className="font-mono">{risk.lotNumber ?? `#${risk.lotId}`}</span>
                         {isAll ? <span>· {risk.branchName}</span> : null}
-                        {risk.expiryDate ? <span>· vence {formatDate(risk.expiryDate)}</span> : null}
+                        {risk.expiryDate ? (
+                          <span>
+                            · {risk.daysToExpiry != null && risk.daysToExpiry < 0 ? 'venció' : 'vence'}{' '}
+                            {formatDate(risk.expiryDate)}
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -766,8 +1029,8 @@ export default function InsightsPage() {
                           {formatNumber(risk.unitsAtRisk)} de {formatNumber(risk.quantity)} u.
                         </div>
                       </div>
-                      <Badge tone={RISK_TONE[risk.riskLevel ?? 'LOW'] ?? 'info'}>
-                        {risk.riskLevel === 'HIGH' ? 'Alto' : risk.riskLevel === 'MEDIUM' ? 'Medio' : 'Bajo'}
+                      <Badge tone={riskLevel(risk.riskLevel, risk.daysToExpiry).tone}>
+                        {riskLevel(risk.riskLevel, risk.daysToExpiry).label}
                       </Badge>
                     </div>
                   </li>

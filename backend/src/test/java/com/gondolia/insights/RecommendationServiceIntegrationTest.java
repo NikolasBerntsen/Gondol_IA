@@ -4,6 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.gondolia.analytics.BranchScopeService.Scope;
+import com.gondolia.analytics.DashboardService;
+import com.gondolia.analytics.StatisticsService;
+import com.gondolia.analytics.dto.ReorderRow;
 import com.gondolia.common.error.ApiException;
 import com.gondolia.domain.ai.RecommendationStatus;
 import com.gondolia.domain.ai.RecommendationType;
@@ -12,6 +15,8 @@ import com.gondolia.domain.inventory.LotRepository;
 import com.gondolia.domain.user.Role;
 import com.gondolia.insights.RecommendationService.AcceptRequest;
 import com.gondolia.insights.RecommendationService.RecommendationQuery;
+import com.gondolia.insights.RecommendationService.RestockRequest;
+import com.gondolia.insights.dto.InsightsSummaryDto;
 import com.gondolia.insights.dto.RecommendationDecisionDto;
 import com.gondolia.insights.dto.RecommendationDto;
 import com.gondolia.it.PostgresIntegrationTest;
@@ -20,6 +25,7 @@ import com.gondolia.security.AuthUser;
 import com.gondolia.security.BranchAccessService;
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -61,6 +67,12 @@ class RecommendationServiceIntegrationTest {
     private RecommendationOutcomeJob outcomeJob;
     @Autowired
     private LotRepository lotRepository;
+    @Autowired
+    private DashboardService dashboardService;
+    @Autowired
+    private StatisticsService statisticsService;
+    @Autowired
+    private InsightsService insightsService;
     @Autowired
     private Clock clock;
 
@@ -215,6 +227,90 @@ class RecommendationServiceIntegrationTest {
         assertThat(decision.message()).contains("Distribuidora de prueba");
     }
 
+    @Test
+    void comprarFromTheDashboardIsRecordedAndShownUntilTheGoodsArrive() {
+        // Yerba en Centro: 2 u. y mínimo 10, sin sugerencia pendiente de la IA.
+        jdbc.update("update products set min_stock = 10 where id = ?", yerba);
+        long yerbaLot = data.lot(tenant, centro, yerba, "M1", "M1", null, 2, "ACTIVE", 10);
+
+        RecommendationDecisionDto decision = recommendationService.orderRestock(tenant, admin.id(), scopeAll,
+                new RestockRequest(centro, yerba, 25, null));
+
+        assertThat(decision.orderedQuantity()).isEqualTo(25);
+        assertThat(decision.whatsappText()).contains("Yerba mate").contains("25 unidades");
+        assertThat(decision.recommendation().type()).isEqualTo(RecommendationType.REORDER);
+        assertThat(decision.recommendation().status()).isEqualTo(RecommendationStatus.ACCEPTED);
+        assertThat(decision.recommendation().decidedByName()).isNotBlank();
+        assertThat(decision.recommendation().explanation()).contains("2 u.").contains("10 u.");
+
+        // Recargar el Inicio no lo pierde: la fila lo muestra como pedido.
+        ReorderRow row = yerbaRow();
+        assertThat(row.orderedQuantity()).isEqualTo(25);
+        assertThat(row.orderedAt()).isNotNull();
+
+        // Es un pedido anotado a mano, no una sugerencia de la IA: no cuenta en la tasa de aceptación.
+        assertThat(statisticsService.overview(tenant, scopeAll, 30).ai().recommendations().total()).isZero();
+
+        // Entra la mercadería: la fila vuelve a ofrecer "Comprar".
+        jdbc.update("""
+                insert into stock_movements (tenant_id, branch_id, product_id, lot_id, type, quantity, source,
+                                             batch_ref, occurred_at)
+                values (?, ?, ?, ?, 'ENTRY', 5, 'MANUAL', 'E-TEST',
+                        (select decided_at from recommendations where id = ?) + interval '1 minute')
+                """, tenant, centro, yerba, yerbaLot, decision.recommendation().id());
+        assertThat(yerbaRow().orderedQuantity()).isNull();
+    }
+
+    @Test
+    void comprarAcceptsThePendingReorderOfTheAi() {
+        long pending = recommendation(RecommendationType.REORDER, centro, yerba, null, "REORDER:" + yerba, 30, null);
+
+        RecommendationDecisionDto decision = recommendationService.orderRestock(tenant, admin.id(), scopeAll,
+                new RestockRequest(centro, yerba, 40, "Pedido del lunes"));
+
+        assertThat(decision.recommendation().id()).isEqualTo(pending);
+        assertThat(decision.recommendation().status()).isEqualTo(RecommendationStatus.ACCEPTED);
+        assertThat(decision.orderedQuantity()).isEqualTo(40);
+        assertThat(jdbc.queryForObject("select count(*) from recommendations where tenant_id = ? and type = 'REORDER'",
+                Long.class, tenant)).isEqualTo(1);
+    }
+
+    @Test
+    void comprarChecksTheBranchAccessAndTheProductTenant() {
+        AuthUser employee = data.user(tenant, Role.TENANT_EMPLOYEE, true, norte);
+        as(employee, null);
+        assertThatThrownBy(() -> recommendationService.orderRestock(tenant, employee.id(), scopeAll,
+                new RestockRequest(centro, yerba, 5, null)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo("BRANCH_FORBIDDEN"));
+
+        as(otherAdmin, null);
+        assertThatThrownBy(() -> recommendationService.orderRestock(otherTenant, otherAdmin.id(), otherScope,
+                new RestockRequest(otherBranch, yerba, 5, null)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getStatus().value()).isEqualTo(404));
+    }
+
+    // ------------------------------------------------------------------ resumen de la IA
+
+    @Test
+    void lastRunAtIsTheLastOkRunEvenWhileANewOneIsRunning() {
+        Instant finished = jdbc.queryForObject("""
+                insert into ai_runs (tenant_id, branch_id, status, trigger_type, started_at, finished_at)
+                values (?, ?, 'OK', 'SCHEDULED', now() - interval '2 hours', now() - interval '2 hours' + interval '5 seconds')
+                returning finished_at
+                """, java.sql.Timestamp.class, tenant, centro).toInstant();
+        jdbc.update("""
+                insert into ai_runs (tenant_id, branch_id, status, trigger_type, started_at)
+                values (?, ?, 'RUNNING', 'MANUAL', now())
+                """, tenant, centro);
+
+        InsightsSummaryDto summary = insightsService.summary(tenant, scopeAll);
+
+        assertThat(summary.running()).isTrue();
+        assertThat(summary.lastRunAt()).isEqualTo(finished);
+    }
+
     // ------------------------------------------------------------------ listado y descartes
 
     @Test
@@ -344,6 +440,12 @@ class RecommendationServiceIntegrationTest {
                 """, Long.class, tenant, branchId, type.name(), productId, lotId, "Recomendación " + type,
                 quantity, discountPct, dedupeKey);
         return id == null ? 0 : id;
+    }
+
+    private ReorderRow yerbaRow() {
+        return dashboardService.reorder(tenant, scopeAll, 50).stream()
+                .filter(row -> row.productId().equals(yerba) && row.branchId().equals(centro))
+                .findFirst().orElseThrow();
     }
 
     private void salesOn(int daysAgo, int quantity) {
