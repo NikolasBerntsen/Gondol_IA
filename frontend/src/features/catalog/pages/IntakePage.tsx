@@ -9,7 +9,7 @@ import {
   RotateCcw,
   ScanBarcode,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { getErrorMessage, isApiError } from '@/api/client';
@@ -23,6 +23,7 @@ import {
   Button,
   ButtonLink,
   Card,
+  ConfirmDialog,
   Field,
   Input,
   Modal,
@@ -33,13 +34,41 @@ import {
   Skeleton,
 } from '@/components/ui';
 import { isCameraSupported } from '@/lib/secureContext';
-import { formatDate, formatMoney, formatNumber } from '@/lib/format';
+import { formatDate, formatMoney, formatNumber, todayLocalDate } from '@/lib/format';
 import { catalogLookupApi, lotsApi, ocrApi, productsApi, suppliersApi } from '../api';
 import { LotRotationList } from '../components/LotRotationList';
 import { OcrChoice } from '../components/OcrChoice';
 import { RecallPanel } from '../components/RecallPanel';
 import { normalizeBarcode, normalizeLotNumber, parseDateInput, parseDecimal, unitShort } from '../lib';
 import type { BarcodeLookupResponse, LotDto, OcrLabelResponse, ProductDetail, ReceiveLotResponse } from '../types';
+
+type IntakeSource = 'MANUAL' | 'SCAN' | 'OCR';
+
+/** Máximo de ms entre teclas para considerar que el código lo escribió un lector USB y no una persona. */
+const SCANNER_KEY_INTERVAL_MS = 50;
+
+/**
+ * Producto con el lote recién cargado, sin esperar la relectura: la respuesta trae el lote nuevo y los demás lotes
+ * vendibles de esa sucursal en orden de rotación (`existingLots`, SPEC §6.3). Así el orden de salida y el aviso de
+ * FIFO de la próxima caja ya cuentan con este lote.
+ */
+function withReceivedLot(current: ProductDetail, response: ReceiveLotResponse): ProductDetail {
+  const refreshed = new Map<number, LotDto>(response.existingLots.map((lot) => [lot.id, lot]));
+  const lots = current.lots.map((lot) => refreshed.get(lot.id) ?? lot);
+  for (const lot of response.existingLots) {
+    if (!current.lots.some((existing) => existing.id === lot.id)) lots.push(lot);
+  }
+  lots.push(response.lot);
+  const sellable = response.lot.rotationRank != null;
+  const expired = response.lot.expiryBucket === 'EXPIRED' && !response.quarantined;
+  return {
+    ...current,
+    lots,
+    sellableStock: current.sellableStock + (sellable ? response.lot.quantity : 0),
+    expiredStock: current.expiredStock + (expired ? response.lot.quantity : 0),
+    lotsCount: current.lotsCount + 1,
+  };
+}
 
 interface TodayIntake {
   lotId: number;
@@ -72,7 +101,10 @@ export default function IntakePage() {
   const [quantity, setQuantity] = useState(1);
   const [cost, setCost] = useState('');
   const [supplierId, setSupplierId] = useState('');
-  const [source, setSource] = useState<'MANUAL' | 'SCAN' | 'OCR'>('MANUAL');
+  const [source, setSource] = useState<IntakeSource>('MANUAL');
+  const [confirmExpired, setConfirmExpired] = useState(false);
+  // Ráfaga de teclas en el campo del código: un lector USB con el foco en el campo escribe muy rápido.
+  const manualTypingRef = useRef<{ lastKeyAt: number; burst: boolean }>({ lastKeyAt: 0, burst: true });
   const [branchError, setBranchError] = useState<string>();
   const [result, setResult] = useState<ReceiveLotResponse | null>(null);
   const [today, setToday] = useState<TodayIntake[]>([]);
@@ -90,7 +122,7 @@ export default function IntakePage() {
   }, []);
 
   const applyProduct = useCallback(
-    (loaded: ProductDetail, detectedSource: 'MANUAL' | 'SCAN' | 'OCR') => {
+    (loaded: ProductDetail, detectedSource: IntakeSource) => {
       setProduct(loaded);
       setUnknown(null);
       setResult(null);
@@ -102,7 +134,7 @@ export default function IntakePage() {
   );
 
   const findByBarcode = useMutation({
-    mutationFn: async (barcode: string) => {
+    mutationFn: async ({ barcode }: { barcode: string; source: IntakeSource }) => {
       try {
         return { product: await productsApi.getByBarcode(barcode), lookup: null as BarcodeLookupResponse | null };
       } catch (error) {
@@ -114,9 +146,10 @@ export default function IntakePage() {
       }
     },
     meta: { errorToast: false },
-    onSuccess: (data, barcode) => {
+    onSuccess: (data, { barcode, source: codeSource }) => {
       if (data.product) {
-        applyProduct(data.product, 'SCAN');
+        // El origen del lote sigue a cómo llegó el código: cámara o lector → SCAN, tipeado → MANUAL.
+        applyProduct(data.product, codeSource);
         return;
       }
       setProduct(null);
@@ -148,17 +181,18 @@ export default function IntakePage() {
   }, [presetProductId]);
 
   const handleCode = useCallback(
-    (raw: string) => {
+    (raw: string, codeSource: IntakeSource) => {
       const barcode = normalizeBarcode(raw);
       if (!barcode) return;
       setManualCode('');
-      findByBarcode.mutate(barcode);
+      manualTypingRef.current = { lastKeyAt: 0, burst: true };
+      findByBarcode.mutate({ barcode, source: codeSource });
     },
     [findByBarcode],
   );
 
   // Lector USB de caja: captura ráfagas terminadas en Enter mientras no hay un producto cargado.
-  useBarcodeWedge({ onScan: handleCode, enabled: !product });
+  useBarcodeWedge({ onScan: (code) => handleCode(code, 'SCAN'), enabled: !product });
 
   const readLabel = useMutation({
     mutationFn: (photo: Blob) => ocrApi.label(photo),
@@ -175,7 +209,7 @@ export default function IntakePage() {
         toast('No pudimos leer la etiqueta', { description: 'Cargá el vencimiento y el lote a mano.' });
       }
       if (!product && data.matchedProduct) {
-        handleCode(data.matchedProduct.barcode ?? '');
+        handleCode(data.matchedProduct.barcode ?? '', 'OCR');
       }
     },
     onError: (error) => {
@@ -190,6 +224,9 @@ export default function IntakePage() {
 
   const expiryIso = parseDateInput(expiryText);
   const expiryError = expiryText.trim() && !expiryIso ? `Fecha inválida: ${expiryText}. Usá dd/mm/aaaa.` : undefined;
+  // Un vencimiento que ya pasó se puede cargar (mercadería que hay que registrar y descartar), pero nunca en silencio:
+  // entra vencido, no se vende y queda pendiente de descarte en Vencimientos (SPEC §4.2).
+  const expiryPast = !!expiryIso && expiryIso < todayLocalDate();
 
   // Chequeo previo de recall: avisa antes de cargar (SPEC §6.3).
   const recallQuery = useQuery({
@@ -214,9 +251,13 @@ export default function IntakePage() {
       .sort((a, b) => (a.rotationRank ?? 0) - (b.rotationRank ?? 0));
   }, [product, writeBranch.branchId]);
 
-  // Con FIFO avisamos si el lote nuevo vence antes que mercadería que entró antes (SPEC §4.2).
+  // Con FIFO avisamos si el lote nuevo vence antes que mercadería que entró antes (SPEC §4.2). Un lote vencido no
+  // entra en el orden de salida: ahí el aviso es el de vencimiento.
   const breaksRotation =
-    rotation === 'FIFO' && !!expiryIso && branchLots.some((lot) => !!lot.expiryDate && lot.expiryDate > expiryIso);
+    rotation === 'FIFO' &&
+    !!expiryIso &&
+    !expiryPast &&
+    branchLots.some((lot) => !!lot.expiryDate && lot.expiryDate > expiryIso);
 
   const receive = useMutation({
     mutationFn: () =>
@@ -256,6 +297,16 @@ export default function IntakePage() {
       void queryClient.invalidateQueries({ queryKey: ['expirations'] });
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       resetForm(product);
+      if (product) {
+        // El lote nuevo ya cuenta para la próxima caja (orden de salida y aviso de FIFO) y después se relee el
+        // producto para tener el stock exacto.
+        const productId = product.id;
+        setProduct(withReceivedLot(product, response));
+        productsApi
+          .get(productId)
+          .then((fresh) => setProduct((current) => (current?.id === productId ? fresh : current)))
+          .catch(() => undefined);
+      }
     },
     onError: (error) => {
       if (isApiError(error, 'BRANCH_REQUIRED')) {
@@ -278,6 +329,7 @@ export default function IntakePage() {
   const canSave =
     !!product && !!writeBranch.isReady && quantity > 0 && !expiryError && !blockedByRecall && !receive.isPending;
   const needsExpiry = !!product?.perishable && !expiryIso;
+  const resultExpired = !!result && result.lot.expiryBucket === 'EXPIRED' && !result.quarantined;
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
@@ -320,6 +372,12 @@ export default function IntakePage() {
                 {result.rotationWarning}
               </Alert>
             )}
+            {resultExpired && (
+              <Alert tone="crit" icon={AlertTriangle} title="El lote entró vencido">
+                Venció el {formatDate(result.lot.expiryDate)}: no se vende y queda pendiente de descarte en
+                Vencimientos.
+              </Alert>
+            )}
             {result.quarantined && <RecallPanel recalls={result.recalls} quarantined />}
           </div>
         )}
@@ -328,7 +386,7 @@ export default function IntakePage() {
           <div className="flex flex-col gap-3">
             {isCameraSupported() ? (
               <BarcodeScanner
-                onDetected={handleCode}
+                onDetected={(code) => handleCode(code, 'SCAN')}
                 active={!findByBarcode.isPending}
                 hint="Apuntá al código de barras del producto."
                 fallback={<p className="text-base text-muted-foreground">Ingresá el código a mano acá abajo.</p>}
@@ -346,7 +404,9 @@ export default function IntakePage() {
               className="flex items-end gap-2"
               onSubmit={(event) => {
                 event.preventDefault();
-                handleCode(manualCode);
+                // Tipeado a mano → MANUAL; si el código entró de un tirón (lector USB con el foco en el campo) → SCAN.
+                const typing = manualTypingRef.current;
+                handleCode(manualCode, typing.burst && manualCode.length >= 6 ? 'SCAN' : 'MANUAL');
               }}
             >
               <Field label="Código de barras" className="flex-1" htmlFor="intake-manual-code">
@@ -359,6 +419,17 @@ export default function IntakePage() {
                   className="h-11 font-mono tabular-nums"
                   leftIcon={<Keyboard className="h-4 w-4" aria-hidden="true" />}
                   onChange={(event) => setManualCode(normalizeBarcode(event.target.value))}
+                  onKeyDown={(event) => {
+                    if (event.key.length !== 1) return;
+                    const now = Date.now();
+                    const typing = manualTypingRef.current;
+                    if (!manualCode) typing.burst = true;
+                    else if (now - typing.lastKeyAt > SCANNER_KEY_INTERVAL_MS) typing.burst = false;
+                    typing.lastKeyAt = now;
+                  }}
+                  onPaste={() => {
+                    manualTypingRef.current.burst = false;
+                  }}
                 />
               </Field>
               <Button type="submit" size="lg" loading={findByBarcode.isPending} disabled={!manualCode}>
@@ -521,7 +592,9 @@ export default function IntakePage() {
                   label="Vencimiento"
                   error={expiryError}
                   optional={!product.perishable}
-                  hint={needsExpiry ? 'Este producto vence: cargá la fecha.' : undefined}
+                  hint={
+                    needsExpiry ? 'Este producto vence: cargá la fecha.' : expiryPast ? 'Esta fecha ya pasó.' : undefined
+                  }
                   htmlFor="intake-expiry"
                 >
                   <Input
@@ -603,12 +676,34 @@ export default function IntakePage() {
                   rotation={rotation}
                   pending={
                     expiryIso || quantity > 0
-                      ? { lotNumber: lotNumber || null, expiryDate: expiryIso, quantity, breaksRotation }
+                      ? {
+                          lotNumber: lotNumber || null,
+                          expiryDate: expiryIso,
+                          quantity,
+                          breaksRotation,
+                          expired: expiryPast,
+                        }
                       : null
                   }
                 />
               )}
             </section>
+
+            {expiryPast && expiryIso && (
+              <div
+                role="alert"
+                className="flex gap-3 rounded-control border border-crit/40 bg-crit-soft px-3 py-3 text-crit-ink"
+              >
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+                <div className="min-w-0">
+                  <p className="text-base font-semibold">El vencimiento ya pasó</p>
+                  <p className="mt-0.5 text-base">
+                    El {formatDate(expiryIso)} ya pasó: el lote va a entrar vencido, no se va a poder vender y queda
+                    pendiente de descarte en Vencimientos. Revisá la fecha antes de registrarlo.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {breaksRotation && (
               <div
@@ -675,6 +770,10 @@ export default function IntakePage() {
                   setBranchError('Elegí una sucursal para esta operación.');
                   return;
                 }
+                if (expiryPast) {
+                  setConfirmExpired(true);
+                  return;
+                }
                 receive.mutate();
               }}
             >
@@ -730,6 +829,20 @@ export default function IntakePage() {
           </ButtonLink>
         </div>
       </aside>
+
+      <ConfirmDialog
+        open={confirmExpired}
+        onClose={() => setConfirmExpired(false)}
+        onConfirm={() => {
+          setConfirmExpired(false);
+          receive.mutate();
+        }}
+        title="¿Registrar un lote ya vencido?"
+        description={`El vencimiento (${expiryIso ? formatDate(expiryIso) : ''}) ya pasó. El lote entra vencido: no se vende y queda pendiente de descarte en Vencimientos.`}
+        confirmLabel="Registrar vencido"
+        cancelLabel="Revisar la fecha"
+        tone="danger"
+      />
 
       <Modal
         open={cameraOpen}
