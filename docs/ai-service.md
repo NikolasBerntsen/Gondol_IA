@@ -243,7 +243,7 @@ pasaría. La IA lo detecta simulando ambas rotaciones y lo explica:
 > El lote L2409A vence el 24/09/2026 (en 7 días) y tiene 18 u. Con rotación FIFO primero sale la mercadería que
 > entró antes: hay 40 u. de lotes que ingresaron antes y vencen después (hasta el 08/10/2026), así que este lote no
 > llegaría a venderse antes de vencer. Al ritmo actual se venderían 0 u. antes del vencimiento y quedan 18 u. en
-> riesgo ($ 25.200 a costo). Con 10% de descuento, que lo pone primero en la fila de venta, se estima vender 18 u.,
+> riesgo ($ 25.200 a costo). Con 10% de descuento, que lo pasa adelante en la fila de venta, se estima vender 18 u.,
 > suficiente para liquidar el lote. Con rotación FEFO (primero lo que vence antes) quedarían 0 u. en riesgo en lugar de 18 u.:
 > evaluá cambiarla en Configuración. Elasticidad usada para Lácteos: 2,9, ajustada con 1 resultado medido de descuentos.
 
@@ -429,7 +429,7 @@ Los logs son **JSON de una línea** (`ts`, `level`, `logger`, `message` + campos
 recomendaciones y duración. No se registran datos de ventas ni imágenes. `/health` se loguea en nivel DEBUG para no
 llenar el log con los healthchecks. El nivel se cambia con `LOG_LEVEL`.
 
-## 6. Tests (`ai-service/tests`, 196 casos)
+## 6. Tests (`ai-service/tests`, 198 casos)
 
 - `synthetic.py`: generadores de series para **cada patrón** (estable, finde fuerte, intermitente, crecimiento,
   declive, baja rotación, sin movimiento, poca historia) y armado de pedidos.
@@ -448,7 +448,8 @@ llenar el log con los healthchecks. El nivel se cambia con `LOG_LEVEL`.
   reposición; un repuesto no queda "en declive"; la tendencia de un producto en alza es la del patrón.
 - `test_discounts.py`: elasticidad por defecto, el feedback la sube o baja, transferencia entre categorías.
 - `test_recommendations.py`: los 5 tipos, `dedupeKey`, orden por prioridad (vencido > reposición > anomalía),
-  explicación FIFO, FEFO no genera el descuento, el feedback cambia el descuento sugerido, liquidación sin ventas,
+  explicación FIFO, FEFO no genera el descuento, un lote ya en liquidación no recibe otro descuento, un lote detrás
+  de una liquidación lo explica, el feedback cambia el descuento sugerido, liquidación sin ventas,
   fechas de otro año con año, formato es-AR.
 - `test_parse.py`: más de 50 textos de etiquetas reales (`VTO: 12/10/26`, `VENCE 03-2027`, `L.2409A`,
   `LOTE 24091B F.ELAB 10/09/2026 VTO 10/03/2027`, `CONSUMIR ANTES DE 25 SEP 2026`…).

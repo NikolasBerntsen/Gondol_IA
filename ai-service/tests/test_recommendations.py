@@ -139,6 +139,45 @@ def test_fefo_rotation_does_not_leave_the_newer_lot_unsold():
     assert risks[22].units_at_risk == 0
 
 
+def test_lot_already_in_liquidation_is_not_discounted_again():
+    """Un lote con descuento aceptado sale primero aunque haya mercadería más vieja (SPEC §4.2): se vende a tiempo."""
+    rng = np.random.default_rng(5)
+    queso = product(
+        128,
+        synthetic.stable(rng, level=3),
+        name="Queso untable 290 g",
+        category="Lácteos",
+        lots=[
+            lot(1, 71, AS_OF + timedelta(days=40), AS_OF - timedelta(days=30), "LP0820A"),
+            lot(2, 10, AS_OF + timedelta(days=6), AS_OF - timedelta(days=3), "LP0914B", discount_pct=10),
+        ],
+    )
+    response = run([queso])
+    assert not [r for r in response.recommendations if r.type == DISCOUNT]
+    risks = {r.lot_id: r for r in response.products[0].lot_risks}
+    assert risks[2].units_at_risk == 0 and risks[2].risk_level == "NONE"
+    assert risks[2].expected_sales_before_expiry == pytest.approx(10)
+
+
+def test_lot_behind_a_liquidation_explains_why_it_sells_later():
+    rng = np.random.default_rng(6)
+    item = product(
+        77,
+        synthetic.stable(rng, level=4),
+        name="Crema de leche 200 ml",
+        category="Lácteos",
+        lots=[
+            lot(1, 40, AS_OF + timedelta(days=30), AS_OF - timedelta(days=2), "CR-NUEVO", discount_pct=20),
+            lot(2, 12, AS_OF + timedelta(days=4), AS_OF - timedelta(days=20), "CR-VIEJO"),
+        ],
+    )
+    (rec,) = [r for r in run([item]).recommendations if r.type == DISCOUNT]
+    assert rec.lot_id == 2
+    assert "Los lotes en liquidación salen primero: hay 40 u. con descuento" in rec.explanation
+    assert "que lo pasa adelante en la fila de venta" in rec.explanation
+    assert "FIFO primero sale" not in rec.explanation
+
+
 def test_remove_expired_lot(result):
     (rec,) = recs_by_type(result, REMOVE_EXPIRED)
     assert rec.dedupe_key == "REMOVE_EXPIRED:31"

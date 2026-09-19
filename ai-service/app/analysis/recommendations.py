@@ -243,7 +243,7 @@ def _discounts(a: ProductAnalysis, as_of: date, settings: AnalyzeSettings, model
         )
         # Al aceptar el descuento el lote pasa a estar en liquidación y se vende antes que el resto (SPEC §4.2).
         jumps_queue = not risk.current_discount_pct and (risk.rotation_rank or 1) > 1
-        display = ", que lo pone primero en la fila de venta," if jumps_queue else ""
+        display = ", que lo pasa adelante en la fila de venta," if jumps_queue else ""
         if risk.discount_clears_lot:
             text += f"Con {pct}% de descuento{display} se estima vender {fmt_units(sold_with, 1)}, suficiente para liquidar el lote."
         elif sells_out:

@@ -846,7 +846,7 @@
       "priority": 80,
       "confidence": 0.746,
       "title": "Aplicar 10% de descuento a Yogur bebible frutilla 1L (lote L2409A)",
-      "explanation": "El lote L2409A vence el 24/09/2026 (en 7 días) y tiene 18 u. Con rotación FIFO primero sale la mercadería que entró antes: hay 40 u. de lotes que ingresaron antes y vencen después (hasta el 08/10/2026), así que este lote no llegaría a venderse antes de vencer. Al ritmo actual se venderían 0 u. antes del vencimiento y quedan 18 u. en riesgo ($ 25.200 a costo). Con 10% de descuento, que lo pone primero en la fila de venta, se estima vender 18 u., suficiente para liquidar el lote. Con rotación FEFO (primero lo que vence antes) quedarían 0 u. en riesgo en lugar de 18 u.: evaluá cambiarla en Configuración. Elasticidad usada para Lácteos: 2,9, ajustada con 1 resultado medido de descuentos.",
+      "explanation": "El lote L2409A vence el 24/09/2026 (en 7 días) y tiene 18 u. Con rotación FIFO primero sale la mercadería que entró antes: hay 40 u. de lotes que ingresaron antes y vencen después (hasta el 08/10/2026), así que este lote no llegaría a venderse antes de vencer. Al ritmo actual se venderían 0 u. antes del vencimiento y quedan 18 u. en riesgo ($ 25.200 a costo). Con 10% de descuento, que lo pasa adelante en la fila de venta, se estima vender 18 u., suficiente para liquidar el lote. Con rotación FEFO (primero lo que vence antes) quedarían 0 u. en riesgo en lugar de 18 u.: evaluá cambiarla en Configuración. Elasticidad usada para Lácteos: 2,9, ajustada con 1 resultado medido de descuentos.",
       "suggestedQuantity": null,
       "suggestedDiscountPct": 10,
       "suggestedDate": "2026-09-17",
