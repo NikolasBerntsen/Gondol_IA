@@ -2,6 +2,7 @@ import { ArrowLeft, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/cn';
+import { useDocumentTitle } from '@/lib/documentTitle';
 
 export interface PageHeaderProps {
   title: ReactNode;
@@ -15,6 +16,11 @@ export interface PageHeaderProps {
   back?: { to: string; label?: string };
   /** Contenido extra debajo (filtros, `Tabs`, `Segmented`). */
   children?: ReactNode;
+  /**
+   * Título de la pestaña ("… · GondolIA"). Por defecto, `title` cuando es texto; si `title` es un nodo, pasalo acá.
+   * `null` deja el título de la ruta.
+   */
+  documentTitle?: string | null;
   className?: string;
 }
 
@@ -30,8 +36,11 @@ export function PageHeader({
   actions,
   back,
   children,
+  documentTitle,
   className,
 }: PageHeaderProps) {
+  useDocumentTitle(documentTitle === undefined ? (typeof title === 'string' ? title : null) : documentTitle);
+
   return (
     <header className={cn('mb-5 space-y-4', className)}>
       {back && (

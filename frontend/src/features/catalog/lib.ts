@@ -1,5 +1,5 @@
 // Helpers del módulo A1 — Catálogo y carga de mercadería.
-import { MOVEMENT_SOURCE_LABELS, MOVEMENT_TYPE_LABELS, type ProductUnit } from '@/api/types';
+import { MOVEMENT_TYPE_LABELS, type ProductUnit } from '@/api/types';
 import type { ProductMovement, ProductStockFilter } from './types';
 
 /** Etiquetas de los tipos que el núcleo todavía no lista (A2 los agrega al historial completo). */
@@ -7,18 +7,12 @@ const EXTRA_TYPE_LABELS: Record<string, string> = {
   SALE_VOID: 'Anulación de venta',
 };
 
-const EXTRA_SOURCE_LABELS: Record<string, string> = {
-  POS_GONDOLIA: 'Punto de venta GondolIA',
-  IMPORT: 'Importación masiva',
-};
-
 export function movementTypeLabel(type: ProductMovement['type']): string {
   return (MOVEMENT_TYPE_LABELS as Record<string, string>)[type] ?? EXTRA_TYPE_LABELS[type] ?? type;
 }
 
-export function movementSourceLabel(source: ProductMovement['source']): string {
-  return (MOVEMENT_SOURCE_LABELS as Record<string, string>)[source] ?? EXTRA_SOURCE_LABELS[source] ?? source;
-}
+/** Mismas etiquetas que Ventas y Movimientos: "POS externo" vs. "POS GondolIA" (SPEC §4.1). */
+export { movementSourceLabel } from '@/api/types';
 
 /** Los ingresos suman y las bajas restan: sirve para el signo y el color de la fila. */
 export function movementSign(type: ProductMovement['type']): 1 | -1 {

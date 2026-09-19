@@ -1,16 +1,36 @@
 import { Home, ShieldX } from 'lucide-react';
-import { ROLE_LABELS } from '@/api/types';
+import { useLocation } from 'react-router-dom';
+import { ROLE_LABELS, isTenantRole, type Role } from '@/api/types';
 import { useAuth } from '@/auth/AuthContext';
 import { roleHome } from '@/auth/roleHome';
 import { useShellLayout } from '@/components/layout/shellLayout';
 import { ButtonLink } from '@/components/ui/Button';
+import { rolesForPath } from '@/config/access';
 import { cn } from '@/lib/cn';
+import { useDocumentTitle } from '@/lib/documentTitle';
+
+/**
+ * Qué hacer cuando `role` no puede abrir `pathname`, según de quién es la pantalla (SPEC §3.3, §9.5). Solo se manda
+ * a "pedíselo al administrador" a quien tiene un administrador que se lo pueda dar: al propio administrador, o a
+ * cualquiera que entra a la consola de GondolIA, eso no le sirve de nada.
+ */
+export function forbiddenHint(role: Role, pathname: string): string {
+  const forTenants = rolesForPath(pathname).some(isTenantRole);
+  if (isTenantRole(role)) {
+    if (!forTenants) return 'Esta sección es del equipo de GondolIA y no forma parte de la gestión de tu comercio.';
+    if (role === 'TENANT_ADMIN') return 'Si creés que es un error, escribinos desde Soporte.';
+    return 'Si necesitás usarla, pedíselo al administrador de tu comercio.';
+  }
+  if (forTenants) return 'Es una pantalla de los comercios: la usan sus propios equipos.';
+  return 'Es una sección de otro rol del equipo de GondolIA.';
+}
 
 export default function ForbiddenPage() {
   const { me } = useAuth();
-  const isTenantUser = me?.tenant != null;
+  const { pathname } = useLocation();
   // Fuera del AppShell (ruta del ticket) o en la variante compacta nadie puso el padding de página.
   const { compact, inShell } = useShellLayout();
+  useDocumentTitle('Acceso denegado');
 
   return (
     <div
@@ -31,10 +51,7 @@ export default function ForbiddenPage() {
         {me ? (
           <>
             Tu rol <span className="font-semibold text-foreground">{ROLE_LABELS[me.role]}</span> no tiene permisos para ver
-            esta pantalla.{' '}
-            {isTenantUser
-              ? 'Si necesitás usarla, pedíselo al administrador de tu comercio.'
-              : 'Si creés que es un error, hablalo con el equipo de GondolIA.'}
+            esta pantalla. {forbiddenHint(me.role, pathname)}
           </>
         ) : (
           'Iniciá sesión con una cuenta que tenga permisos para ver esta pantalla.'

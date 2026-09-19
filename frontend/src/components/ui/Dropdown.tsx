@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type ButtonHTMLAttributes,
@@ -111,19 +112,71 @@ export interface DropdownPanelProps extends HTMLAttributes<HTMLDivElement> {
   align?: 'start' | 'end';
 }
 
-/** Panel flotante debajo del disparador (el contenedor debe ser `relative`). */
+/** Margen mínimo entre un panel flotante y el borde de la pantalla (el gutter mobile de docs/design-system.md). */
+export const VIEWPORT_GUTTER_PX = 16;
+
+/**
+ * Cuánto hay que correr horizontalmente un panel de `width` px que naturalmente arranca en `left` para que quede
+ * dentro de `[gutter, viewportWidth - gutter]`. Si no entra ni así, se prioriza el borde izquierdo (donde empieza
+ * el texto). Negativo = hacia la izquierda.
+ */
+export function viewportShift(left: number, width: number, viewportWidth: number, gutter = VIEWPORT_GUTTER_PX): number {
+  const overflowRight = left + width - (viewportWidth - gutter);
+  let shift = overflowRight > 0 ? -overflowRight : 0;
+  if (left + shift < gutter) shift = gutter - left;
+  return Math.round(shift);
+}
+
+/**
+ * Panel flotante debajo del disparador (el contenedor debe ser `relative`). Se alinea al borde pedido y, si así se
+ * saldría de la pantalla (p. ej. el selector de sucursal, centrado en la barra de un celular), se corre lo justo para
+ * quedar dentro con el gutter de 16 px. El corrimiento usa la propiedad `translate`, que se suma al `transform` de la
+ * animación de entrada sin pisarlo.
+ */
 export const DropdownPanel = forwardRef<HTMLDivElement, DropdownPanelProps>(function DropdownPanel(
-  { align = 'end', className, ...props },
+  { align = 'end', className, style, ...props },
   ref,
 ) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [shift, setShift] = useState(0);
+
+  const setRefs = useCallback(
+    (node: HTMLDivElement | null) => {
+      panelRef.current = node;
+      if (typeof ref === 'function') ref(node);
+      else if (ref) ref.current = node;
+    },
+    [ref],
+  );
+
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    const place = () => {
+      const anchor = panel.offsetParent;
+      // Los paneles `fixed` (la campana en celulares) ya se ubican contra la pantalla.
+      if (!anchor || getComputedStyle(panel).position === 'fixed') {
+        setShift(0);
+        return;
+      }
+      // Posición de layout (sin la escala de la animación ni el corrimiento actual).
+      const left = anchor.getBoundingClientRect().left + panel.offsetLeft;
+      setShift(viewportShift(left, panel.offsetWidth, document.documentElement.clientWidth));
+    };
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+  }, [align]);
+
   return (
     <div
-      ref={ref}
+      ref={setRefs}
       className={cn(
         'absolute top-full z-40 mt-2 min-w-[14rem] origin-top animate-in fade-in-0 zoom-in-95 rounded-panel border border-border bg-popover p-1.5 text-popover-foreground shadow-pop focus:outline-none',
         align === 'end' ? 'right-0' : 'left-0',
         className,
       )}
+      style={shift ? { ...style, translate: `${shift}px 0` } : style}
       {...props}
     />
   );
