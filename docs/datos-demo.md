@@ -164,7 +164,9 @@ Fisherton**. Vida Sana no vende el producto; El Sol Centro y Echesortu tienen la
 4. En Don Pepe: **Seguridad alimentaria** → "Entendido" → **Retirar del stock** (o "Devolver al proveedor") con una nota.
    El lote queda en 0 con su movimiento `Retiro por recall`. Probá vender la sopa desde el POS con `cajero@donpepe.com`:
    el producto aparece bloqueado por cuarentena.
-5. En El Sol, `empleado@elsol.com` resuelve la de Fisherton. La sopa de Centro (otro lote) se sigue vendiendo.
+5. En El Sol, `empleado@elsol.com` resuelve la de Fisherton. Aunque tenga elegida Centro en el topbar, la alerta le
+   aparece igual (se piden las de todas sus sucursales) y "Ver detalle y retirar del stock" lo lleva a Fisherton. La
+   sopa de Centro (otro lote) se sigue vendiendo.
 6. Para comparar: en **Seguridad alimentaria** de Don Pepe o de El Sol queda también el **recall histórico resuelto**
    del Dulce de leche (lote `DV2603B`), con quién lo reconoció, quién lo resolvió y la nota.
 

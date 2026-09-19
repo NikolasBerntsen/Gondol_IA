@@ -192,7 +192,7 @@ export default function RecallsPage() {
           }
         >
           {pendingElsewhere.length === 1
-            ? `Estás viendo ${scopeLabel}. Cambiá de sucursal para ver el lote y retirarlo del stock.`
+            ? `Estás viendo ${scopeLabel}. Cambiá de sucursal para ver el lote${canResolve ? ' y retirarlo del stock' : ''}.`
             : `Estás viendo ${scopeLabel}. ${pendingElsewhere
                 .map((entry) => `${entry.branchName}: ${entry.count}`)
                 .join(' · ')}.`}
