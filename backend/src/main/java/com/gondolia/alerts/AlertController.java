@@ -5,6 +5,7 @@ import com.gondolia.alerts.dto.AlertCountsDto;
 import com.gondolia.alerts.dto.AlertDto;
 import com.gondolia.analytics.BranchScopeService;
 import com.gondolia.analytics.BranchScopeService.Scope;
+import com.gondolia.analytics.ParamMessages;
 import com.gondolia.common.PageResponse;
 import com.gondolia.common.error.BadRequestException;
 import com.gondolia.common.error.ErrorCodes;
@@ -57,8 +58,9 @@ public class AlertController {
             @RequestParam(required = false) String severity,
             @RequestParam(required = false) Long productId,
             @RequestParam(required = false) String q,
-            @RequestParam(defaultValue = "0") @Min(0) int page,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+            @RequestParam(defaultValue = "0") @Min(value = 0, message = ParamMessages.MIN) int page,
+            @RequestParam(defaultValue = "20") @Min(value = 1, message = ParamMessages.MIN)
+            @Max(value = 100, message = ParamMessages.MAX) int size) {
         AlertQuery query = new AlertQuery(parseStatus(status), parseType(type), parseSeverity(severity), productId,
                 q, page, size);
         return alertService.list(CurrentUser.tenantId(), scope(), query);

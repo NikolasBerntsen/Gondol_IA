@@ -38,8 +38,14 @@ public class DashboardService {
 
     static final int MAX_TREND_DAYS = 180;
 
+    /** Coincidencias de recall sin resolver: sin confirmar o confirmadas con el lote todavía en cuarentena. */
+    static final String ACTIVE_RECALL_STATUSES = "('OPEN', 'ACKNOWLEDGED')";
+
     /** Ventana de ventas para estimar el ritmo diario cuando la IA todavía no sugirió una cantidad. */
     private static final int DEMAND_WINDOW_DAYS = 28;
+
+    /** Hasta cuántos días atrás un pedido anotado sin ingreso posterior se sigue mostrando como "pedido". */
+    static final int ORDER_WINDOW_DAYS = 30;
 
     private final NamedParameterJdbcTemplate jdbc;
     private final TenantSettingsRepository settingsRepository;
@@ -113,10 +119,12 @@ public class DashboardService {
                 select count(*) from recommendations
                 where tenant_id = :tenantId and branch_id in (:branchIds) and status = 'PENDING'
                 """, params);
+        // Una coincidencia "Entendida" sigue en cuarentena hasta que se resuelve el retiro: el Inicio la muestra igual
+        // (mismo conjunto que GET /recall-matches?status=ACTIVE).
         long openRecallMatches = count("""
                 select count(*) from recall_matches
-                where tenant_id = :tenantId and branch_id in (:branchIds) and status = 'OPEN'
-                """, params);
+                where tenant_id = :tenantId and branch_id in (:branchIds) and status in %s
+                """.formatted(ACTIVE_RECALL_STATUSES), params);
         OffsetDateTime lastRunAt = jdbc.queryForObject("""
                 select max(coalesce(finished_at, started_at)) from ai_runs
                 where tenant_id = :tenantId and branch_id in (:branchIds) and status = 'OK'
@@ -278,6 +286,10 @@ public class DashboardService {
 
     // ------------------------------------------------------------------ vencimientos
 
+    /**
+     * Lotes <strong>vendibles</strong> que vencen entre hoy y los próximos {@link #UPCOMING_HORIZON_DAYS} días (api-b
+     * §1.4). Los ya vencidos no se venden: el Inicio los informa aparte ("lotes vencidos sin descartar").
+     */
     @Transactional(readOnly = true)
     public List<UpcomingExpirationRow> upcomingExpirations(Long tenantId, Scope scope, int limit) {
         if (scope.isEmpty()) {
@@ -293,7 +305,8 @@ public class DashboardService {
                        l.quantity
                 from lots l join products p on p.id = l.product_id
                 where l.tenant_id = :tenantId and l.branch_id in (:branchIds) and l.status = 'ACTIVE'
-                  and l.quantity > 0 and l.expiry_date is not null and l.expiry_date <= :horizon
+                  and l.quantity > 0 and l.expiry_date is not null
+                  and l.expiry_date >= :today and l.expiry_date <= :horizon
                 order by l.expiry_date asc, l.quantity desc, l.id asc
                 limit :rowLimit
                 """, params, (rs, rowNum) -> {
@@ -317,6 +330,7 @@ public class DashboardService {
         TenantSettings settings = settings(tenantId);
         MapSqlParameterSource params = baseParams(tenantId, scope, today)
                 .addValue("from", AnalyticsSql.startOfDay(today.minusDays(DEMAND_WINDOW_DAYS - 1L), clock))
+                .addValue("orderSince", AnalyticsSql.startOfDay(today.minusDays(ORDER_WINDOW_DAYS), clock))
                 .addValue("rowLimit", Math.clamp(limit, 1, 200));
 
         return jdbc.query(reorderRowsSql() + """
@@ -330,10 +344,29 @@ public class DashboardService {
                  )
                  select r.branch_id, r.product_id, r.product_name, r.brand, r.sellable, r.min_stock,
                         coalesce(rc.units, 0) as recent_units,
-                        i.suggested_order_qty, i.predicted_stockout_date
+                        i.suggested_order_qty, i.predicted_stockout_date,
+                        o.ordered_quantity, o.ordered_at
                  from reorder r
                  left join recent rc on rc.branch_id = r.branch_id and rc.product_id = r.product_id
                  left join product_insights i on i.branch_id = r.branch_id and i.product_id = r.product_id
+                 left join lateral (
+                   -- Último pedido anotado (REORDER aceptada) que todavía no llegó: sin ingresos desde que se anotó.
+                   select coalesce(case when jsonb_typeof(rec.outcome -> 'orderedQuantity') = 'number'
+                                        then (rec.outcome ->> 'orderedQuantity')::int end,
+                                   rec.suggested_quantity) as ordered_quantity,
+                          rec.decided_at as ordered_at
+                   from recommendations rec
+                   where rec.tenant_id = :tenantId and rec.branch_id = r.branch_id
+                     and rec.product_id = r.product_id and rec.type = 'REORDER' and rec.status = 'ACCEPTED'
+                     and rec.decided_at >= :orderSince
+                     and not exists (
+                       select 1 from stock_movements e
+                       where e.tenant_id = :tenantId and e.branch_id = rec.branch_id
+                         and e.product_id = rec.product_id and e.type in ('ENTRY', 'TRANSFER_IN')
+                         and e.occurred_at > rec.decided_at)
+                   order by rec.decided_at desc
+                   limit 1
+                 ) o on true
                  order by r.sellable asc, coalesce(rc.units, 0) desc, r.product_name asc
                  limit :rowLimit
                 """.formatted(AnalyticsSql.NET_SALE_UNITS, AnalyticsSql.SALE_TYPES), params, (rs, rowNum) -> {
@@ -346,7 +379,8 @@ public class DashboardService {
                             rs.getString("brand"), branchId, scope.nameOf(branchId), sellable, minStock,
                             suggestedQuantity(suggested, sellable, minStock, recentUnits, settings),
                             AnalyticsSql.reorderStatus(sellable, minStock),
-                            rs.getObject("predicted_stockout_date", LocalDate.class));
+                            rs.getObject("predicted_stockout_date", LocalDate.class),
+                            (Integer) rs.getObject("ordered_quantity"), AnalyticsSql.instant(rs, "ordered_at"));
                 });
     }
 

@@ -32,8 +32,9 @@ public class StatisticsController {
     @Operation(summary = "Panorama de ventas, rotación, pérdidas e impacto de la IA")
     @GetMapping("/overview")
     public StatisticsOverview overview(
-            @RequestParam(defaultValue = "90") @Min(StatisticsService.MIN_DAYS) @Max(StatisticsService.MAX_DAYS)
-            int days) {
+            @RequestParam(defaultValue = "90")
+            @Min(value = StatisticsService.MIN_DAYS, message = ParamMessages.MIN)
+            @Max(value = StatisticsService.MAX_DAYS, message = ParamMessages.MAX) int days) {
         Long tenantId = CurrentUser.tenantId();
         return statisticsService.overview(tenantId, branchScope.current(tenantId), days);
     }

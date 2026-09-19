@@ -47,7 +47,12 @@ import org.springframework.transaction.annotation.Transactional;
  * {@code SALE_WITHOUT_STOCK} (núcleo) solo se cierran a mano.
  * <p>
  * Una alerta descartada no se vuelve a abrir mientras la condición siga igual: se respeta el descarte durante
- * {@link #DISMISS_QUIET_DAYS} días.
+ * {@link #DISMISS_QUIET_DAYS} días. Una {@code ANOMALY} es un hecho puntual (el pico de un día): si alguien la
+ * resolvió o la descartó, no se vuelve a abrir mientras esa anomalía siga dentro de la ventana de
+ * {@link #ANOMALY_WINDOW_DAYS} días (su {@code dedupe_key} incluye el día).
+ * <p>
+ * La notificación de una alerta de vencimiento lleva a cada rol a una pantalla que puede abrir: el administrador a
+ * {@code /app/alerts} y el empleado a {@code /app/expirations} (la bandeja de alertas es solo de jefe y admin).
  */
 @Slf4j
 @Service
@@ -65,12 +70,19 @@ public class AlertEvaluator {
     private static final Set<AlertType> EXPIRY_TYPES = EnumSet.of(AlertType.EXPIRED, AlertType.EXPIRING_SOON);
 
     /** Días hacia atrás en los que una anomalía sigue siendo noticia. */
-    private static final int ANOMALY_WINDOW_DAYS = 7;
+    static final int ANOMALY_WINDOW_DAYS = 7;
+
+    /** Pantalla de cada rol para las notificaciones de alertas (SPEC §9.3: el empleado no ve la bandeja). */
+    static final String ADMIN_ALERT_LINK = "/app/alerts";
+    static final String EMPLOYEE_EXPIRY_LINK = "/app/expirations";
+
+    /** Números de los mensajes con el formato del resto de la app ({@code 9,7 u.}). */
+    private static final Locale ES_AR = Locale.forLanguageTag("es-AR");
 
     /** Margen sobre el tiempo de reposición para avisar un quiebre previsto. */
     private static final int STOCKOUT_MARGIN_DAYS = 2;
 
-    private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.forLanguageTag("es-AR"));
+    private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("dd/MM/yyyy", ES_AR);
 
     private final NamedParameterJdbcTemplate jdbc;
     private final AlertRepository alertRepository;
@@ -122,6 +134,7 @@ public class AlertEvaluator {
         }
 
         Set<String> dismissed = recentlyDismissed(tenantId, branchId, today);
+        dismissed.addAll(closedAnomalies(tenantId, branchId, today));
         int opened = 0;
         int criticalOpened = 0;
         for (Desired candidate : desired.values()) {
@@ -313,8 +326,9 @@ public class AlertEvaluator {
             String direction = "DROP".equalsIgnoreCase(kind) ? "muy por debajo" : "muy por encima";
             alerts.add(new Desired(AlertType.ANOMALY, Severity.INFO,
                     "Anomalía de ventas: " + product,
-                    "%s: el %s se vendieron %d u. de %s, %s de lo esperado (%.1f u.). Revisá si hubo un error de carga."
-                            .formatted(branch, DAY.format(day), quantity, product, direction, expected),
+                    String.format(ES_AR, "%s: el %s se vendieron %d u. de %s, %s de lo esperado (%.1f u.). "
+                            + "Revisá si hubo un error de carga.",
+                            branch, DAY.format(day), quantity, product, direction, expected),
                     productId, null,
                     "ANOMALY:%d:%d:%s".formatted(branchId, productId, day)));
         }
@@ -337,6 +351,26 @@ public class AlertEvaluator {
                 """, params, (rs, rowNum) -> rs.getString(1)));
     }
 
+    /**
+     * Anomalías que una persona ya cerró (resuelta o descartada, con {@code handled_by}) dentro de la ventana en la que
+     * el motor las seguiría informando. Una anomalía es un hecho pasado: resolverla no cambia la condición, así que sin
+     * este filtro el motor la reabría en la pasada siguiente.
+     */
+    private Set<String> closedAnomalies(long tenantId, long branchId, LocalDate today) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("tenantId", tenantId)
+                .addValue("branchId", branchId)
+                .addValue("since", OffsetDateTime.ofInstant(
+                        today.minusDays(ANOMALY_WINDOW_DAYS + 1L).atStartOfDay(clock.getZone()).toInstant(),
+                        ZoneOffset.UTC));
+        return new HashSet<>(jdbc.query("""
+                select dedupe_key from alerts
+                where tenant_id = :tenantId and branch_id = :branchId and type = 'ANOMALY'
+                  and status in ('RESOLVED', 'DISMISSED') and handled_by is not null
+                  and created_at >= :since
+                """, params, (rs, rowNum) -> rs.getString(1)));
+    }
+
     private static String key(AlertType type, long branchId, long entityId) {
         return "%s:%d:%d".formatted(type.name(), branchId, entityId);
     }
@@ -356,11 +390,17 @@ public class AlertEvaluator {
     }
 
     private void notify(long tenantId, long branchId, Desired desired, Long alertId) {
-        Set<Role> roles = EXPIRY_TYPES.contains(desired.type())
-                ? Set.of(Role.TENANT_ADMIN, Role.TENANT_EMPLOYEE)
-                : Set.of(Role.TENANT_ADMIN);
-        NotificationDraft draft = new NotificationDraft(NotificationType.ALERT, desired.severity(),
-                desired.title(), desired.message(), "/app/alerts", "ALERT", alertId);
-        notificationService.notifyBranchUsers(tenantId, branchId, roles, draft);
+        notificationService.notifyBranchUsers(tenantId, branchId, Set.of(Role.TENANT_ADMIN),
+                draft(desired, alertId, ADMIN_ALERT_LINK));
+        if (EXPIRY_TYPES.contains(desired.type())) {
+            // El empleado no puede abrir /app/alerts: su pantalla para actuar sobre un vencimiento es Vencimientos.
+            notificationService.notifyBranchUsers(tenantId, branchId, Set.of(Role.TENANT_EMPLOYEE),
+                    draft(desired, alertId, EMPLOYEE_EXPIRY_LINK));
+        }
+    }
+
+    private static NotificationDraft draft(Desired desired, Long alertId, String link) {
+        return new NotificationDraft(NotificationType.ALERT, desired.severity(), desired.title(), desired.message(),
+                link, "ALERT", alertId);
     }
 }
