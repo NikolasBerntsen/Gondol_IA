@@ -13,12 +13,15 @@ es único por comercio**; el **stock y los lotes son por sucursal**.
 | Acción | JEFE | ADMIN | EMPLEADO | CAJERO |
 |---|:-:|:-:|:-:|:-:|
 | Listar categorías (`GET /tenant/categories`) | ✔ | ✔ | ✔ | ✔ |
-| Listar/ver productos, listar proveedores y lotes | ✘ | ✔ | ✔ | ✘ |
+| Listar/ver productos (lista, ficha, por código, movimientos del producto), listar proveedores y lotes | ✔ | ✔ | ✔ | ✘ |
 | Crear y editar productos, crear categoría (incluida la creación inline) | ✘ | ✔ | ✔ | ✘ |
 | Cargar y corregir lotes, consulta pública por código, chequeo de recall, OCR | ✘ | ✔ | ✔ | ✘ |
 | Eliminar productos · editar/eliminar categorías · ABM de proveedores | ✘ | ✔ | ✘ | ✘ |
 
-Se implementa con `@PreAuthorize(Roles.TENANT_INVENTORY | Roles.TENANT_ADMIN | Roles.TENANT_ANY)`.
+Se implementa con `@PreAuthorize(Roles.TENANT_INVENTORY_READ | Roles.TENANT_INVENTORY | Roles.TENANT_ADMIN |
+Roles.TENANT_ANY)`: los `GET` de productos, lotes y proveedores usan `TENANT_INVENTORY_READ` (jefe + admin +
+empleado) porque el jefe abre el inventario desde su Inicio (regla de SPEC §3.3: todo lo visible funciona); todas las
+escrituras siguen como estaban.
 Un rol sin permiso recibe **403 `FORBIDDEN`**; sin token, **401 `UNAUTHORIZED`**.
 
 ### Aislamiento (SPEC §3.4)

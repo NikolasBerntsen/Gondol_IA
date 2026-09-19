@@ -32,7 +32,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Recomendaciones de la IA (SPEC §6.5). Ver: jefe y administrador. Aceptar o descartar: solo administrador.
+ * Recomendaciones de la IA (SPEC §6.5). Ver, aceptar y descartar: jefe y administrador (el jefe es quien decide).
  */
 @Tag(name = "Recomendaciones de la IA")
 @RestController
@@ -75,7 +75,7 @@ public class RecommendationController {
 
     @Operation(summary = "Aceptar la recomendación y ejecutar su acción")
     @PostMapping("/{id}/accept")
-    @PreAuthorize(Roles.TENANT_ADMIN)
+    @PreAuthorize(Roles.TENANT_DASHBOARD)
     public RecommendationDecisionDto accept(@PathVariable Long id, @RequestBody(required = false) @Valid
                                             AcceptBody body) {
         AcceptRequest request = body == null ? new AcceptRequest(null, null, null)
@@ -85,7 +85,7 @@ public class RecommendationController {
 
     @Operation(summary = "Descartar la recomendación")
     @PostMapping("/{id}/discard")
-    @PreAuthorize(Roles.TENANT_ADMIN)
+    @PreAuthorize(Roles.TENANT_DASHBOARD)
     public RecommendationDecisionDto discard(@PathVariable Long id, @RequestBody(required = false) @Valid
                                              DiscardBody body) {
         return recommendationService.discard(CurrentUser.tenantId(), id, CurrentUser.id(), scope(),

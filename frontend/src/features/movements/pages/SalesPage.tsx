@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/api/client';
+import { useAccess } from '@/auth/useAccess';
 import { BranchPicker } from '@/branches/BranchPicker';
 import { useBranch, useBranchQueryKey, useWriteBranch } from '@/branches/BranchContext';
 import { useBranchColumn } from '@/branches/branchColumn';
@@ -273,6 +274,7 @@ function NewSaleTab() {
 
 function HistoryTab() {
   const { isAll } = useBranch();
+  const { canOpen } = useAccess();
   const [range, setRange] = useState<DateRange>(EMPTY_RANGE);
   const [source, setSource] = useState('');
   const [search, setSearch] = useState('');
@@ -315,7 +317,8 @@ function HistoryTab() {
       header: 'Origen',
       mobile: 'field',
       cell: (row) =>
-        row.ticketCode && row.posSaleId ? (
+        // El ticket del POS se abre solo si el rol usa el POS (el jefe ve el código sin link).
+        row.ticketCode && row.posSaleId && canOpen(`/app/pos/sales/${row.posSaleId}/ticket`) ? (
           <Link
             to={`/app/pos/sales/${row.posSaleId}/ticket`}
             onClick={(event) => event.stopPropagation()}
@@ -324,6 +327,10 @@ function HistoryTab() {
             <Receipt className="h-3.5 w-3.5" aria-hidden="true" />
             {row.ticketCode}
           </Link>
+        ) : row.ticketCode ? (
+          <Badge tone="neutral" className="font-mono">
+            {row.ticketCode}
+          </Badge>
         ) : (
           <Badge tone="neutral">{row.sourceLabel}</Badge>
         ),
@@ -420,7 +427,7 @@ function HistoryTab() {
           icon: Receipt,
           title: 'Todavía no hay ventas',
           description: isAll
-            ? 'Registrá una venta manual, importá un CSV o conectá tu POS para verlas acá.'
+            ? 'Cuando se registren ventas (manuales, del POS o importadas) las vas a ver acá.'
             : 'No hay ventas en esta sucursal con los filtros elegidos.',
         }}
         footer={
@@ -438,27 +445,36 @@ function HistoryTab() {
 // ---------------------------------------------------------------------------
 
 export default function SalesPage() {
-  const [tab, setTab] = useState<TabValue>('new');
+  const { can } = useAccess();
+  // El jefe ve el historial pero no registra ventas (SPEC §3.3): sin la pestaña "Registrar venta".
+  const canRegister = can('sales.write');
+  const [tab, setTab] = useState<TabValue>(canRegister ? 'new' : 'history');
 
   return (
     <>
       <PageHeader
         title="Ventas"
         icon={ShoppingCart}
-        description="Registrá ventas manuales y revisá el historial de todas las fuentes."
+        description={
+          canRegister
+            ? 'Registrá ventas manuales y revisá el historial de todas las fuentes.'
+            : 'Historial de ventas de todas las fuentes, con el detalle de cada una.'
+        }
       >
-        <Tabs<TabValue>
-          value={tab}
-          onChange={setTab}
-          ariaLabel="Secciones de ventas"
-          tabs={[
-            { value: 'new', label: 'Registrar venta', icon: ShoppingCart },
-            { value: 'history', label: 'Historial', icon: Receipt },
-          ]}
-        />
+        {canRegister ? (
+          <Tabs<TabValue>
+            value={tab}
+            onChange={setTab}
+            ariaLabel="Secciones de ventas"
+            tabs={[
+              { value: 'new', label: 'Registrar venta', icon: ShoppingCart },
+              { value: 'history', label: 'Historial', icon: Receipt },
+            ]}
+          />
+        ) : null}
       </PageHeader>
 
-      {tab === 'new' ? <NewSaleTab /> : <HistoryTab />}
+      {canRegister && tab === 'new' ? <NewSaleTab /> : <HistoryTab />}
     </>
   );
 }

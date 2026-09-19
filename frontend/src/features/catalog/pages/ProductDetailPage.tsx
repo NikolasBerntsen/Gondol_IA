@@ -16,7 +16,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/api/client';
 import { LOT_STATUS_LABELS, SALES_PATTERN_LABELS } from '@/api/types';
-import { useAuth, useCurrentUser } from '@/auth/AuthContext';
+import { useCurrentUser } from '@/auth/AuthContext';
+import { useAccess } from '@/auth/useAccess';
 import { useBranch } from '@/branches/BranchContext';
 import { useBranchQueryKey } from '@/branches/BranchContext';
 import { BarcodeDigits, ExpiryChip, LotRankChip, StatusPill, StockStatusPill } from '@/components/gondola';
@@ -46,10 +47,13 @@ export default function ProductDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const me = useCurrentUser();
-  const { hasRole } = useAuth();
+  const { can } = useAccess();
   const { isAll } = useBranch();
-  const isAdmin = hasRole('TENANT_ADMIN');
-  const canSeeInsights = hasRole('TENANT_ADMIN') || hasRole('TENANT_BOSS');
+  // El jefe ve la ficha completa (lotes, stock, movimientos, IA) pero no carga, edita ni da de baja (SPEC §3.3).
+  const canIntake = can('intake.use');
+  const canEdit = can('products.write');
+  const canDelete = can('products.delete');
+  const canSeeInsights = can('dashboard.view');
   const rotation = me.tenant?.stockRotation ?? 'FIFO';
 
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -254,19 +258,28 @@ export default function ProductDetailPage() {
         }
         back={{ to: '/app/inventory', label: 'Inventario' }}
         actions={
+          canIntake || canEdit || canDelete ? (
           <div className="flex flex-wrap items-center gap-2">
-            <ButtonLink
-              to={`/app/intake?productId=${product.id}${
-                product.barcode ? `&barcode=${encodeURIComponent(product.barcode)}` : ''
-              }`}
-              leftIcon={<ScanBarcode className="h-4 w-4" />}
-            >
-              Cargar mercadería
-            </ButtonLink>
-            <ButtonLink to={`/app/products/${product.id}/edit`} variant="outline" leftIcon={<Pencil className="h-4 w-4" />}>
-              Editar
-            </ButtonLink>
-            {isAdmin && (
+            {canIntake && (
+              <ButtonLink
+                to={`/app/intake?productId=${product.id}${
+                  product.barcode ? `&barcode=${encodeURIComponent(product.barcode)}` : ''
+                }`}
+                leftIcon={<ScanBarcode className="h-4 w-4" />}
+              >
+                Cargar mercadería
+              </ButtonLink>
+            )}
+            {canEdit && (
+              <ButtonLink
+                to={`/app/products/${product.id}/edit`}
+                variant="outline"
+                leftIcon={<Pencil className="h-4 w-4" />}
+              >
+                Editar
+              </ButtonLink>
+            )}
+            {canDelete && (
               <Button
                 variant="ghost"
                 size="icon"
@@ -278,19 +291,21 @@ export default function ProductDetailPage() {
               </Button>
             )}
           </div>
+          ) : undefined
         }
       />
 
       <div className="flex flex-col gap-4">
         {!product.active && (
           <Alert tone="warn" title="Producto dado de baja">
-            No aparece en el punto de venta ni en la carga de mercadería. Podés reactivarlo desde Editar.
+            No aparece en el punto de venta ni en la carga de mercadería.
+            {canEdit ? ' Podés reactivarlo desde Editar.' : ''}
           </Alert>
         )}
         {product.quarantinedStock > 0 && (
           <Alert tone="crit" icon={ShieldAlert} title="Hay mercadería en cuarentena">
             {formatNumber(product.quarantinedStock)} {unitShort(product.unit)} retenidas por una alerta de seguridad
-            alimentaria. Resolvelas desde Seguridad alimentaria.
+            alimentaria. {can('recalls.resolve') ? 'Resolvelas desde' : 'Las ves en'} Seguridad alimentaria.
           </Alert>
         )}
 
@@ -314,7 +329,13 @@ export default function ProductDetailPage() {
             value={`${formatNumber(product.expiredStock)} ${unitShort(product.unit)}`}
             icon={AlertTriangle}
             tone={product.expiredStock > 0 ? 'crit' : 'neutral'}
-            hint={product.expiredStock > 0 ? 'Descartalo desde Vencimientos' : 'Nada vencido en stock'}
+            hint={
+              product.expiredStock > 0
+                ? can('expirations.discard')
+                  ? 'Descartalo desde Vencimientos'
+                  : 'Pendiente de descarte en Vencimientos'
+                : 'Nada vencido en stock'
+            }
           />
           <StatCard
             label="Precio de venta"
@@ -352,12 +373,14 @@ export default function ProductDetailPage() {
             empty={{
               icon: Layers,
               title: 'Este producto no tiene lotes cargados',
-              description: 'Registrá el primer ingreso para empezar a controlar vencimientos.',
-              action: (
+              description: canIntake
+                ? 'Registrá el primer ingreso para empezar a controlar vencimientos.'
+                : 'Cuando se registre el primer ingreso vas a ver acá sus lotes y vencimientos.',
+              action: canIntake ? (
                 <ButtonLink to={`/app/intake?productId=${product.id}`} leftIcon={<ScanBarcode className="h-4 w-4" />}>
                   Cargar mercadería
                 </ButtonLink>
-              ),
+              ) : undefined,
             }}
           />
         </Card>

@@ -1,6 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { ArrowLeftRight, Plus } from 'lucide-react';
 import { useState } from 'react';
+import { useAccess } from '@/auth/useAccess';
 import { useBranchQueryKey } from '@/branches/BranchContext';
 import { useBranchColumn } from '@/branches/branchColumn';
 import { BarcodeDigits, ExpiryChip } from '@/components/gondola';
@@ -55,6 +56,9 @@ function typeTone(type: MovementTypeExt) {
 }
 
 export default function MovementsPage() {
+  const { can } = useAccess();
+  // El jefe ve el historial; los ajustes son del administrador y el empleado (SPEC §3.3).
+  const canAdjust = can('movements.adjust');
   const [range, setRange] = useState<DateRange>(EMPTY_RANGE);
   const [type, setType] = useState('');
   const [source, setSource] = useState('');
@@ -184,9 +188,11 @@ export default function MovementsPage() {
         icon={ArrowLeftRight}
         description="Todo lo que entró y salió del stock, con su lote, origen y responsable."
         actions={
-          <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setAdjusting(true)}>
-            Registrar ajuste
-          </Button>
+          canAdjust ? (
+            <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setAdjusting(true)}>
+              Registrar ajuste
+            </Button>
+          ) : undefined
         }
       >
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -251,7 +257,7 @@ export default function MovementsPage() {
         }
       />
 
-      <AdjustmentDialog open={adjusting} onClose={() => setAdjusting(false)} />
+      {canAdjust ? <AdjustmentDialog open={adjusting} onClose={() => setAdjusting(false)} /> : null}
     </>
   );
 }

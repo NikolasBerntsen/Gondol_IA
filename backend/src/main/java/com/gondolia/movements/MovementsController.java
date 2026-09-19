@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Historial de movimientos de stock y ajustes manuales (SPEC §6.4).
  * <p>
- * El listado es del administrador; los ajustes los pueden registrar administrador y empleado, con tipos
+ * El listado lo ven jefe y administrador; los ajustes los pueden registrar administrador y empleado, con tipos
  * distintos (SPEC §3.3).
  */
 @Tag(name = "Movimientos")
@@ -37,7 +37,7 @@ public class MovementsController {
     private final MovementsService movementsService;
 
     @Operation(summary = "Historial de movimientos de stock")
-    @PreAuthorize(Roles.TENANT_ADMIN)
+    @PreAuthorize(Roles.TENANT_DASHBOARD)
     @GetMapping
     public PageResponse<MovementDto> list(
             @RequestParam(required = false) Long productId,

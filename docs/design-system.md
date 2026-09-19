@@ -327,7 +327,8 @@ Todos en `design/gondola-ui/src/gondola/components/` → en el frontend real, `c
 5. "Próximos vencimientos" y "Artículos a reponer" (2 columnas desde 1536 px).
 6. "Recomendaciones de la IA": explicación, confianza, impacto, acción, Aceptar/Descartar con Deshacer.
 
-Con una sucursal elegida se oculta la columna Sucursal y los números se filtran. Jefe: "Modo lectura", sin acciones.
+Con una sucursal elegida se oculta la columna Sucursal y los números se filtran. Jefe: decide sobre las
+recomendaciones igual que el administrador; los "Ver todos" le abren Vencimientos e Inventario en solo lectura.
 
 ### 7.3 Tabla / listado
 
@@ -400,7 +401,7 @@ cuarentena", motivo, pasos numerados, "Entendido" (contorno) y "Ver detalle y re
 | **Error de campo** | Borde `crit`, mensaje con ícono debajo, qué pasó + cómo arreglarlo | "Precio inválido: «2.45O». Usá números, punto para miles y coma para centavos." |
 | **Bloqueado por regla** | Aviso en línea `crit` o diálogo bloqueante con salida | "En cuarentena por recall · no se puede vender." |
 | **Deshabilitado** | Botón deshabilitado **con motivo visible** al lado | "Corregí los 9 errores u omitilos para continuar." |
-| **Solo lectura (Jefe)** | Píldora `info` "Modo lectura"; acciones reemplazadas por una frase | "Solo el administrador puede aceptarla o descartarla." |
+| **Solo lectura** | Las acciones que el rol no puede usar **no se muestran** (regla de SPEC §3.3: todo botón visible funciona); donde hace falta, una frase explica quién lo hace | "Solo el administrador o un empleado pueden retirarlo." |
 | **Módulo deshabilitado** | Página con EmptyState: qué es la función y a quién pedirla | "Esta función no está habilitada para tu comercio." |
 
 ---

@@ -35,7 +35,7 @@ public class SupplierController {
 
     /** {@code includeInactive=false} deja afuera los proveedores dados de baja. */
     @GetMapping
-    @PreAuthorize(Roles.TENANT_INVENTORY)
+    @PreAuthorize(Roles.TENANT_INVENTORY_READ)
     public List<SupplierDto> list(@RequestParam(defaultValue = "true") boolean includeInactive) {
         return supplierService.list(includeInactive);
     }

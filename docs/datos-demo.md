@@ -119,7 +119,9 @@ primeros segundos después de arrancar.
    y volver a entrar.
 3. **Jefe de El Sol** (`jefe@elsol.com`): Inicio consolidado de las 3 sucursales (productos, por vencer, stock bajo,
    valor de inventario, ventas de hoy), cambiar a una sucursal, Estadísticas, Inteligencia IA (patrones: finde fuerte,
-   creciente, intermitente, sin movimiento; recomendaciones con explicación) y Alertas.
+   creciente, intermitente, sin movimiento; recomendaciones con explicación, que el jefe acepta o descarta) y
+   Alertas. Desde el Inicio, "Ver todos" abre Vencimientos e Inventario (stock bajo) en solo lectura, y también ve
+   el historial de Ventas.
 4. **Administradora de El Sol** (`admin@elsol.com`): aceptar un descuento sugerido; ver en Inventario el Queso untable
    de Centro con dos lotes y la etiqueta "Se vende primero"; Vencimientos (vencidos pendientes → descartar);
    Transferencias; Importar Excel/CSV (la importación de marzo aplicada, con sus filas); Cajas y turnos (arqueos con

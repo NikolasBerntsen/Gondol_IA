@@ -35,7 +35,8 @@ import type { TableColumn } from '@/components/ui';
 import { ExpiryChip, LotRankChip, StatusPill } from '@/components/gondola';
 import { useBranch, useBranchQueryKey } from '@/branches/BranchContext';
 import { useBranchColumn } from '@/branches/branchColumn';
-import { useAuth, useCurrentUser } from '@/auth/AuthContext';
+import { useCurrentUser } from '@/auth/AuthContext';
+import { useAccess } from '@/auth/useAccess';
 import { SALES_PATTERN_LABELS } from '@/api/types';
 import type { SalesPattern } from '@/api/types';
 import { useDebounce } from '@/lib/useDebounce';
@@ -510,10 +511,12 @@ function ProductDetail({
 
 export default function InsightsPage() {
   const me = useCurrentUser();
-  const { hasRole } = useAuth();
+  const { can } = useAccess();
   const { isAll, scopeLabel, currentBranch } = useBranch();
   const queryClient = useQueryClient();
-  const readOnly = !hasRole('TENANT_ADMIN');
+  // Recalcular la IA y decidir sobre sus recomendaciones: jefe y administrador (SPEC §3.3).
+  const readOnly = !can('recommendations.decide');
+  const canRun = can('insights.run');
   const branchColumn = useBranchColumn<ProductInsightRow>();
 
   const [selected, setSelected] = useState<{ productId: number; branchId: number } | null>(null);
@@ -642,7 +645,7 @@ export default function InsightsPage() {
         }
         icon={Sparkles}
         actions={
-          readOnly ? (
+          !canRun ? (
             <StatusPill tone="info">Modo lectura</StatusPill>
           ) : (
             <Button
@@ -830,7 +833,7 @@ export default function InsightsPage() {
                 description: summary?.productsAnalyzed
                   ? 'Probá con otro patrón o quitá el buscador.'
                   : `Cargá mercadería y registrá ventas: la IA analiza todas las noches. ${
-                      readOnly ? '' : 'También podés recalcularla ahora con el botón de arriba.'
+                      canRun ? 'También podés recalcularla ahora con el botón de arriba.' : ''
                     }`,
               }}
               footer={data && data.totalPages > 1 ? <Pagination {...pageInfo(data)} onPageChange={setPage} /> : undefined}
