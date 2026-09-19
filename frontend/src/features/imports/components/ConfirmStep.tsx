@@ -7,14 +7,21 @@ import type { ImportJob } from '../types';
 /** Cuántos nombres se muestran antes de resumir el resto como «y N más». */
 const MAX_NAMES = 3;
 
+interface SummaryItem {
+  label: string;
+  value: string;
+  /** Nombres de lo que se va a crear, debajo de la cantidad. */
+  detail?: string;
+  /** Lista completa (tooltip nativo) cuando `detail` resume con «y N más». */
+  title?: string;
+}
+
 /** Cantidad y nombres de lo que se va a crear, sin esconder ninguno sin decirlo. */
-function namesItem(label: string, names: readonly string[], none: string) {
+function namesItem(label: string, names: readonly string[], none: string): SummaryItem {
   if (!names.length) return { label, value: none };
-  return {
-    label,
-    value: `${formatNumber(names.length)} · ${summarizeNames(names, MAX_NAMES)}`,
-    title: names.join(', '),
-  };
+  const detail = summarizeNames(names, MAX_NAMES);
+  const all = names.join(', ');
+  return { label, value: formatNumber(names.length), detail, title: detail === all ? undefined : all };
 }
 
 export interface ConfirmStepProps {
@@ -26,7 +33,7 @@ export interface ConfirmStepProps {
 /** Paso 4 «Confirmar»: qué va a pasar con el inventario y la barra de progreso (SPEC §16.4). */
 export function ConfirmStep({ job, applying }: ConfirmStepProps) {
   const preview = job.preview;
-  const items: Array<{ label: string; value: string; title?: string }> = preview
+  const items: SummaryItem[] = preview
     ? [
         { label: 'Productos nuevos', value: formatNumber(preview.productsToCreate) },
         { label: 'Productos a actualizar', value: formatNumber(preview.productsToUpdate) },
@@ -51,15 +58,15 @@ export function ConfirmStep({ job, applying }: ConfirmStepProps) {
       />
       {preview ? (
         <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
-          {items.map(({ label, value, title }) => (
+          {items.map(({ label, value, detail, title }) => (
             <div key={label} className="min-w-0">
               <dt className="text-sm text-muted-foreground">{label}</dt>
-              <dd
-                className="break-words font-display text-lg font-semibold tabular-nums text-foreground"
-                title={title}
-              >
-                {value}
-              </dd>
+              <dd className="font-display text-lg font-semibold tabular-nums text-foreground">{value}</dd>
+              {detail ? (
+                <dd className="break-words text-sm text-muted-foreground" title={title}>
+                  {detail}
+                </dd>
+              ) : null}
             </div>
           ))}
         </dl>
