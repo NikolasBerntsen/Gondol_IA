@@ -407,10 +407,15 @@ curl -X POST http://localhost:8080/api/integrations/pos/sales \
 - Los códigos que no existen en el catálogo se informan en `unknownBarcodes` y **no frenan** el resto del ticket.
 - Las líneas sin stock suficiente se registran igual (faltante + alerta `SALE_WITHOUT_STOCK`) y se informan en
   `shortages`.
-- 401 `INVALID_API_KEY` si la key falta, no existe, la sucursal está desactivada o el comercio no está `ACTIVE`.
+- 401 `INVALID_API_KEY` si la key falta, no tiene el formato, no existe o su sucursal está desactivada.
+- 403 `TENANT_DISABLED` / `TENANT_CANCELLED` (con el mismo mensaje que el login) si la key es válida pero el comercio
+  está deshabilitado o dado de baja (SPEC §3.2): así el integrador sabe que la key está bien y no la regenera.
 - **403 `MODULE_DISABLED`** si el comercio no tiene `POS_INTEGRATION`. Como la ruta no tiene usuario autenticado,
-  el interceptor de `@RequiresModule` no puede resolver el comercio: el controlador lo chequea **a mano** con
-  `moduleService.require(branch.tenantId(), POS_INTEGRATION)` después de `ApiKeyService.resolveBranch`
+  el interceptor de `@RequiresModule` no puede resolver el comercio.
+- Todo eso lo resuelve `PosApiKeyInterceptor` (registrado por `PosWebhookWebConfig` para `/api/integrations/pos/**`)
+  con `ApiKeyService.authenticate` y `moduleService.require(branch.tenantId(), POS_INTEGRATION)` **antes de leer el
+  cuerpo**: sin key válida la respuesta es 401 sea cual sea el payload, y los errores de validación (400) solo le
+  llegan a quien tiene una key válida. El controlador recibe la `PosBranch` como `@RequestAttribute`
   (`api-foundation.md` §12.5).
 
 ---

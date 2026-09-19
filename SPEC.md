@@ -323,7 +323,8 @@ spring-boot-starter-test, spring-security-test. `artifactId=gondolia-backend`, j
 - `ApiKeyService`: `GeneratedApiKey generate()` → `record GeneratedApiKey(String rawKey, String prefix, String hash)`
   (formato `gk_` + 40 chars base62; prefix = primeros 10 chars; hash = SHA-256 hex), `String hash(String raw)`,
   `Optional<PosBranch> resolveBranch(String rawKey)` → `record PosBranch(Long tenantId, Long branchId)` (la API key es
-  **por sucursal**, en `branches.pos_api_key_hash`; sucursal activa y tenant ACTIVE).
+  **por sucursal**, en `branches.pos_api_key_hash`; sucursal activa y tenant ACTIVE) y `PosBranch authenticate(String rawKey)`
+  para el webhook (401 `INVALID_API_KEY` si la key no sirve; 403 `TENANT_DISABLED` / `TENANT_CANCELLED` si es de un comercio bloqueado).
 - `BranchAccessService` (lee el header `X-Branch-Id` del request actual vía `RequestContextHolder`):
   - `record BranchRef(Long id, String name, String code)`
   - `List<BranchRef> accessibleBranches()` — sucursales activas accesibles por el usuario actual (ADMIN/BOSS: todas; EMPLOYEE: asignadas), orden por nombre.
@@ -496,7 +497,8 @@ Dinero y decimales → número JSON. En cada módulo documentá los endpoints fi
   `POST /api/tenant/integrations/pos/{branchId}/key` → `{branchId,apiKey,prefix,createdAt}` (se muestra una sola vez) ·
   `POST /api/tenant/integrations/pos/{branchId}/simulate` `{sales: 10}` → genera ventas aleatorias realistas por el mismo camino que el POS.
 - **Webhook POS** (API key de la sucursal, sin JWT): `POST /api/integrations/pos/sales` header `X-API-Key` body
-  `{externalId?,occurredAt?,items:[{barcode,quantity,unitPrice?}]}` → `{batchRef,processed,unknownBarcodes:[],shortages:[{barcode,quantity}]}`. 401 `INVALID_API_KEY`.
+  `{externalId?,occurredAt?,items:[{barcode,quantity,unitPrice?}]}` → `{batchRef,processed,unknownBarcodes:[],shortages:[{barcode,quantity}]}`. 401 `INVALID_API_KEY`
+  (sea cual sea el payload); 403 `TENANT_DISABLED` / `TENANT_CANCELLED` si la key es válida pero el comercio está bloqueado (§3.2).
 
 ### 6.5 Módulo B — Dashboards, estadísticas, alertas e IA (`com.gondolia.analytics`, `com.gondolia.alerts`, `com.gondolia.insights`)
 Roles: lectura TENANT_DASHBOARD; acciones TENANT_ADMIN. Todo respeta el scope de sucursales (§3.5).

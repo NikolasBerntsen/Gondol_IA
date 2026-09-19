@@ -60,17 +60,27 @@ public class UserAccessValidator {
             if (status == null) {
                 throw sessionInvalid();
             }
-            switch (status) {
-                case DISABLED -> throw new ApiException(HttpStatus.FORBIDDEN, ErrorCodes.TENANT_DISABLED,
-                        MSG_TENANT_DISABLED);
-                case CANCELLED -> throw new ApiException(HttpStatus.FORBIDDEN, ErrorCodes.TENANT_CANCELLED,
-                        MSG_TENANT_CANCELLED);
-                case ACTIVE -> {
-                    // acceso normal
-                }
-            }
+            requireTenantActive(status);
         }
         return AuthUser.from(user);
+    }
+
+    /**
+     * Bloqueo de un comercio que no está {@code ACTIVE} (SPEC §3.2). Lo comparten los usuarios (JWT, STOMP, login) y
+     * el webhook del POS ({@link ApiKeyService#authenticate}).
+     *
+     * @throws ApiException 403 {@code TENANT_DISABLED} / {@code TENANT_CANCELLED}
+     */
+    static void requireTenantActive(TenantStatus status) {
+        switch (status) {
+            case DISABLED -> throw new ApiException(HttpStatus.FORBIDDEN, ErrorCodes.TENANT_DISABLED,
+                    MSG_TENANT_DISABLED);
+            case CANCELLED -> throw new ApiException(HttpStatus.FORBIDDEN, ErrorCodes.TENANT_CANCELLED,
+                    MSG_TENANT_CANCELLED);
+            case ACTIVE -> {
+                // acceso normal
+            }
+        }
     }
 
     private static ApiException sessionInvalid() {

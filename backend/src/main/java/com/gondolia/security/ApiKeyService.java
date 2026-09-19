@@ -1,5 +1,8 @@
 package com.gondolia.security;
 
+import com.gondolia.common.error.ApiException;
+import com.gondolia.common.error.ErrorCodes;
+import com.gondolia.domain.tenant.Branch;
 import com.gondolia.domain.tenant.BranchRepository;
 import com.gondolia.domain.tenant.TenantRepository;
 import com.gondolia.domain.tenant.TenantStatus;
@@ -10,6 +13,7 @@ import java.security.SecureRandom;
 import java.util.HexFormat;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +31,7 @@ public class ApiKeyService {
     public static final String KEY_PREFIX = "gk_";
     public static final int RANDOM_LENGTH = 40;
     public static final int DISPLAY_PREFIX_LENGTH = 10;
+    public static final String MSG_INVALID_KEY = "La API key no es válida o la sucursal no está habilitada";
 
     private static final char[] BASE62 =
             "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz".toCharArray();
@@ -61,6 +66,34 @@ public class ApiKeyService {
      */
     @Transactional(readOnly = true)
     public Optional<PosBranch> resolveBranch(String rawKey) {
+        return findBranch(rawKey)
+                .filter(Branch::isActive)
+                .filter(branch -> tenantStatus(branch).map(status -> status == TenantStatus.ACTIVE).orElse(false))
+                .map(ApiKeyService::toPosBranch);
+    }
+
+    /**
+     * Autentica un pedido del webhook POS (SPEC §6.4) distinguiendo por qué se rechaza: una key que no sirve es 401,
+     * pero una key válida de un comercio bloqueado es 403 con el código del bloqueo (SPEC §3.2), para que el
+     * integrador no regenere keys que están bien.
+     *
+     * @throws ApiException 401 {@code INVALID_API_KEY} si la key falta, no tiene el formato, no existe o su sucursal
+     *                      está desactivada; 403 {@code TENANT_DISABLED} / {@code TENANT_CANCELLED} si es de un
+     *                      comercio deshabilitado o dado de baja
+     */
+    @Transactional(readOnly = true)
+    public PosBranch authenticate(String rawKey) {
+        Branch branch = findBranch(rawKey).orElseThrow(ApiKeyService::invalidKey);
+        TenantStatus status = tenantStatus(branch).orElseThrow(ApiKeyService::invalidKey);
+        UserAccessValidator.requireTenantActive(status);
+        if (!branch.isActive()) {
+            throw invalidKey();
+        }
+        return toPosBranch(branch);
+    }
+
+    /** Sucursal cuya key coincide (activa o no); vacío si la key falta, no tiene el formato o no existe. */
+    private Optional<Branch> findBranch(String rawKey) {
         if (rawKey == null) {
             return Optional.empty();
         }
@@ -68,11 +101,18 @@ public class ApiKeyService {
         if (!key.startsWith(KEY_PREFIX) || key.length() != KEY_PREFIX.length() + RANDOM_LENGTH) {
             return Optional.empty();
         }
-        return branchRepository.findByPosApiKeyHash(hash(key))
-                .filter(branch -> branch.isActive())
-                .filter(branch -> tenantRepository.findStatusById(branch.getTenantId())
-                        .map(status -> status == TenantStatus.ACTIVE)
-                        .orElse(false))
-                .map(branch -> new PosBranch(branch.getTenantId(), branch.getId()));
+        return branchRepository.findByPosApiKeyHash(hash(key));
+    }
+
+    private Optional<TenantStatus> tenantStatus(Branch branch) {
+        return tenantRepository.findStatusById(branch.getTenantId());
+    }
+
+    private static PosBranch toPosBranch(Branch branch) {
+        return new PosBranch(branch.getTenantId(), branch.getId());
+    }
+
+    private static ApiException invalidKey() {
+        return new ApiException(HttpStatus.UNAUTHORIZED, ErrorCodes.INVALID_API_KEY, MSG_INVALID_KEY);
     }
 }
