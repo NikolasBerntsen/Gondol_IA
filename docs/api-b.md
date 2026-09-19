@@ -242,7 +242,7 @@ producto"). Sucursal fuera del alcance → 403 `BRANCH_FORBIDDEN`. Sin análisis
 ```json
 {"insight": { /* ProductInsightRow */ },
  "barcode":"7799990000035","salePrice":5400.00,"costPrice":3200.00,"perishable":true,
- "history":[{"date":"2026-06-20","units":4,"amount":21600.00}],
+ "history":[{"date":"2026-06-20","units":4,"amount":21600.00,"stockout":false}],
  "weekdayProfile":[0.8,0.9,0.9,1.0,1.1,1.4,1.2],
  "forecast":[{"date":"2026-09-18","yhat":3.9,"lo":1.9,"hi":5.9}],
  "forecastMethod":"HOLT_WINTERS",
@@ -254,7 +254,9 @@ producto"). Sucursal fuera del alcance → 403 `BRANCH_FORBIDDEN`. Sin análisis
  "recommendations":[ /* RecommendationDto PENDING y ACCEPTED */ ]}
 ```
 
-- `history`: 90 días de ventas **netas** de esa sucursal (solo los días con movimiento).
+- `history`: 90 días de ventas **netas** de esa sucursal, **día por día** desde el alta del producto (los días sin
+  ventas van con `units` 0; hoy solo si ya tiene ventas). `stockout: true` marca los días sin stock vendible ni
+  ventas (§4.6): el gráfico los sombrea como "Sin stock". Si el producto no tuvo ventas en 90 días, la lista viene vacía.
 - `lots`: los lotes vivos **en el orden en que se van a vender** (`StockService.lotsInRotationOrder`), así el
   `rotationRank` 1 es el que sale primero (SPEC §4.2: los lotes en liquidación van antes).
 
@@ -285,7 +287,8 @@ Sin sucursales accesibles → 400 `BRANCH_REQUIRED`.
 `InsightsService` → `InsightsRunner` → `InsightsStore`, **una corrida por sucursal**:
 
 1. `buildInput` arma el `AnalyzeRequest` de §8.2 con **180 días** de ventas netas de esa sucursal (`dailySales`),
-   los lotes vivos con `receivedAt` y `discountPct`, el stock vendible, `settings` (incluida `stockRotation`,
+   los días sin stock (`stockoutDays`, ver abajo), los lotes vivos con `receivedAt` y `discountPct`, el stock
+   vendible, `settings` (incluida `stockRotation`,
    `serviceLevel`, `targetCoverageDays` y `maxDiscountPct`) y el `feedback` de las recomendaciones `DISCOUNT` ya
    decididas en los últimos 90 días (con su `outcome` medido).
 2. La llamada HTTP a la IA (hasta 120 s) ocurre **fuera de toda transacción**.
@@ -294,6 +297,14 @@ Sin sucursales accesibles → 400 `BRANCH_REQUIRED`.
    No recrea las que el comercio descartó en los últimos 7 días (§5.3).
    Se descartan las respuestas que mencionan productos o lotes que no estaban en el pedido.
 4. `finishRun` cierra el `ai_runs` con el resumen del modelo; un fallo lo deja en `ERROR` con el mensaje.
+
+**Días sin stock (`StockoutCalendar`).** Un producto agotado no vende, y esos ceros no son una caída de la demanda.
+Para cada lote de la sucursal se reconstruye cuántas unidades había al empezar y al terminar cada día (cantidad
+actual menos los movimientos con lote posteriores; las ventas sin stock, con `lot_id` null, no mueven lotes). Un día
+es de faltante si el producto no tuvo stock **vendible** (lotes sin vencer con unidades) ni al empezar ni al terminar
+el día y no registró ventas netas. Se omiten los días previos a la primera vez que tuvo stock o ventas en la ventana.
+La IA completa esos días con la demanda previa, así la ficha de un producto agotado no dice "estable" y "tendencia
+−90%" a la vez; la historia de la ficha (§4.3) los marca con `stockout`.
 5. Si hubo recomendaciones nuevas se notifica a los administradores de esa sucursal (`RECOMMENDATION`,
    link `/app/insights`).
 
