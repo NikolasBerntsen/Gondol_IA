@@ -62,6 +62,12 @@ final class StoreSimulator {
     /** Días de ventas importadas por CSV en Echesortu antes de conectar el POS por API. */
     static final int CSV_DAYS = 60;
 
+    /**
+     * Anticipación con la que un proveedor avisa que deja de entregar un producto ({@code SupplyStop}): desde ahí no
+     * hay compras de oportunidad y los pedidos cubren solo hasta el corte.
+     */
+    static final int SUPPLY_STOP_NOTICE_DAYS = 45;
+
     private static final double[] HOUR_WEIGHTS = {4, 6, 8, 9, 8, 5, 3, 3, 5, 8, 10, 9, 5};
     private static final double[] WEEK_STABLE = {1.0, 0.97, 1.0, 1.0, 1.05, 1.12, 0.86};
     private static final double[] WEEK_MILD = {0.92, 0.9, 0.95, 1.0, 1.1, 1.25, 0.88};
@@ -284,9 +290,14 @@ final class StoreSimulator {
 
         applyDiscountDecisions(branch, day);
 
-        // Llegadas de pedidos.
+        // Llegadas de pedidos (si el proveedor ya dejó de entregar, el pedido pendiente no llega).
         for (Stock stock : branchStocks.values()) {
             if (stock.pendingArrival != null && stock.pendingArrival.equals(day) && stock.pendingQuantity > 0) {
+                if (supplyStopped(stock, day)) {
+                    stock.pendingQuantity = 0;
+                    stock.pendingArrival = null;
+                    continue;
+                }
                 Instant when = at(day, LocalTime.of(8, 30).plusMinutes(rnd.between(0, 150)));
                 events.add(new Timed(when, 1, () -> receiveOrder(stock, day, when)));
             }
@@ -364,11 +375,13 @@ final class StoreSimulator {
             default -> {
             }
         }
-        // Venta mayorista quincenal de Vida Sana (venta manual del administrador).
-        if (run.spec.key().equals(DemoWorld.VIDA_SANA) && branch.spec.key().equals("NCB")
-                && day.getDayOfWeek() == DayOfWeek.THURSDAY && dayIndex % 14 < 7) {
-            Instant when = at(day, LocalTime.of(11, 15));
-            events.add(new Timed(when, 5, () -> wholesale(branch, day, when)));
+        // Ventas manuales quincenales del administrador (mayorista de Vida Sana, pedidos del club en El Sol).
+        for (DemoScenarios.ManualOrders orders : run.scenario.manualOrders()) {
+            if (orders.branch().equals(branch.spec.key()) && day.getDayOfWeek() == orders.weekday()
+                    && dayIndex % 14 < 7) {
+                Instant when = at(day, orders.time());
+                events.add(new Timed(when, 5, () -> manualOrder(branch, orders, day, when)));
+            }
         }
         // Pedidos al cierre.
         if (!isToday) {
@@ -680,7 +693,7 @@ final class StoreSimulator {
 
     private void reorders(BranchRun branch, LocalDate day) {
         for (Stock stock : stocks.get(branch.id).values()) {
-            if (stock.reorderBlockedFrom != null && !day.isBefore(stock.reorderBlockedFrom)) {
+            if (supplyStopped(stock, day)) {
                 continue;
             }
             if (stock.pendingQuantity > 0 || stock.product.template.pattern() == Pattern.NONE) {
@@ -710,6 +723,15 @@ final class StoreSimulator {
         }
         double target = daily * (coverDays(template) + lead + safety * 0.5);
         int quantity = roundUp(Math.max(target - position, template.packSize()), template.packSize());
+        LocalDate stop = stock.reorderBlockedFrom;
+        if (stop != null && day.isAfter(stop.minusDays(SUPPLY_STOP_NOTICE_DAYS))) {
+            // El proveedor ya avisó que deja de entregar: no hace ofertas y solo manda cajas completas hasta cubrir lo
+            // que falta vender hasta el corte. Así el faltante del escenario llega siempre (hoy sin stock o bajo
+            // mínimo), sea cual sea el día de la siembra.
+            double untilStop = daily * Math.max(0, ChronoUnit.DAYS.between(day, stop)) - position;
+            int pack = Math.max(1, template.packSize());
+            return Math.min(quantity, (int) Math.floor(Math.max(0, untilStop) / pack) * pack);
+        }
         // Compras de oportunidad (oferta del proveedor): más lotes vivos y, en perecederos, riesgo de merma.
         double bonus = template.perishable() && template.shelfLifeDays() <= 60 ? 0.12 : 0.07;
         if (rnd.chance(bonus)) {
@@ -749,6 +771,11 @@ final class StoreSimulator {
     private static int roundUp(double value, int multiple) {
         int step = Math.max(1, multiple);
         return (int) (Math.ceil(value / step) * step);
+    }
+
+    /** El proveedor dejó de entregar este producto en esta sucursal (escenario {@code SupplyStop}). */
+    private static boolean supplyStopped(Stock stock, LocalDate day) {
+        return stock.reorderBlockedFrom != null && !day.isBefore(stock.reorderBlockedFrom);
     }
 
     private void applySupplyStops() {
@@ -826,12 +853,10 @@ final class StoreSimulator {
         }
     }
 
-    private void wholesale(BranchRun branch, LocalDate day, Instant moment) {
+    private void manualOrder(BranchRun branch, DemoScenarios.ManualOrders orders, LocalDate day, Instant moment) {
         List<Stock> candidates = new ArrayList<>();
         for (Stock stock : stocks.get(branch.id).values()) {
-            String category = stock.product.template.category();
-            if (category.equals("Frutos secos") || category.equals("Legumbres")
-                    || category.equals("Cereales y harinas")) {
+            if (orders.categories().contains(stock.product.template.category())) {
                 candidates.add(stock);
             }
         }
@@ -846,7 +871,7 @@ final class StoreSimulator {
         }
         for (Stock stock : chosen) {
             int available = sellableQuantity(stock, day, moment);
-            int quantity = Math.min(available, rnd.between(4, 10));
+            int quantity = Math.min(available, rnd.between(orders.minUnits(), orders.maxUnits()));
             if (quantity <= 0) {
                 continue;
             }
@@ -1266,6 +1291,10 @@ final class StoreSimulator {
                     }
                     Stock source = stocks.get(from.id).get(product.id);
                     Stock target = stocks.get(to.id).get(product.id);
+                    // Un faltante por proveedor queda a la vista (en la demo se puede transferir en vivo).
+                    if (supplyStopped(target, day)) {
+                        continue;
+                    }
                     double fromCover = sellableQuantity(source, day, moment) / Math.max(0.3, expectedDaily(source,
                             day));
                     double toCover = (sellableQuantity(target, day, moment) + target.pendingQuantity)
@@ -1298,7 +1327,9 @@ final class StoreSimulator {
                     if (quantity == 0) {
                         break;
                     }
-                    if (lot.expiryDate != null && lot.expiryDate.isBefore(day.plusDays(10))) {
+                    // Los lotes de los recalls armados se quedan donde los puso el escenario (SPEC §11).
+                    if (lot.expiryDate != null && lot.expiryDate.isBefore(day.plusDays(10))
+                            || lot.lotNumber != null && DemoScenarios.RESERVED_LOT_NUMBERS.contains(lot.lotNumber)) {
                         continue;
                     }
                     int taken = Math.min(quantity, lot.quantity);

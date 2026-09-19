@@ -95,6 +95,9 @@ final class DemoWorldBuilder {
         }
     }
 
+    /** Antigüedad del equipo de la plataforma (dueños y soporte): alta hace 400 días. */
+    static final int PLATFORM_TEAM_DAYS_AGO = 400;
+
     private final SeedJdbc db;
     private final PasswordEncoder passwordEncoder;
     private final ApiKeyService apiKeyService;
@@ -145,6 +148,8 @@ final class DemoWorldBuilder {
         platformHash = passwordEncoder.encode(DemoWorld.PLATFORM_PASSWORD);
         Map<String, Long> ids = new LinkedHashMap<>();
         Map<String, String> names = new LinkedHashMap<>();
+        // El equipo de GondolIA (también el dueño inicial) es anterior a todos los comercios.
+        Instant teamCreatedAt = daysAgo(PLATFORM_TEAM_DAYS_AGO, LocalTime.of(9, 0));
         for (DemoWorld.PlatformUser user : DemoWorld.PLATFORM_USERS) {
             String email = Emails.normalize(user.email());
             List<Long> existing = db.jdbc().queryForList("select id from users where email = ?", Long.class, email);
@@ -154,14 +159,18 @@ final class DemoWorldBuilder {
                         insert into users (email, password_hash, full_name, role, active, created_at, updated_at,
                                            last_login_at)
                         values (?, ?, ?, ?, true, ?, ?, ?)""", email, platformHash, user.fullName(), user.role(),
-                        daysAgo(400, LocalTime.of(9, 0)), now, daysAgo(user.lastLoginDaysAgo(), LocalTime.of(9, 12)));
+                        teamCreatedAt, now, daysAgo(user.lastLoginDaysAgo(), LocalTime.of(9, 12)));
             } else {
                 id = existing.getFirst();
-                // Solo se completa la presentación del dueño inicial; su contraseña no se toca.
+                // Solo se completa la presentación del dueño inicial (lo crea BootstrapRunner al arrancar): nombre y
+                // fecha de alta como el resto del equipo, que es anterior a todos los comercios; su contraseña no se
+                // toca.
                 db.update("""
                         update users set full_name = case when full_name = 'Dueño GondolIA' then ? else full_name end,
+                                         created_at = least(created_at, ?),
                                          last_login_at = coalesce(last_login_at, ?)
-                        where id = ?""", user.fullName(), daysAgo(user.lastLoginDaysAgo(), LocalTime.of(9, 5)), id);
+                        where id = ?""", user.fullName(), teamCreatedAt,
+                        daysAgo(user.lastLoginDaysAgo(), LocalTime.of(9, 5)), id);
             }
             ids.put(email, id);
             names.put(email, db.jdbc().queryForObject("select full_name from users where id = ?", String.class, id));
