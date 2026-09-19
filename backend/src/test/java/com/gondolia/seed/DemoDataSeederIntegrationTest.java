@@ -30,6 +30,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -47,6 +48,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  */
 @SpringBootTest
 @AutoConfigureMockMvc
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @PostgresIntegrationTest.EnabledWhenRequested
 class DemoDataSeederIntegrationTest {
@@ -71,6 +73,9 @@ class DemoDataSeederIntegrationTest {
         registry.add("app.seed-demo", () -> "true");
         registry.add("app.dev-fixture", () -> "false");
         registry.add("app.storage.dir", storage::toString);
+        // Pool chico: la base de pruebas es compartida y cada contexto de Spring guarda sus conexiones.
+        registry.add("spring.datasource.hikari.maximum-pool-size", () -> "5");
+        registry.add("spring.datasource.hikari.minimum-idle", () -> "1");
     }
 
     private static String setting(String property, String fallback) {
