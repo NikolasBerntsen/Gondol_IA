@@ -41,6 +41,11 @@ import { productInsightApi, productsApi } from '../api';
 import { movementSign, movementSourceLabel, movementTypeLabel, unitShort } from '../lib';
 import type { LotDto, ProductMovement } from '../types';
 
+/** Lote alcanzado por un recall que ya se retiró del stock (queda `RECALLED` con 0 u.). */
+function isWithdrawn(lot: LotDto): boolean {
+  return lot.status === 'RECALLED' && lot.quantity === 0;
+}
+
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
   const productId = Number(id);
@@ -123,6 +128,8 @@ export default function ProductDetailPage() {
       cell: (lot) =>
         lot.rotationRank != null ? (
           <LotRankChip rank={lot.rotationRank} rotation={rotation} discounted={!!lot.discountPct} />
+        ) : isWithdrawn(lot) ? (
+          <StatusPill tone="neutral">Retirado por recall</StatusPill>
         ) : (
           <StatusPill tone={lot.status === 'RECALLED' ? 'crit' : 'neutral'}>
             {LOT_STATUS_LABELS[lot.status]}
@@ -369,7 +376,7 @@ export default function ProductDetailPage() {
             data={product.lots}
             rowKey={(lot) => lot.id}
             rowSeverity={(lot) =>
-              lot.status === 'RECALLED'
+              lot.status === 'RECALLED' && !isWithdrawn(lot)
                 ? 'crit'
                 : lot.expiryBucket === 'EXPIRED'
                   ? 'crit'
