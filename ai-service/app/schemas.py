@@ -131,6 +131,8 @@ class ProductInput(CamelModel):
     created_at: LenientDate | None = None
     daily_sales: Annotated[list[DailySale], NullableList] = Field(default_factory=list)
     lots: Annotated[list[LotInput], NullableList] = Field(default_factory=list)
+    stockout_days: Annotated[list[LenientDate], NullableList] = Field(default_factory=list)
+    """Días sin stock vendible y sin ventas: demanda censurada, no una caída de la venta (opcional)."""
 
 
 class FeedbackOutcome(CamelModel):

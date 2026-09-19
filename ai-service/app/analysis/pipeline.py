@@ -31,7 +31,7 @@ from .inventory import MAX_COVER_DAYS, demand_path, estimate_shelf_life, plan_in
 from .lots import FIFO, RISK_EXPIRED, assess_lots
 from .patterns import ALL_PATTERNS, classify, compute_features, refine_with_clusters
 from .recommendations import Recommendation, build_recommendations
-from .series import DailySeries, SaleRecord, build_daily_series
+from .series import DailySeries, SaleRecord, build_daily_series, impute_stockouts
 
 log = logging.getLogger(__name__)
 
@@ -72,6 +72,8 @@ def _analyze_product(
 ) -> ProductAnalysis:
     sales = [SaleRecord(s.date, s.quantity, s.discount_pct or 0.0) for s in product.daily_sales]
     series = build_daily_series(sales, as_of, product.created_at)
+    # Los días sin stock no muestran la demanda: se completan antes de medir patrón, tendencia y pronóstico.
+    series, censoring = impute_stockouts(series, product.stockout_days)
     features = compute_features(series)
     # Patrón, promedio y pronóstico se calculan con los picos extremos acotados (una venta mayorista o un
     # error de carga no deben definir el comportamiento del producto); las anomalías usan la serie original.
@@ -122,6 +124,7 @@ def _analyze_product(
         plan=plan,
         elasticity=elasticity,
         degraded=simplified,
+        censoring=censoring,
     )
 
 
@@ -156,7 +159,7 @@ def _product_out(a: ProductAnalysis, as_of: date, horizon: int) -> ProductInsigh
         abc_class=a.abc_class,
         xyz_class=a.xyz_class,
         avg_daily_sales=round(min(a.features.mean_recent, AVG_SALES_MAX), 2),
-        trend_pct=round(a.features.trend_pct, 1),
+        trend_pct=round(a.trend_pct, 1),
         weekday_profile=[round(float(v), 2) for v in a.features.profile],
         forecast_method=a.forecast.method,
         forecast=points,
@@ -248,6 +251,12 @@ def _model_notes(
     expired = sum(1 for a in analyses for r in a.lots.risks if r.risk_level == RISK_EXPIRED)
     if expired:
         notes.append(f"Hay {expired} {'lote vencido' if expired == 1 else 'lotes vencidos'} con stock para retirar y registrar como merma.")
+    censored = sum(1 for a in analyses if a.censoring.days)
+    if censored:
+        notes.append(
+            f"{_plural(censored, 'producto estuvo', 'productos estuvieron')} sin stock algunos días: esos días no se "
+            "tomaron como una caída de la venta sino que se completaron con la demanda esperada."
+        )
     degraded = sum(1 for a in analyses if a.degraded)
     if degraded:
         notes.append(f"{degraded} {'producto se analizó' if degraded == 1 else 'productos se analizaron'} con un método simplificado por datos inconsistentes.")

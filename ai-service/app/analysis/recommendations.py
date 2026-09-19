@@ -116,11 +116,17 @@ def _reorder(a: ProductAnalysis, as_of: date, model: ElasticityModel) -> Recomme
     when = "hoy" if order_day == 0 else f"antes del {fmt_day_month(suggested, as_of)}"
 
     rate = f"{fmt_num(plan.demand_rate)} u/día"
-    if abs(a.features.trend_pct) >= 10:
-        rate += f", tendencia {fmt_pct(a.features.trend_pct, signed=True)}"
+    if abs(a.trend_pct) >= 10:
+        rate += f", tendencia {fmt_pct(a.trend_pct, signed=True)}"
     lead_text = "el proveedor entrega en el día" if lead == 0 else f"el proveedor tarda {fmt_days(lead)}"
     cover = plan.days_of_cover
-    if stock <= 0:
+    since = a.censoring.since
+    if stock <= 0 and since is not None:
+        text = (
+            f"No hay stock vendible desde el {fmt_day_month(since, as_of)} y la demanda es de {rate} "
+            f"(los días sin stock no se toman como una caída de la venta). Sugerimos pedir {fmt_units(qty)} {when} ({lead_text})."
+        )
+    elif stock <= 0:
         text = f"No queda stock vendible y se venden {rate}. Sugerimos pedir {fmt_units(qty)} {when} ({lead_text})."
     elif cover is not None:
         text = (
