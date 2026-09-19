@@ -21,6 +21,8 @@ type View = 'list' | 'chat' | 'new';
 const BASE_BOTTOM_PX = 16;
 /** Alto del botón (56 px) + separación con el panel + margen arriba: lo que el panel no puede ocupar. */
 const PANEL_RESERVED_PX = 96;
+/** Junta en un solo pedido los eventos que llegan juntos (MESSAGE + TICKET_UPDATED de un mismo mensaje). */
+const LIST_REFRESH_DEBOUNCE_MS = 250;
 
 /**
  * Botón flotante de soporte, presente en todas las pantallas del comercio (SPEC §9.6).
@@ -52,8 +54,28 @@ export default function SupportWidget() {
   const openIds = useMemo(() => (list.data ?? []).map((ticket) => ticket.id).slice(0, 12), [list.data]);
   const unread = (list.data ?? []).reduce((total, ticket) => total + ticket.unreadCount, 0);
 
-  // La lista sigue viva aunque el panel esté cerrado: la burbuja avisa los mensajes nuevos.
-  useTicketTopics(openIds, () => invalidateSupportLists(queryClient));
+  // La lista sigue viva aunque el panel esté cerrado: la burbuja avisa los mensajes nuevos. Solo se vuelve a pedir
+  // con los eventos que la cambian (mensaje, ticket actualizado, lectura del lado del comercio); "está escribiendo…"
+  // y la lectura del agente son efímeros (SPEC §7). Un mensaje llega con su TICKET_UPDATED: se refresca una sola vez.
+  const refreshTimer = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (refreshTimer.current !== null) window.clearTimeout(refreshTimer.current);
+    },
+    [],
+  );
+  useTicketTopics(openIds, (event) => {
+    const changesList =
+      event.event === 'MESSAGE' ||
+      event.event === 'TICKET_UPDATED' ||
+      (event.event === 'READ' && event.senderType === 'CUSTOMER');
+    if (!changesList) return;
+    if (refreshTimer.current !== null) window.clearTimeout(refreshTimer.current);
+    refreshTimer.current = window.setTimeout(() => {
+      refreshTimer.current = null;
+      invalidateSupportLists(queryClient);
+    }, LIST_REFRESH_DEBOUNCE_MS);
+  });
 
   const conversation = useTicketConversation({
     ticketId: view === 'chat' && open ? ticketId : null,

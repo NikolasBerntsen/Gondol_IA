@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { notificationKeys, notificationsApi } from '@/api/notifications';
 import type { NotificationDto } from '@/api/types';
 import { NotificationItem } from '@/components/notifications/NotificationItem';
+import { isReferenceOnScreen } from '@/components/notifications/onScreenReferences';
 import { useNotificationActions } from '@/components/notifications/useNotificationActions';
 import { DropdownPanel, useDropdown } from '@/components/ui/Dropdown';
 import { ErrorState } from '@/components/ui/ErrorState';
@@ -34,6 +35,12 @@ export function NotificationBell() {
 
   useStompSubscription<NotificationDto>('/user/queue/notifications', (notification) => {
     if (!notification?.id) return;
+    // Algo que ya está en pantalla (p. ej. el chat de soporte abierto) no avisa: esa pantalla lo muestra en vivo y lo
+    // marca como leído, y entonces refresca el contador. Solo se marca la lista como desactualizada.
+    if (isReferenceOnScreen(notification.referenceType, notification.referenceId)) {
+      void queryClient.invalidateQueries({ queryKey: notificationKeys.all, refetchType: 'none' });
+      return;
+    }
     queryClient.setQueryData(notificationKeys.unreadCount(), (old: { count: number } | undefined) =>
       old ? { count: old.count + 1 } : old,
     );

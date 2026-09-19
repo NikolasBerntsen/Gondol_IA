@@ -10,6 +10,7 @@ import {
   Radio,
   Timer,
   UserCheck,
+  type LucideIcon,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -26,10 +27,10 @@ import {
   Pagination,
   SearchInput,
   Segmented,
+  Select,
   Sheet,
   SheetContent,
   Skeleton,
-  StatCard,
   pageInfo,
 } from '@/components/ui';
 import { cn } from '@/lib/cn';
@@ -55,14 +56,55 @@ const ASSIGNED_OPTIONS = [
   { value: 'unassigned', label: 'Sin asignar' },
 ] as const;
 
+/** En un `<select>`: seis opciones no entran en la columna de la bandeja como control segmentado. */
 const STATUS_FILTERS = [
   { value: 'ACTIVE', label: 'Activos' },
   { value: 'OPEN', label: 'Abiertos' },
   { value: 'IN_PROGRESS', label: 'En curso' },
   { value: 'WAITING_CUSTOMER', label: 'Esperando' },
   { value: 'RESOLVED', label: 'Resueltos' },
-  { value: 'ALL', label: 'Todos' },
+  { value: 'ALL', label: 'Todos (con cerrados)' },
 ] as const;
+
+const STAT_TONES = {
+  warn: 'bg-warn-soft text-warn-ink',
+  primary: 'bg-primary/10 text-primary',
+  info: 'bg-info-soft text-info-ink',
+  ok: 'bg-ok-soft text-ok-ink',
+  neutral: 'bg-muted text-muted-foreground',
+} as const;
+
+/** Indicador compacto del tablero: una línea por dato para dejarle la altura a la conversación. */
+function QueueStat({
+  label,
+  value,
+  icon: Icon,
+  tone,
+  hint,
+  loading,
+}: {
+  label: string;
+  value: string | number;
+  icon: LucideIcon;
+  tone: keyof typeof STAT_TONES;
+  hint?: string;
+  loading: boolean;
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-2.5 px-3 py-2.5" title={hint}>
+      <span className={cn('grid h-7 w-7 shrink-0 place-items-center rounded-control', STAT_TONES[tone])}>
+        <Icon className="h-4 w-4" aria-hidden="true" />
+      </span>
+      <dt className="min-w-0 flex-1 truncate text-sm font-medium text-muted-foreground">
+        {label}
+        {hint && <span className="sr-only"> ({hint})</span>}
+      </dt>
+      <dd className="shrink-0 font-display text-lg font-bold leading-none tabular-nums text-foreground">
+        {loading ? <span className="gd-skeleton inline-block h-5 w-8 rounded-[6px] bg-muted" aria-hidden="true" /> : value}
+      </dd>
+    </div>
+  );
+}
 
 function readMuted(): boolean {
   try {
@@ -193,22 +235,25 @@ export default function SupportConsolePage() {
         }
       />
 
-      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <StatCard label="Sin asignar" value={stats.data?.unassigned ?? 0} tone="warn" icon={Inbox} loading={stats.isPending} />
-        <StatCard label="Míos activos" value={stats.data?.mine ?? 0} tone="primary" icon={UserCheck} loading={stats.isPending} />
-        <StatCard label="En curso" value={stats.data?.inProgress ?? 0} tone="info" icon={Radio} loading={stats.isPending} />
-        <StatCard label="Resueltos hoy" value={stats.data?.resolvedToday ?? 0} tone="ok" icon={CircleUserRound} loading={stats.isPending} />
-        <StatCard
-          label="1.ª respuesta"
-          value={formatMinutes(stats.data?.avgFirstResponseMinutes)}
-          hint="Promedio de los últimos 30 días"
-          tone="neutral"
-          icon={Timer}
-          loading={stats.isPending}
-        />
-      </div>
+      {/* Tablero en una franja baja: la altura es para la conversación. En mobile, con un ticket abierto, se oculta. */}
+      <Card padding="none" className={cn('mb-4', selectedId != null && 'hidden lg:block')}>
+        <dl className="grid grid-cols-2 divide-border sm:grid-cols-3 lg:grid-cols-5 lg:divide-x">
+          <QueueStat label="Sin asignar" value={stats.data?.unassigned ?? 0} tone="warn" icon={Inbox} loading={stats.isPending} />
+          <QueueStat label="Míos activos" value={stats.data?.mine ?? 0} tone="primary" icon={UserCheck} loading={stats.isPending} />
+          <QueueStat label="En curso" value={stats.data?.inProgress ?? 0} tone="info" icon={Radio} loading={stats.isPending} />
+          <QueueStat label="Resueltos hoy" value={stats.data?.resolvedToday ?? 0} tone="ok" icon={CircleUserRound} loading={stats.isPending} />
+          <QueueStat
+            label="1.ª respuesta"
+            value={formatMinutes(stats.data?.avgFirstResponseMinutes)}
+            hint="Promedio de los últimos 30 días"
+            tone="neutral"
+            icon={Timer}
+            loading={stats.isPending}
+          />
+        </dl>
+      </Card>
 
-      <div className="grid gap-4 lg:h-[calc(100dvh-24rem)] lg:min-h-[34rem] lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)_minmax(0,20rem)]">
+      <div className="grid gap-4 lg:h-[calc(100dvh-18rem)] lg:min-h-[30rem] lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)_minmax(0,20rem)]">
         {/* 1. Cola */}
         <Card
           padding="none"
@@ -221,20 +266,24 @@ export default function SupportConsolePage() {
               placeholder="Buscar por asunto, comercio o persona"
               inputSize="sm"
             />
-            <Segmented
-              size="sm"
-              label="Asignación"
-              value={assigned}
-              onChange={setAssigned}
-              options={ASSIGNED_OPTIONS.map((option) => ({ ...option }))}
-            />
-            <Segmented
-              size="sm"
-              label="Estado"
-              value={status}
-              onChange={setStatus}
-              options={STATUS_FILTERS.map((option) => ({ ...option }))}
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Segmented
+                size="sm"
+                label="Asignación"
+                value={assigned}
+                onChange={setAssigned}
+                options={ASSIGNED_OPTIONS.map((option) => ({ ...option }))}
+              />
+              <Select
+                selectSize="sm"
+                aria-label="Estado"
+                title="Estado"
+                value={status}
+                onChange={(event) => setStatus(event.target.value as TicketStatusFilter)}
+                options={STATUS_FILTERS}
+                containerClassName="min-w-[8.5rem] flex-1"
+              />
+            </div>
           </div>
 
           <div className="gd-scroll min-h-0 flex-1 overflow-y-auto">
