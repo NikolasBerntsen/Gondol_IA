@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Ban, ShieldAlert } from 'lucide-react';
 import type { RecallAlertMessage } from '@/api/types';
 import { useAuth } from '@/auth/AuthContext';
+import { useAccess } from '@/auth/useAccess';
 import { BarcodeDigits, ExpiryChip } from '@/components/gondola';
 import { Button, Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui';
 import { beep, vibrate } from '@/components/scanner';
@@ -14,20 +15,25 @@ import type { RecallMatch } from '../types';
 
 /**
  * Alerta de seguridad alimentaria (SPEC §7, design-system §7.9). Se monta una sola vez en el `AppShell` para los
- * usuarios de comercio: al entrar trae las coincidencias todavía pendientes y después escucha
- * `/user/queue/security-alerts` en vivo.
+ * usuarios de comercio: al entrar trae las coincidencias todavía pendientes de **todas** sus sucursales accesibles
+ * (no solo la elegida en el topbar) y después escucha `/user/queue/security-alerts` en vivo.
  * <p>
  * El diálogo es de atención total (`alertdialog`, no se cierra tocando afuera ni con Esc) y encola varias alertas:
  * "Entendido" confirma y muestra la siguiente, "Ver detalle y retirar del stock" lleva a Seguridad alimentaria.
+ * El jefe y el cajero no pueden retirar del stock (matriz SPEC §3.3): para ellos el botón es "Ver detalle" y el
+ * último paso les pide avisarle al administrador o a un empleado.
  */
 export default function SecurityAlertHost() {
-  const { isTenantUser } = useAuth();
+  const { me, isTenantUser } = useAuth();
+  const { can } = useAccess();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [queue, setQueue] = useState<RecallAlertMessage[]>([]);
   const [busy, setBusy] = useState(false);
   const seen = useRef(new Set<number>());
   const alerted = useRef(false);
+  const userId = isTenantUser ? (me?.id ?? null) : null;
+  const canResolve = can('recalls.resolve');
 
   const enqueue = useCallback((alerts: RecallAlertMessage[]) => {
     const fresh = alerts.filter((alert) => !seen.current.has(alert.matchId));
@@ -36,12 +42,21 @@ export default function SecurityAlertHost() {
     setQueue((current) => [...current, ...fresh]);
   }, []);
 
-  // Al montar: lo que quedó pendiente de sesiones anteriores (el push solo llega mientras la app está abierta).
+  // Otro usuario en la misma pestaña: no hereda la cola ni las alertas ya vistas.
   useEffect(() => {
-    if (!isTenantUser) return undefined;
+    seen.current = new Set();
+    alerted.current = false;
+    setQueue([]);
+  }, [userId]);
+
+  // Al montar: lo que quedó pendiente de sesiones anteriores (el push solo llega mientras la app está abierta).
+  // Se piden las de todas las sucursales accesibles (`X-Branch-Id: all`, SPEC §3.5): el push en vivo llega por
+  // cualquier sucursal del usuario, así que la puesta al día no puede depender de la que tenga elegida.
+  useEffect(() => {
+    if (userId === null) return undefined;
     let cancelled = false;
     void recallsApi
-      .list('OPEN')
+      .list('OPEN', 'all')
       .then((matches) => {
         if (!cancelled) enqueue(matches.map(toAlert));
       })
@@ -51,7 +66,7 @@ export default function SecurityAlertHost() {
     return () => {
       cancelled = true;
     };
-  }, [enqueue, isTenantUser]);
+  }, [enqueue, userId]);
 
   useStompSubscription<RecallAlertMessage>(
     isTenantUser ? '/user/queue/security-alerts' : null,
@@ -98,7 +113,7 @@ export default function SecurityAlertHost() {
     navigate(`/app/recalls?match=${current.matchId}`);
   }, [current, dismiss, navigate]);
 
-  const steps = useMemo(() => buildSteps(current), [current]);
+  const steps = useMemo(() => buildSteps(current, canResolve), [current, canResolve]);
 
   if (!isTenantUser || !current) return null;
 
@@ -119,7 +134,9 @@ export default function SecurityAlertHost() {
               Alerta de seguridad alimentaria
             </DialogTitle>
             <p className="text-sm opacity-90">
-              Publicada por GondolIA · {formatDateTime(current.matchedAt)}
+              {/* `matchedAt` es cuándo el recall alcanzó este lote (al publicarlo o después: carga, transferencia,
+                  corrección del lote), no cuándo se publicó el recall. */}
+              Recall de GondolIA · lote detectado el {formatDateTime(current.matchedAt)}
               {queue.length > 1 ? ` · 1 de ${queue.length}` : ''}
             </p>
           </div>
@@ -188,7 +205,7 @@ export default function SecurityAlertHost() {
             Entendido
           </Button>
           <Button variant="destructive" onClick={goToDetail} autoFocus>
-            Ver detalle y retirar del stock
+            {canResolve ? 'Ver detalle y retirar del stock' : 'Ver detalle'}
           </Button>
         </div>
       </DialogContent>
@@ -196,15 +213,22 @@ export default function SecurityAlertHost() {
   );
 }
 
-/** Pasos numerados: los del recall más los fijos del producto en cuarentena. */
-function buildSteps(alert: RecallAlertMessage | null): string[] {
+/**
+ * Pasos numerados: los del recall más los fijos del producto en cuarentena. El último depende del rol: solo el
+ * administrador y el empleado pueden darlo de baja del stock (SPEC §3.3); el jefe y el cajero avisan.
+ */
+function buildSteps(alert: RecallAlertMessage | null, canResolve: boolean): string[] {
   if (!alert) return [];
   const steps = [
     `Sacá de la góndola el lote ${alert.lotNumber ?? 'alcanzado'} de ${alert.productName} en ${alert.branchName}.`,
     'Separalo del resto de la mercadería para que nadie lo venda.',
   ];
   if (alert.instructions) steps.push(alert.instructions);
-  steps.push('Cuando lo hayas retirado, marcalo como resuelto en Seguridad alimentaria.');
+  steps.push(
+    canResolve
+      ? 'Cuando lo hayas retirado, marcalo como resuelto en Seguridad alimentaria.'
+      : 'Avisale al administrador o a un empleado: ellos lo dan de baja del stock en Seguridad alimentaria.',
+  );
   return steps;
 }
 

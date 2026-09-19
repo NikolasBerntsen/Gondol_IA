@@ -167,8 +167,10 @@ Fisherton**. Vida Sana no vende el producto; El Sol Centro y Echesortu tienen la
    El lote queda en 0 con su movimiento `Retiro por recall`. Si volvés a escanear la sopa en el POS, sigue sin poder
    venderse: mientras el recall esté publicado el mostrador avisa "Recall vigente (lote L2409A)" y **no** ofrece
    "Vender igual", porque una lata sin lote registrado puede ser del lote retirado.
-5. En El Sol, `empleado@elsol.com` resuelve la de Fisherton. La sopa de Centro (otro lote, ya chequeado al cargarlo) se
-   sigue vendiendo hasta agotar lo cargado; por encima de eso tampoco hay "Vender igual" mientras dure el recall.
+5. En El Sol, `empleado@elsol.com` resuelve la de Fisherton. Aunque tenga elegida Centro en el topbar, la alerta le
+   aparece igual (se piden las de todas sus sucursales) y "Ver detalle y retirar del stock" lo lleva a Fisherton. La
+   sopa de Centro (otro lote, ya chequeado al cargarlo) se sigue vendiendo hasta agotar lo cargado; por encima de eso
+   tampoco hay "Vender igual" mientras dure el recall.
 6. Para comparar: en **Seguridad alimentaria** de Don Pepe o de El Sol queda también el **recall histórico resuelto**
    del Dulce de leche (lote `DV2603B`), con quién lo reconoció, quién lo resolvió y la nota.
 
