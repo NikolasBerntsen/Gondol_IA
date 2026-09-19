@@ -39,8 +39,8 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Siembra el mundo demo completo en una base propia y recién creada ({@code gondolia_it_seed}, la de las demás pruebas
- * ya tiene comercios) arrancando la aplicación con {@code app.seed-demo=true}, y verifica el resultado con SQL y con la
+ * Siembra el mundo demo completo en una base propia y recién creada ({@code <base de pruebas>_seed}, por defecto
+ * {@code gondolia_it_seed}: la de las demás pruebas ya tiene comercios) arrancando la aplicación con {@code app.seed-demo=true}, y verifica el resultado con SQL y con la
  * API real: logins de la demo, aislamiento entre comercios y sucursales sobre los datos sembrados, el recall en vivo,
  * la consistencia de stock y de los arqueos del POS y la idempotencia.
  * <p>
@@ -53,21 +53,24 @@ import org.springframework.transaction.support.TransactionTemplate;
 @PostgresIntegrationTest.EnabledWhenRequested
 class DemoDataSeederIntegrationTest {
 
-    private static final String DATABASE = "gondolia_it_seed";
-
     @DynamicPropertySource
     static void freshDatabase(DynamicPropertyRegistry registry) throws Exception {
         String baseUrl = setting("gondolia.it.db.url", "jdbc:postgresql://localhost:55432/gondolia_it");
         String user = setting("gondolia.it.db.user", "postgres");
         String password = setting("gondolia.it.db.password", "dev");
         String serverUrl = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+        // Derivada de la base configurada: dos suites contra el mismo servidor no se borran la base entre sí.
+        String baseName = baseUrl.substring(serverUrl.length());
+        int params = baseName.indexOf('?');
+        String database = (params < 0 ? baseName : baseName.substring(0, params)).replaceAll("[^A-Za-z0-9_]", "")
+                + "_seed";
         try (Connection connection = DriverManager.getConnection(serverUrl + "postgres", user, password);
              Statement statement = connection.createStatement()) {
-            statement.execute("DROP DATABASE IF EXISTS " + DATABASE + " WITH (FORCE)");
-            statement.execute("CREATE DATABASE " + DATABASE);
+            statement.execute("DROP DATABASE IF EXISTS " + database + " WITH (FORCE)");
+            statement.execute("CREATE DATABASE " + database);
         }
         Path storage = Files.createTempDirectory("gondolia-seed-it");
-        registry.add("spring.datasource.url", () -> serverUrl + DATABASE);
+        registry.add("spring.datasource.url", () -> serverUrl + database);
         registry.add("spring.datasource.username", () -> user);
         registry.add("spring.datasource.password", () -> password);
         registry.add("app.seed-demo", () -> "true");
@@ -125,6 +128,34 @@ class DemoDataSeederIntegrationTest {
 
         seeder.run(null);
         assertThat(count("select count(*) from tenants")).isEqualTo(tenants);
+    }
+
+    @Test
+    void platformTeamIncludingTheBootstrapOwnerPredatesEveryTenant() {
+        // El dueño inicial lo crea BootstrapRunner al arrancar; la siembra le da la misma antigüedad que al resto.
+        assertThat(jdbc.queryForObject("select full_name from users where email = 'dueno@gondolia.app'",
+                String.class)).isEqualTo("Federico Almada");
+        assertThat(count("""
+                select count(distinct created_at) from users where role in ('PLATFORM_OWNER', 'SUPPORT_AGENT')
+                """)).isEqualTo(1);
+        assertThat(count("""
+                select count(*) from users where role in ('PLATFORM_OWNER', 'SUPPORT_AGENT')
+                  and created_at >= (select min(created_at) from tenants)
+                """)).isZero();
+        // Nadie actúa antes de su alta (p. ej. el dueño dando de alta Don Pepe hace 335 días).
+        assertThat(count("""
+                select count(*) from tenant_events e join users u on u.id = e.actor_user_id
+                where e.created_at < u.created_at
+                """)).isZero();
+    }
+
+    @Test
+    void elSolSellsThroughTheFourSources() {
+        List<String> sources = jdbc.queryForList("""
+                select distinct m.source from stock_movements m join tenants t on t.id = m.tenant_id
+                where t.name = 'Minimercado El Sol' and m.type = 'SALE'
+                """, String.class);
+        assertThat(sources).contains("POS_GONDOLIA", "POS", "CSV", "MANUAL");
     }
 
     @Test
