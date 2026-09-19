@@ -91,20 +91,27 @@ function QueueStat({
   loading: boolean;
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-2.5 px-3 py-2" title={hint}>
+    // `dt`/`dd` quedan hijos directos del grupo (`dl > div`); el ícono ocupa las dos filas de la izquierda.
+    <div
+      className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2.5 px-3 py-2 lg:gap-x-0 xl:gap-x-2.5"
+      title={hint}
+    >
       {/* Entre lg y xl las cinco columnas son angostas: el ícono se oculta para que entre el rótulo. */}
-      <span className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-control lg:hidden xl:grid', STAT_TONES[tone])}>
+      <span
+        className={cn(
+          'row-span-2 grid h-8 w-8 place-items-center rounded-control lg:hidden xl:grid',
+          STAT_TONES[tone],
+        )}
+      >
         <Icon className="h-4 w-4" aria-hidden="true" />
       </span>
-      <div className="min-w-0 flex-1">
-        <dt className="truncate text-xs font-medium text-muted-foreground">
-          {label}
-          {hint && <span className="sr-only"> ({hint})</span>}
-        </dt>
-        <dd className="whitespace-nowrap font-display text-lg font-bold leading-6 tabular-nums text-foreground">
-          {loading ? <span className="gd-skeleton inline-block h-5 w-10 rounded-[6px] bg-muted" aria-hidden="true" /> : value}
-        </dd>
-      </div>
+      <dt className="col-start-2 truncate text-xs font-medium text-muted-foreground">
+        {label}
+        {hint && <span className="sr-only"> ({hint})</span>}
+      </dt>
+      <dd className="col-start-2 whitespace-nowrap font-display text-lg font-bold leading-6 tabular-nums text-foreground">
+        {loading ? <span className="gd-skeleton inline-block h-5 w-10 rounded-[6px] bg-muted" aria-hidden="true" /> : value}
+      </dd>
     </div>
   );
 }
@@ -370,7 +377,9 @@ export default function SupportConsolePage() {
                     {ticket.tenantName} · {ticket.createdByName ?? 'Usuario dado de baja'}
                   </p>
                 </div>
-                <div className="hidden shrink-0 items-center gap-1.5 sm:flex">
+                {/* Con la bandeja al lado (lg+) la columna es angosta: estado y prioridad ya se ven en la fila de la
+                    bandeja y en "Datos", así que el asunto se queda con el ancho. */}
+                <div className="hidden shrink-0 items-center gap-1.5 sm:flex lg:hidden 2xl:flex">
                   <TicketStatusBadge status={ticket.status} size="sm" />
                   <TicketPriorityBadge priority={ticket.priority} size="sm" />
                   <UnreadBadge count={ticket.unreadCount} />
