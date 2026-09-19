@@ -29,7 +29,8 @@ import org.springframework.web.bind.annotation.RestController;
  * Productos del catálogo (SPEC §6.3). El catálogo es del comercio; el stock de cada fila corresponde al alcance de
  * sucursales del encabezado {@code X-Branch-Id} (SPEC §3.5).
  * <p>
- * Roles: listar, ver, crear y editar → administrador y empleado; eliminar → solo administrador.
+ * Roles: listar y ver (incluidos los movimientos del producto) → jefe, administrador y empleado; crear y editar →
+ * administrador y empleado; eliminar → solo administrador.
  */
 @Tag(name = "Catálogo · productos")
 @RestController
@@ -67,7 +68,10 @@ public class ProductController {
         return productService.getByBarcode(barcode);
     }
 
-    /** Últimos movimientos del producto en el alcance (ficha del producto). */
+    /**
+     * Últimos movimientos del producto en el alcance (ficha del producto). El empleado los ve sin los importes ni la
+     * referencia de la venta (el historial de ventas es del jefe y del administrador, SPEC §3.3).
+     */
     @GetMapping("/{id}/movements")
     @PreAuthorize(Roles.TENANT_INVENTORY_READ)
     public List<ProductMovementDto> movements(@PathVariable Long id,

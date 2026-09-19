@@ -88,10 +88,19 @@ export const ocrApi = {
 };
 
 /**
- * Lectura opcional del análisis de IA del producto (endpoint del módulo B, SPEC §6.5). La ficha lo muestra
- * solo si está disponible: si el análisis todavía no corrió, el rol no lo puede ver o el módulo aún no
- * respondió, la tarjeta no se dibuja. Por eso el tipo es tolerante y la query no reintenta.
+ * Análisis de IA del producto (endpoint del módulo B, SPEC §6.5), solo para jefe y administrador. La IA es **por
+ * sucursal**: se usa el listado de patrones (que respeta el alcance del encabezado, una o todas las sucursales) y se
+ * queda con las filas de este producto. Así la ficha funciona igual con una sucursal elegida o con "Todas", sin
+ * pedir la ficha de IA (que exige una sucursal y respondía 400 `BRANCH_REQUIRED` en la vista consolidada).
  */
 export const productInsightApi = {
-  get: (productId: number) => apiGet<ProductInsightPeek>(`/tenant/insights/products/${productId}`),
+  byBranch: async (product: Pick<ProductDetail, 'id' | 'barcode' | 'name'>): Promise<ProductInsightPeek[]> => {
+    const page = await apiGet<PageResponse<ProductInsightPeek>>('/tenant/insights/products', {
+      q: product.barcode || product.name,
+      size: 100,
+    });
+    return page.content
+      .filter((row) => row.productId === product.id)
+      .sort((a, b) => a.branchName.localeCompare(b.branchName, 'es'));
+  },
 };

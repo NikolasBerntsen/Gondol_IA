@@ -40,6 +40,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.jpa.domain.Specification;
@@ -49,7 +50,10 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Catálogo de productos (SPEC §6.3). El catálogo es <b>del comercio</b> (lo ven todos sus usuarios de inventario),
  * pero el stock que se informa en cada fila es el del <b>alcance de sucursales</b> del request (SPEC §3.5): se suma
- * sobre las sucursales accesibles y el estado consolidado es el peor de todas.
+ * sobre las sucursales accesibles y el estado consolidado es el peor entre las sucursales del alcance que
+ * <b>manejan</b> el producto (tienen o tuvieron lotes de él), la misma regla que el Inicio usa para contar productos
+ * sin stock y a reponer. Una sucursal que nunca recibió el producto no aparece en {@code stockByBranch} ni lo vuelve
+ * "Sin stock"; si ninguna del alcance lo manejó, el estado sale del total (0 → {@code OUT}).
  * <p>
  * El filtro por estado de stock y el orden por columnas calculadas se resuelven en memoria: el catálogo de un
  * comercio chico entra holgadamente y así el estado consolidado coincide siempre con el que se muestra.
@@ -66,7 +70,10 @@ public class ProductService {
     static final String MSG_SUPPLIER_NOT_FOUND = "El proveedor elegido no existe.";
     static final String DUPLICATE_BARCODE_CODE = "DUPLICATE_BARCODE";
 
-    /** Ventana de lotes agotados que igual se muestran en la ficha del producto. */
+    /**
+     * Ventana de lotes sin remanente que igual se muestran en la ficha del producto: los que ingresaron en estos días
+     * o de los que salió stock por un retiro por recall, un descarte, un ajuste o una transferencia.
+     */
     private static final int RECENT_EMPTY_LOT_DAYS = 30;
 
     private final ProductRepository productRepository;
@@ -211,18 +218,26 @@ public class ProductService {
                 product.getCreatedAt(), product.getUpdatedAt());
     }
 
-    /** Lotes del producto en el alcance: los que tienen remanente y los agotados de los últimos 30 días. */
+    /**
+     * Lotes del producto en el alcance (SPEC §6.3 "con quantity &gt; 0 o recientes"): los que tienen remanente y los
+     * que quedaron en 0 pero ingresaron en los últimos 30 días o en ese lapso se retiraron, descartaron, ajustaron o
+     * transfirieron. Así un lote retirado hoy por un recall sigue a la vista (en cuarentena, con 0 u.) aunque haya
+     * ingresado hace meses; uno que solo se vendió entero no vuelve a aparecer.
+     */
     private List<LotDto> lotsOf(Long tenantId, Long productId, CatalogScope scope) {
         if (scope.isEmpty()) {
             return List.of();
         }
         Instant recentSince = clock.instant().minus(RECENT_EMPTY_LOT_DAYS, ChronoUnit.DAYS);
+        Set<Long> recentlyWithdrawn = stockReader.recentlyWithdrawnLotIds(tenantId, scope.branchIds(), productId,
+                recentSince);
         List<Lot> lots = lotRepository
                 .findByTenantIdAndBranchIdInAndProductIdOrderByBranchIdAscReceivedAtAscIdAsc(
                         tenantId, scope.branchIds(), productId)
                 .stream()
                 .filter(lot -> lot.getQuantity() > 0
-                        || (lot.getReceivedAt() != null && lot.getReceivedAt().isAfter(recentSince)))
+                        || (lot.getReceivedAt() != null && lot.getReceivedAt().isAfter(recentSince))
+                        || recentlyWithdrawn.contains(lot.getId()))
                 .toList();
         LotMapper.Context context = lotMapper.context(tenantId, List.of(productId));
         return lotMapper.sortForDisplay(lotMapper.toDtos(lots, context));
@@ -231,15 +246,19 @@ public class ProductService {
     private ProductListItem toListItem(Product product, Map<Long, String> categories,
                                        Map<Long, ProductStock> stocks, CatalogScope scope) {
         ProductStock stock = stocks.getOrDefault(product.getId(), ProductStock.EMPTY);
+        // Solo las sucursales que manejan el producto: las que nunca lo recibieron no lo tienen "sin stock".
         List<BranchStockDto> byBranch = new ArrayList<>();
         List<String> statuses = new ArrayList<>();
         for (BranchRef branch : scope.branches()) {
+            if (!stock.handledIn(branch.id())) {
+                continue;
+            }
             int sellable = stock.sellableIn(branch.id());
             String status = StockStatuses.of(sellable, product.getMinStock());
             statuses.add(status);
             byBranch.add(new BranchStockDto(branch.id(), branch.name(), sellable, status));
         }
-        String consolidated = scope.isEmpty()
+        String consolidated = statuses.isEmpty()
                 ? StockStatuses.of(stock.sellableStock(), product.getMinStock())
                 : StockStatuses.worst(statuses);
         return new ProductListItem(product.getId(), product.getBarcode(), product.getName(), product.getBrand(),

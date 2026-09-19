@@ -10,12 +10,14 @@ import com.gondolia.catalog.dto.LotRequest;
 import com.gondolia.catalog.dto.LotUpdateRequest;
 import com.gondolia.catalog.dto.ProductDetail;
 import com.gondolia.catalog.dto.ProductListItem;
+import com.gondolia.catalog.dto.ProductMovementDto;
 import com.gondolia.catalog.dto.ProductRequest;
 import com.gondolia.catalog.dto.ReceiveLotResponse;
 import com.gondolia.common.PageResponse;
 import com.gondolia.common.error.ApiException;
 import com.gondolia.domain.inventory.LotStatus;
 import com.gondolia.domain.inventory.MovementSource;
+import com.gondolia.domain.inventory.MovementType;
 import com.gondolia.domain.inventory.ProductUnit;
 import com.gondolia.domain.user.Role;
 import com.gondolia.it.PostgresIntegrationTest;
@@ -51,6 +53,8 @@ class CatalogIntegrationTest extends PostgresIntegrationTest {
     private ProductService productService;
     @Autowired
     private LotService lotService;
+    @Autowired
+    private ProductMovementService productMovementService;
     @Autowired
     private CategoryService categoryService;
     @Autowired
@@ -128,18 +132,53 @@ class CatalogIntegrationTest extends PostgresIntegrationTest {
     }
 
     @Test
-    void el_estado_consolidado_es_el_peor_de_las_sucursales() {
+    void el_estado_consolidado_es_el_peor_de_las_sucursales_que_manejan_el_producto() {
+        // Norte también trabaja la leche pero se le agotó el último lote.
+        data.lot(tenant, norte, lecheId, "LN01", "LN01", today.plusDays(2), 0, "DEPLETED", 60);
         authenticate(admin, null);
 
         ProductListItem leche = row(productService.list(query(null, null)), lecheId);
 
-        // Centro tiene 6 u. con mínimo 20 (LOW) y Norte no tiene stock (OUT): el consolidado es OUT.
+        // Centro tiene 6 u. con mínimo 20 (LOW) y Norte se quedó sin stock (OUT): el consolidado es OUT.
         assertThat(leche.sellableStock()).isEqualTo(6);
         assertThat(leche.stockStatus()).isEqualTo(StockStatuses.OUT);
         assertThat(leche.stockByBranch())
                 .extracting(BranchStockDto::branchName, BranchStockDto::stockStatus)
                 .containsExactly(tuple("Sucursal Centro", StockStatuses.LOW),
                         tuple("Sucursal Norte", StockStatuses.OUT));
+    }
+
+    @Test
+    void una_sucursal_que_nunca_tuvo_el_producto_no_lo_deja_sin_stock() {
+        authenticate(admin, null);
+
+        // La leche solo se trabaja en Centro (6 u., mínimo 20): en "todas" es LOW, igual que en el Inicio.
+        ProductListItem leche = row(productService.list(query(null, null)), lecheId);
+        assertThat(leche.stockStatus()).isEqualTo(StockStatuses.LOW);
+        assertThat(leche.stockByBranch())
+                .extracting(BranchStockDto::branchName, BranchStockDto::sellableStock, BranchStockDto::stockStatus)
+                .containsExactly(tuple("Sucursal Centro", 6, StockStatuses.LOW));
+        assertThat(productService.list(query(null, StockStatuses.OUT)).content())
+                .extracting(ProductListItem::id).doesNotContain(lecheId);
+        assertThat(productService.list(query(null, StockStatuses.LOW)).content())
+                .extracting(ProductListItem::id).contains(lecheId);
+    }
+
+    @Test
+    void un_producto_sin_lotes_en_el_alcance_queda_sin_stock() {
+        long nuevo = data.product(tenant, data.barcode(), "Manteca 200 g", "900", "1500");
+
+        authenticate(admin, null);
+        ProductListItem manteca = row(productService.list(query(null, null)), nuevo);
+        assertThat(manteca.stockStatus()).isEqualTo(StockStatuses.OUT);
+        assertThat(manteca.stockByBranch()).isEmpty();
+
+        // En Norte la leche no se trabaja: no hay stock ahí, pero tampoco una fila de sucursal inventada.
+        authenticate(admin, String.valueOf(norte));
+        ProductListItem lecheNorte = row(productService.list(query(null, null)), lecheId);
+        assertThat(lecheNorte.sellableStock()).isZero();
+        assertThat(lecheNorte.stockStatus()).isEqualTo(StockStatuses.OUT);
+        assertThat(lecheNorte.stockByBranch()).isEmpty();
     }
 
     @Test
@@ -155,6 +194,7 @@ class CatalogIntegrationTest extends PostgresIntegrationTest {
 
     @Test
     void los_filtros_de_texto_y_de_stock_acotan_el_listado() {
+        data.lot(tenant, norte, lecheId, "LN01", "LN01", today.plusDays(2), 0, "DEPLETED", 60);
         authenticate(admin, null);
 
         assertThat(productService.list(query("yogur", null)).content())
@@ -209,6 +249,59 @@ class CatalogIntegrationTest extends PostgresIntegrationTest {
         assertThat(detail.lots()).filteredOn(lot -> lot.rotationRank() == null)
                 .extracting(LotDto::lotNumber)
                 .containsExactlyInAnyOrder("VENCIDO", "RETIRADO");
+    }
+
+    @Test
+    void la_ficha_muestra_el_lote_retirado_hoy_aunque_haya_ingresado_hace_meses() {
+        // Lote viejo retirado hoy por un recall: quedó RECALLED con 0 u.
+        long retirado = data.lot(tenant, centro, lecheId, "L2409A", "L2409A", today.plusDays(20), 0, "RECALLED", 90);
+        movement(centro, lecheId, retirado, "RECALL_REMOVAL", 8, null, null, null, 0);
+        // Lote viejo descartado por vencido hace una semana: también sigue a la vista.
+        long descartado = data.lot(tenant, centro, lecheId, "LDESC", "LDESC", today.minusDays(9), 0,
+                "EXPIRED_DISCARDED", 70);
+        movement(centro, lecheId, descartado, "WASTE_EXPIRED", 2, null, null, null, 7);
+        // Lote viejo que se agotó hace dos meses: ya no es reciente.
+        long agotado = data.lot(tenant, centro, lecheId, "LVIEJO", "LVIEJO", today.minusDays(30), 0, "DEPLETED", 120);
+        movement(centro, lecheId, agotado, "SALE", 3, "1400", "4200", "S-VIEJA", 60);
+        // Lote viejo que se terminó de vender hace días: vender no lo vuelve "reciente" (si no, la ficha de un
+        // producto de alta rotación se llena de lotes agotados).
+        long vendido = data.lot(tenant, centro, lecheId, "LVEND", "LVEND", today.plusDays(10), 0, "DEPLETED", 45);
+        movement(centro, lecheId, vendido, "SALE", 5, "1400", "7000", "S-RECIENTE", 3);
+        authenticate(admin, String.valueOf(centro));
+
+        ProductDetail detail = productService.get(lecheId);
+
+        assertThat(detail.lots()).extracting(LotDto::lotNumber, LotDto::status, LotDto::quantity)
+                .contains(tuple("L2409A", LotStatus.RECALLED, 0), tuple("LDESC", LotStatus.EXPIRED_DISCARDED, 0));
+        assertThat(detail.lots()).extracting(LotDto::lotNumber).doesNotContain("LVIEJO", "LVEND");
+    }
+
+    // ------------------------------------------------------------------ movimientos de la ficha
+
+    @Test
+    void el_empleado_ve_los_movimientos_del_producto_sin_los_importes_de_la_venta() {
+        long lot = jdbc.queryForObject("select id from lots where product_id = ? and lot_number = ?", Long.class,
+                lecheId, "LP01");
+        movement(centro, lecheId, lot, "SALE", 2, "1400", "2800", "P-000123", 0);
+
+        authenticate(employee, null);
+        List<ProductMovementDto> forEmployee = productMovementService.recent(lecheId, 10);
+        assertThat(forEmployee).singleElement().satisfies(movement -> {
+            assertThat(movement.type()).isEqualTo(MovementType.SALE);
+            assertThat(movement.quantity()).isEqualTo(2);
+            assertThat(movement.lotNumber()).isEqualTo("LP01");
+            assertThat(movement.unitPrice()).isNull();
+            assertThat(movement.totalAmount()).isNull();
+            assertThat(movement.discountPct()).isNull();
+            assertThat(movement.batchRef()).isNull();
+        });
+
+        authenticate(admin, null);
+        assertThat(productMovementService.recent(lecheId, 10)).singleElement().satisfies(movement -> {
+            assertThat(movement.unitPrice()).isEqualByComparingTo("1400");
+            assertThat(movement.totalAmount()).isEqualByComparingTo("2800");
+            assertThat(movement.batchRef()).isEqualTo("P-000123");
+        });
     }
 
     // ------------------------------------------------------------------ carga de mercadería
@@ -442,6 +535,17 @@ class CatalogIntegrationTest extends PostgresIntegrationTest {
     }
 
     // ------------------------------------------------------------------ helpers
+
+    private void movement(long branchId, long productId, long lotId, String type, int quantity, String unitPrice,
+                          String totalAmount, String batchRef, int daysAgo) {
+        jdbc.update("""
+                insert into stock_movements (tenant_id, branch_id, product_id, lot_id, type, quantity, unit_price,
+                                             total_amount, source, batch_ref, occurred_at)
+                values (?, ?, ?, ?, ?, ?, ?, ?, 'MANUAL', ?, now() - make_interval(days => ?))
+                """, tenant, branchId, productId, lotId, type, quantity,
+                unitPrice == null ? null : new BigDecimal(unitPrice),
+                totalAmount == null ? null : new BigDecimal(totalAmount), batchRef, daysAgo);
+    }
 
     private static ProductQuery query(String q, String stockStatus) {
         return new ProductQuery(q, null, stockStatus, null, 0, 50, "name,asc");

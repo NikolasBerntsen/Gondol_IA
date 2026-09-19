@@ -99,6 +99,9 @@ export default function InventoryPage() {
       ? branches.map((branch) => ({
           id: `branch-${branch.id}`,
           header: branch.name,
+          // El nombre de la sucursal puede partirse en dos renglones: los valores son números cortos y así la tabla
+          // de "Todas las sucursales" entra (o casi) sin scroll en una pantalla de 1360 px.
+          headerClassName: 'whitespace-normal leading-4',
           align: 'right' as const,
           hideBelow: 'xl' as const,
           mobile: 'field' as const,

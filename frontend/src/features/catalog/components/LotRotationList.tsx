@@ -1,5 +1,5 @@
 import type { StockRotation } from '@/api/types';
-import { ExpiryChip, LotRankChip } from '@/components/gondola';
+import { ExpiryChip, LotRankChip, StatusPill } from '@/components/gondola';
 import { cn } from '@/lib/cn';
 import { formatDate, formatNumber } from '@/lib/format';
 import type { LotDto } from '../types';
@@ -7,8 +7,17 @@ import type { LotDto } from '../types';
 export interface LotRotationListProps {
   lots: readonly LotDto[];
   rotation: StockRotation;
-  /** Lote que se está por cargar: se muestra al final, resaltado. */
-  pending?: { lotNumber: string | null; expiryDate: string | null; quantity: number; breaksRotation: boolean } | null;
+  /**
+   * Lote que se está por cargar: se muestra al final, resaltado. Si ya está vencido (`expired`) no entra en el
+   * orden de salida: se marca "Vencido · no se vende" en vez de su posición.
+   */
+  pending?: {
+    lotNumber: string | null;
+    expiryDate: string | null;
+    quantity: number;
+    breaksRotation: boolean;
+    expired?: boolean;
+  } | null;
   /** Muestra el nombre de la sucursal en cada fila (vista consolidada). */
   showBranch?: boolean;
   className?: string;
@@ -46,16 +55,22 @@ export function LotRotationList({ lots, rotation, pending, showBranch, className
         <li
           className={cn(
             'flex items-center gap-2.5 bg-primary/[0.04] px-4 py-2.5',
-            pending.breaksRotation ? 'gd-stripe-warn' : 'gd-stripe-ok',
+            pending.expired ? 'gd-stripe-crit' : pending.breaksRotation ? 'gd-stripe-warn' : 'gd-stripe-ok',
           )}
         >
-          <LotRankChip rank={lots.length + 1} rotation={rotation} />
+          {pending.expired ? (
+            <StatusPill tone="crit">Vencido</StatusPill>
+          ) : (
+            <LotRankChip rank={lots.length + 1} rotation={rotation} />
+          )}
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="font-mono text-sm font-medium">{pending.lotNumber || 'Sin lote'}</span>
               {pending.expiryDate ? <ExpiryChip expiry={pending.expiryDate} /> : null}
             </div>
-            <div className="text-xs font-semibold text-primary">Nuevo · ingresa hoy</div>
+            <div className={cn('text-xs font-semibold', pending.expired ? 'text-crit-ink' : 'text-primary')}>
+              {pending.expired ? 'Nuevo · ingresa vencido, no se vende' : 'Nuevo · ingresa hoy'}
+            </div>
           </div>
           <span className="shrink-0 font-semibold tabular-nums">{formatNumber(pending.quantity)} u.</span>
         </li>
