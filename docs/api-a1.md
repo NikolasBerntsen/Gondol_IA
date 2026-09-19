@@ -104,9 +104,17 @@ Respuesta `PageResponse<ProductListItem>`:
                    {"branchId":2,"branchName":"Sucursal Norte","sellableStock":20,"stockStatus":"OK"}]}],
  "page":0,"size":20,"totalElements":4,"totalPages":1}
 ```
-- Los totales están **sumados sobre el alcance** y `stockByBranch` detalla cada sucursal accesible con stock.
-- `stockStatus` consolidado = el **peor** de las sucursales (`OUT` > `LOW` > `OK`), con `OUT` si el vendible es 0 y
-  `LOW` si no supera `minStock` (SPEC §4.2).
+- Los totales están **sumados sobre el alcance** y `stockByBranch` detalla cada sucursal del alcance que **maneja** el
+  producto: la que tiene o tuvo algún lote de él (cualquier estado, aunque hoy esté en 0). Una sucursal que nunca lo
+  recibió no aparece (la tabla del inventario muestra "—" en su columna).
+- `stockStatus` consolidado = el **peor** entre esas sucursales (`OUT` > `LOW` > `OK`), con `OUT` si el vendible es 0 y
+  `LOW` si no supera `minStock` (SPEC §4.2). Es la misma regla del Inicio (`DashboardService.reorderRowsSql`, CTE
+  `handled`): un producto que solo se trabaja en Echesortu con 42 u. está `OK` en "Todas las sucursales", no `OUT` por
+  Centro y Fisherton. Si ninguna sucursal del alcance lo manejó nunca (producto recién creado, o una sucursal elegida
+  que no lo trabaja) el estado sale del total: 0 → `OUT` y `stockByBranch` vacío.
+- Diferencias que quedan con el contador "sin stock" del Inicio, a propósito: el Inicio cuenta **pares producto +
+  sucursal** de productos activos con `minStock > 0`; el inventario cuenta **productos** y marca `OUT` cualquier vendible
+  en 0 (también sin mínimo o sin lotes todavía).
 - `sellableStock` excluye vencidos y lotes en cuarentena; esos van en `expiredStock` y `quarantinedStock`.
 
 ### `GET /api/tenant/products/{id}` y `GET /api/tenant/products/by-barcode/{barcode}`
@@ -119,13 +127,20 @@ Los lotes vienen **agrupados por sucursal y, dentro de cada una, en orden de rot
  "supplierId":1,"supplierName":"Distribuidora La Pampa","expiryBucket":"UPCOMING","originLotId":null,
  "rotationRank":1}
 ```
+Entran los lotes con remanente y los que quedaron en 0 pero **ingresaron o tuvieron un movimiento en los últimos 30
+días** (una venta, una baja, el retiro por un recall): así el lote retirado hoy por un recall sigue a la vista en
+cuarentena con 0 u. aunque haya ingresado hace meses (SPEC §6.3 "con quantity > 0 o recientes").
 `rotationRank` = posición de salida **dentro de su sucursal** (1 = "1º sale"); es `null` para los lotes que ya no
 son vendibles (vencidos, agotados o en cuarentena). El orden respeta `tenant_settings.stock_rotation`
 (FIFO o FEFO) y pone primero los lotes con `discountPct` (SPEC §4.2). Código inexistente → **404 `NOT_FOUND`**.
 
 ### `GET /api/tenant/products/{id}/movements?limit=12`
 Vista acotada y de solo lectura de los últimos movimientos del producto **en el alcance**, para la ficha
-(el historial completo con filtros es del módulo A2). `limit` 1..100, por defecto 12.
+(el historial completo con filtros es del módulo A2). `limit` 1..50 (se recorta a ese rango), por defecto 12.
+La ven jefe, administrador y empleado (SPEC §3.3: "ficha con lotes y movimientos del producto"). Como el historial de
+ventas es solo del jefe y del administrador, **para el empleado `unitPrice`, `discountPct`, `totalAmount` y `batchRef`
+vienen en `null`**: ve qué pasó con el stock (tipo, cantidad, lote, sucursal, quién y cuándo) pero no los importes ni
+la referencia del comprobante.
 ```json
 [{"id":9,"branchId":1,"branchName":"Sucursal Centro","lotId":10,"lotNumber":"LP2409C","type":"ENTRY",
   "quantity":18,"unitPrice":null,"discountPct":null,"totalAmount":null,"source":"SCAN","batchRef":null,
@@ -233,9 +248,9 @@ La pantalla lo muestra como aviso y deja seguir a mano: **la cámara nunca es un
 | Ruta | Página | Qué hace |
 |---|---|---|
 | `/app/inventory` | `InventoryPage` | Búsqueda (lee `?q=` del buscador de la barra superior), filtro por categoría y segmentado de estado de stock. Con "Todas las sucursales" agrega **una columna por sucursal**. Acciones rápidas por fila (cargar mercadería, editar), link "Importar Excel/CSV" (solo admin) y estado vacío de comercio nuevo. |
-| `/app/products/:id` | `ProductDetailPage` | KPI (vendible, próximo vencimiento, vencido pendiente, precio), **lotes en orden de salida** con `LotRankChip` + `ExpiryChip` (los no vendibles muestran su estado en vez del orden), datos, stock por sucursal, movimientos recientes y el resumen de IA si el módulo B lo devuelve. Avisos de cuarentena y de producto dado de baja. |
+| `/app/products/:id` | `ProductDetailPage` | KPI (vendible, próximo vencimiento, vencido pendiente, precio), **lotes en orden de salida** con `LotRankChip` + `ExpiryChip` (los no vendibles muestran su estado en vez del orden; sin lotes a la vista pero con movimientos dice "Sin lotes con stock", no "no tiene lotes cargados"), datos, stock por sucursal (solo las que manejan el producto), movimientos recientes y "Lo que ve la IA" (jefe y admin): una fila por sucursal del alcance leída de `GET /tenant/insights/products` (patrón, clase ABC, venta diaria, fecha estimada de quiebre). Avisos de cuarentena y de producto dado de baja. |
 | `/app/products/new` · `/:id/edit` | `ProductFormPage` | Alta y edición con campo de código de barras + botón de escáner, autocompletado con la base pública, **creación de categoría inline**, precios, stock mínimo y "tiene vencimiento". |
-| `/app/intake` | `IntakePage` | La pantalla móvil de carga: `BarcodeScanner`, código a mano y lector USB (`useBarcodeWedge`); producto encontrado → tarjeta, desconocido → datos de Open Food Facts y "Crear el producto"; "Leer vencimiento y lote con la cámara" → `CameraCapture` → chips de OCR con su confianza; stepper de cantidad, costo, proveedor, `BranchPicker` cuando el alcance es "todas"; lotes existentes en orden de salida con el lote nuevo resaltado; **panel rojo que bloquea si hay recall** y aviso de FIFO que no bloquea; toast de éxito y lista "Cargaste hoy". |
+| `/app/intake` | `IntakePage` | La pantalla móvil de carga: `BarcodeScanner`, código a mano y lector USB (`useBarcodeWedge`); producto encontrado → tarjeta, desconocido → datos de Open Food Facts y "Crear el producto"; "Leer vencimiento y lote con la cámara" → `CameraCapture` → chips de OCR con su confianza; stepper de cantidad, costo, proveedor, `BranchPicker` cuando el alcance es "todas"; lotes existentes en orden de salida con el lote nuevo resaltado; **panel rojo que bloquea si hay recall** y aviso de FIFO que no bloquea; **vencimiento ya pasado**: aviso rojo, el lote figura "Vencido" (sin orden de salida) y "Registrar ingreso" pide confirmación; toast de éxito y lista "Cargaste hoy". El origen del lote sigue a cómo llegó el código (cámara o lector → `SCAN`, tipeado → `MANUAL`, lectura de etiqueta → `OCR`). Después de registrar, la tarjeta suma el lote nuevo (con `existingLots` de la respuesta) y relee el producto, así el aviso de FIFO de la próxima caja sale antes de guardar. |
 | `/app/categories` | `CategoriesPage` | ABM con diálogo; el borrado avisa cuando la categoría tiene productos. |
 | `/app/suppliers` | `SuppliersPage` | ABM con diálogo y **link de WhatsApp** armado desde el teléfono (`wa.me`, agrega el código de país argentino si falta). |
 
@@ -248,19 +263,22 @@ pantallas y textos en voseo rioplatense.
 
 ## 8. Decisiones tomadas
 
-1. **`GET /tenant/products/{id}/movements` no está en el SPEC**: la ficha del producto necesitaba los movimientos
-   recientes y `GET /tenant/movements` (módulo A2) es solo para el administrador. Se agregó este endpoint acotado
-   (solo ese producto, solo el alcance, sin filtros, máximo 100 filas) con el permiso de inventario. No pisa el
-   endpoint de A2.
+1. **`GET /tenant/products/{id}/movements`**: la ficha del producto necesita los movimientos recientes y
+   `GET /tenant/movements` (módulo A2) es del jefe y del administrador. Este endpoint acotado (solo ese producto, solo
+   el alcance, sin filtros, máximo 50 filas) usa el permiso de lectura de inventario, como pide SPEC §3.3 ("ficha con
+   lotes y movimientos del producto" para jefe, admin y empleado). Para el empleado salen sin importes ni `batchRef`
+   (el historial de ventas no es de su rol). No pisa el endpoint de A2.
 2. **`DELETE` de productos y proveedores devuelve `{"deactivated":boolean}`** en vez de 204, para que la pantalla
    diga si el registro se eliminó o quedó desactivado (el SPEC define la regla pero no cómo informarla).
 3. **`GET /tenant/suppliers` acepta `includeInactive`** (por defecto `true`): la carga de mercadería solo ofrece
    proveedores activos y las pantallas de administración necesitan ver los dados de baja.
 4. **Editar un producto lo puede hacer el empleado** (SPEC §3.3 *"Inventario … crear/editar productos"* con ✔ para
    EMPLOYEE). En la ficha solo se oculta "Dar de baja", que es exclusivo del administrador.
-5. **El resumen de IA de la ficha es una lectura opcional** de `GET /tenant/insights/products/{id}` (módulo B): se
-   pide solo para jefe y administrador, sin reintentos, y si no llega la tarjeta no se dibuja. El tipo del frontend
-   tiene todos los campos opcionales para no acoplarse al contrato de ese módulo mientras se construye en paralelo.
+5. **El resumen de IA de la ficha lee `GET /tenant/insights/products?q=<código o nombre>`** (módulo B) y se queda
+   con las filas del producto: una por sucursal del alcance, así funciona igual con una sucursal elegida o con
+   "Todas" (la ficha de IA `GET /tenant/insights/products/{id}` exige una sucursal y respondía 400 `BRANCH_REQUIRED`
+   en la vista consolidada). Se pide solo para jefe y administrador, sin reintentos; si el producto todavía no tiene
+   análisis, la tarjeta no se dibuja.
 6. **`lot_number` guarda lo que se escribió** y la normalización va en `lot_number_normalized` (SPEC §4.2), que es
    lo que usa el recall. La pantalla de carga normaliza mientras se tipea, así que en la práctica se guarda en
    mayúsculas y sin separadores.
