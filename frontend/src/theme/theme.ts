@@ -5,8 +5,9 @@
  * - sin atributo en `<html>` → sigue al sistema operativo (`prefers-color-scheme`);
  * - `data-theme="light"` / `data-theme="dark"` → elección explícita, gana siempre.
  *
- * Acá solo se guarda la preferencia y se aplica el atributo. El script inline de `index.html` repite la clave y los
- * colores de la barra del navegador para aplicar el tema antes del primer pintado: si cambiás algo acá, cambialo allá.
+ * Acá solo se guarda la preferencia y se aplica el atributo. `public/theme-init.js` (cargado en el `<head>` de
+ * `index.html`) repite la clave y los colores de la barra del navegador para aplicar el tema antes del primer pintado:
+ * si cambiás algo acá, cambialo allá.
  */
 
 export type ThemePreference = 'system' | 'light' | 'dark';

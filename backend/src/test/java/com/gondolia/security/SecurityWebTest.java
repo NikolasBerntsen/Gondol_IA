@@ -317,6 +317,25 @@ class SecurityWebTest {
                 .andExpect(status().isForbidden());
     }
 
+    /**
+     * Los mismos valores que pone nginx (que oculta los del backend): una sola vez cada uno y sin HSTS aunque la request
+     * llegue como HTTPS a través del proxy.
+     */
+    @Test
+    void securityHeadersAreSingleConsistentAndWithoutHsts() throws Exception {
+        mvc.perform(get("/api/tenant/ping").secure(true).header(HttpHeaders.AUTHORIZATION, bearer(ADMIN)))
+                .andExpect(status().isOk())
+                .andExpect(header().stringValues("X-Frame-Options", "DENY"))
+                .andExpect(header().stringValues("X-Content-Type-Options", "nosniff"))
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsStringIgnoringCase("no-store")))
+                .andExpect(header().doesNotExist("Strict-Transport-Security"));
+
+        mvc.perform(get("/api/tenant/ping").secure(true))
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().stringValues("X-Frame-Options", "DENY"))
+                .andExpect(header().doesNotExist("Strict-Transport-Security"));
+    }
+
     private String bearer(AuthUser authUser) {
         when(userAccessValidator.validate(eq(authUser.id()), anyInt())).thenReturn(authUser);
         return "Bearer " + jwtService.issue(user(authUser, 0));

@@ -69,6 +69,21 @@ map "$http_origin|$scheme://$http_host" $gondolia_upstream_origin {
     "~*^([^|]+)\|\1$"   "";
 }
 
+# "path" de los errores JSON que genera nginx en /api/ (backend caído, cuerpo demasiado grande). Solo si se puede
+# poner tal cual dentro de un string JSON; si no, queda vacío.
+map $uri $gondolia_error_path {
+    "~^[A-Za-z0-9/._~-]*$"  $uri;
+    default                 "";
+}
+
+# connect-src de la CSP (snippets/gondolia-csp.conf): el WebSocket de STOMP va a ws(s)://<mismo host:puerto>/ws.
+# 'self' ya lo cubre con CSP 3, pero los Safari viejos no lo aplican a ws/wss; por eso se agrega explícito
+# (solo si el Host es un host[:puerto] válido).
+map $http_host $gondolia_csp_websocket {
+    "~^[A-Za-z0-9.:\[\]-]+$"  "ws://$http_host wss://$http_host";
+    default                   "";
+}
+
 server {
     listen 80 default_server;
     server_name _;
