@@ -197,7 +197,18 @@ public class SpreadsheetParser {
             LocalDate date = cell.getLocalDateTimeCellValue().toLocalDate();
             return date.format(DMY);
         }
-        return BigDecimal.valueOf(value).stripTrailingZeros().toPlainString();
+        return plainNumber(value);
+    }
+
+    /**
+     * Texto de una celda numérica que {@link ImportValues#number} vuelve a leer igual. Un número con exactamente
+     * tres decimales («12.474», p. ej. un precio × 1,1 calculado en el Excel) se leería como miles: se le agrega un
+     * cero («12.4740») para que el punto quede sin ambigüedad como separador decimal.
+     */
+    static String plainNumber(double value) {
+        String text = BigDecimal.valueOf(value).stripTrailingZeros().toPlainString();
+        int dot = text.indexOf('.');
+        return dot >= 0 && text.length() - dot - 1 == 3 ? text + "0" : text;
     }
 
     // -----------------------------------------------------------------------

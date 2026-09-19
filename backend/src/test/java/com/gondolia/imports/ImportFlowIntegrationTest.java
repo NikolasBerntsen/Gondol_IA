@@ -308,6 +308,52 @@ class ImportFlowIntegrationTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void exportsTheCatalogToExcelWithNumbersAndDatesThatReimportCleanly() throws Exception {
+        ImportDtos.JobDto job = validate(upload(csv()));
+        importService.bulk(job.id(), new ImportDtos.BulkRowsRequest(null, ImportRowStatus.ERROR, "SKIP", null, null));
+        applyService.run(importService.apply(job.id(), false).id(), tenantA, adminA.id(),
+                branchAccess.accessibleBranches());
+
+        byte[] xlsx = fileService.export("xlsx", true).content();
+
+        try (var workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook(new java.io.ByteArrayInputStream(xlsx))) {
+            var sheet = workbook.getSheet("Productos");
+            org.apache.poi.ss.usermodel.Row milk = null;
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                var row = sheet.getRow(i);
+                var lot = row.getCell(ImportField.LOT_NUMBER.ordinal());
+                if (lot != null && "L1".equals(lot.getStringCellValue())) {
+                    milk = row;
+                }
+            }
+            assertThat(milk).as("fila del lote L1").isNotNull();
+            assertThat(milk.getCell(ImportField.BARCODE.ordinal()).getStringCellValue()).isEqualTo("TESTLECHE");
+            var cost = milk.getCell(ImportField.COST_PRICE.ordinal());
+            assertThat(cost.getCellType()).isEqualTo(org.apache.poi.ss.usermodel.CellType.NUMERIC);
+            assertThat(cost.getNumericCellValue()).isEqualTo(950d);
+            assertThat(milk.getCell(ImportField.MIN_STOCK.ordinal()).getCellType())
+                    .isEqualTo(org.apache.poi.ss.usermodel.CellType.NUMERIC);
+            assertThat(milk.getCell(ImportField.QUANTITY.ordinal()).getNumericCellValue()).isEqualTo(10d);
+            var expiry = milk.getCell(ImportField.EXPIRY_DATE.ordinal());
+            assertThat(org.apache.poi.ss.usermodel.DateUtil.isCellDateFormatted(expiry)).isTrue();
+            assertThat(expiry.getLocalDateTimeCellValue().toLocalDate()).isEqualTo(java.time.LocalDate.of(2026, 10, 15));
+        }
+
+        // Reimportar la planilla exportada (sin cargar stock) actualiza el mismo catálogo sin errores.
+        ImportDtos.JobDto uploaded = importService.upload(
+                new MockMultipartFile("file", "catalogo.xlsx", ImportFileService.XLSX_TYPE, xlsx), null);
+        ImportDtos.JobDto reimport = importService.saveMapping(uploaded.id(), new ImportDtos.MappingRequest(
+                uploaded.suggestedMapping(), new ImportDtos.OptionsRequest(true, true, true, false, centro, "DMY")));
+        assertThat(reimport.errorRows()).isZero();
+        assertThat(reimport.preview().productsToCreate()).isZero();
+        ImportRowStore.StoredRow first = rowStore.allRows(reimport.id()).stream()
+                .filter(r -> "L1".equals(r.data().get("lotNumber"))).findFirst().orElseThrow();
+        assertThat(com.gondolia.imports.parse.ImportValues.number(first.data().get("costPrice")))
+                .hasValueSatisfying(v -> assertThat(v).isEqualByComparingTo("950"));
+        assertThat(first.data().get("expiryDate")).isEqualTo("15/10/2026");
+    }
+
+    @Test
     void writesAnErrorsCsvWithTheReasonOfEachCell() {
         ImportDtos.JobDto job = validate(upload(csv()));
 
