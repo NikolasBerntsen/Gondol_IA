@@ -5,12 +5,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.gondolia.common.error.ApiException;
 import com.gondolia.domain.imports.ImportFileFormat;
+import com.gondolia.imports.parse.ImportValues;
 import com.gondolia.imports.parse.ParsedSheet;
 import com.gondolia.imports.parse.SpreadsheetParser;
 import java.io.ByteArrayOutputStream;
+import java.math.BigDecimal;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.util.List;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.Row;
@@ -118,6 +121,29 @@ class SpreadsheetParserTest {
                 "24",                        // el número entero no trae ".0"
                 "15/10/2026",                // fecha nativa formateada dd/MM/yyyy
                 "2400");                     // fórmula evaluada
+    }
+
+    @Test
+    void readsNumericCellsWithThreeDecimalsAsDecimalsNotThousands() {
+        byte[] content;
+        try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet data = workbook.createSheet("Productos");
+            data.createRow(0).createCell(0).setCellValue("Precio");
+            data.createRow(1).createCell(0).setCellValue(12.474);     // p. ej. =B2*1,1 en el Excel
+            data.createRow(2).createCell(0).setCellValue(1350.5);
+            data.createRow(3).createCell(0).setCellValue(2400d);
+            workbook.write(out);
+            content = out.toByteArray();
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+
+        ParsedSheet sheet = parser.parse(content, "catalogo.xlsx", null);
+
+        assertThat(sheet.rows()).extracting(List::getFirst).containsExactly("12.4740", "1350.5", "2400");
+        assertThat(sheet.rows()).extracting(row -> ImportValues.number(row.getFirst()).orElseThrow())
+                .usingElementComparator(BigDecimal::compareTo)
+                .containsExactly(new BigDecimal("12.474"), new BigDecimal("1350.5"), new BigDecimal("2400"));
     }
 
     @Test

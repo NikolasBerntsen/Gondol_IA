@@ -23,16 +23,21 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import org.apache.poi.ss.SpreadsheetVersion;
 import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.DataFormat;
 import org.apache.poi.ss.usermodel.FillPatternType;
 import org.apache.poi.ss.usermodel.Font;
 import org.apache.poi.ss.usermodel.HorizontalAlignment;
+import org.apache.poi.ss.usermodel.IgnoredErrorType;
 import org.apache.poi.ss.usermodel.IndexedColors;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -57,6 +62,8 @@ public class ImportFileService {
     /** Separador del CSV: Excel en español abre los `;` en columnas sin pedir nada. */
     private static final char CSV_DELIMITER = ';';
     private static final DateTimeFormatter DMY = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+    /** Columnas de identificadores: siempre texto en el Excel, aunque sean solo dígitos. */
+    private static final List<ImportField> IDENTIFIER_FIELDS = List.of(ImportField.BARCODE, ImportField.LOT_NUMBER);
 
     private final NamedParameterJdbcTemplate jdbc;
     private final BranchAccessService branchAccess;
@@ -71,22 +78,13 @@ public class ImportFileService {
     /** Plantilla con los encabezados en español, 4 filas de ejemplo y la hoja «Instrucciones». */
     public GeneratedFile template(String format) {
         List<String> headers = headers();
-        List<List<String>> examples = exampleRows();
+        List<List<Object>> examples = exampleRows();
         if (isCsv(format)) {
             return new GeneratedFile("gondolia-plantilla-productos.csv", CSV_TYPE, csv(headers, examples));
         }
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.createSheet("Productos");
-            writeHeader(workbook, sheet, headers);
-            int rowIndex = 1;
-            for (List<String> example : examples) {
-                Row row = sheet.createRow(rowIndex++);
-                for (int c = 0; c < example.size(); c++) {
-                    row.createCell(c).setCellValue(example.get(c));
-                }
-            }
-            autoSize(sheet, headers.size());
-            sheet.createFreezePane(0, 1);
+            writeProductsSheet(workbook, sheet, headers, examples);
             writeInstructions(workbook);
             workbook.write(out);
             return new GeneratedFile("gondolia-plantilla-productos.xlsx", XLSX_TYPE, out.toByteArray());
@@ -104,20 +102,27 @@ public class ImportFileService {
         return headers;
     }
 
-    /** Cuatro filas de ejemplo: el primer producto viene con dos lotes distintos (SPEC §16.3). */
-    private List<List<String>> exampleRows() {
+    /**
+     * Cuatro filas de ejemplo: el primer producto viene con dos lotes distintos (SPEC §16.3). Los valores van
+     * tipados (importes, enteros y fechas) para que el Excel los guarde como números y fechas de verdad.
+     */
+    private List<List<Object>> exampleRows() {
         return List.of(
                 List.of("7791234000012", "Leche entera La Pradera 1 L", "La Pradera", "Lácteos",
-                        "Distribuidora La Pampa", "LITRO", "950,00", "1.350,00", "12", "sí",
-                        "Sachet de 1 litro", "24", "L2409A", "15/10/2026", "01/09/2026", "Sucursal Centro"),
+                        "Distribuidora La Pampa", "LITRO", new BigDecimal("950.00"), new BigDecimal("1350.00"), 12,
+                        "sí", "Sachet de 1 litro", 24, "L2409A", LocalDate.of(2026, 10, 15),
+                        LocalDate.of(2026, 9, 1), "Sucursal Centro"),
                 List.of("7791234000012", "Leche entera La Pradera 1 L", "La Pradera", "Lácteos",
-                        "Distribuidora La Pampa", "LITRO", "950,00", "1.350,00", "12", "sí",
-                        "Sachet de 1 litro", "18", "L2410B", "28/10/2026", "10/09/2026", "Sucursal Centro"),
+                        "Distribuidora La Pampa", "LITRO", new BigDecimal("950.00"), new BigDecimal("1350.00"), 12,
+                        "sí", "Sachet de 1 litro", 18, "L2410B", LocalDate.of(2026, 10, 28),
+                        LocalDate.of(2026, 9, 10), "Sucursal Centro"),
                 List.of("7791234000029", "Yogur bebible frutilla Vaquita 1 L", "Vaquita", "Lácteos",
-                        "Distribuidora La Pampa", "LITRO", "1.180,00", "1.690,00", "8", "sí",
-                        "", "12", "Y2411", "05/11/2026", "12/09/2026", "Sucursal Centro"),
+                        "Distribuidora La Pampa", "LITRO", new BigDecimal("1180.00"), new BigDecimal("1690.00"), 8,
+                        "sí", "", 12, "Y2411", LocalDate.of(2026, 11, 5), LocalDate.of(2026, 9, 12),
+                        "Sucursal Centro"),
                 List.of("7791234000036", "Galletitas de agua Crocantes 200 g", "Crocantes", "Almacén",
-                        "", "PAQUETE", "620,00", "980,00", "10", "no", "", "30", "", "", "", "Sucursal Norte"));
+                        "", "PAQUETE", new BigDecimal("620.00"), new BigDecimal("980.00"), 10, "no", "", 30, "",
+                        "", "", "Sucursal Norte"));
     }
 
     private void writeInstructions(Workbook workbook) {
@@ -203,7 +208,7 @@ public class ImportFileService {
     public GeneratedFile export(String format, boolean includeStock) {
         Long tenantId = CurrentUser.tenantId();
         List<Long> branchIds = branchAccess.scopeBranchIds();
-        List<List<String>> rows = catalogRows(tenantId, branchIds, includeStock);
+        List<List<Object>> rows = catalogRows(tenantId, branchIds, includeStock);
         String date = LocalDate.now(clock).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
         List<String> headers = headers();
         if (isCsv(format)) {
@@ -211,16 +216,7 @@ public class ImportFileService {
         }
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.createSheet("Productos");
-            writeHeader(workbook, sheet, headers);
-            int rowIndex = 1;
-            for (List<String> values : rows) {
-                Row row = sheet.createRow(rowIndex++);
-                for (int c = 0; c < values.size(); c++) {
-                    row.createCell(c).setCellValue(values.get(c));
-                }
-            }
-            autoSize(sheet, headers.size());
-            sheet.createFreezePane(0, 1);
+            writeProductsSheet(workbook, sheet, headers, rows);
             workbook.write(out);
             return new GeneratedFile("gondolia-catalogo-" + date + ".xlsx", XLSX_TYPE, out.toByteArray());
         } catch (IOException e) {
@@ -229,7 +225,11 @@ public class ImportFileService {
         }
     }
 
-    private List<List<String>> catalogRows(Long tenantId, List<Long> branchIds, boolean includeStock) {
+    /**
+     * Filas del catálogo con los valores tipados: texto ({@link String}), importes ({@link BigDecimal}), enteros
+     * ({@link Integer}) y fechas ({@link LocalDate}); {@code null} = celda vacía.
+     */
+    private List<List<Object>> catalogRows(Long tenantId, List<Long> branchIds, boolean includeStock) {
         boolean withStock = includeStock && !branchIds.isEmpty();
         String sql = """
                 select p.barcode, p.name, p.brand, c.name as category_name, s.name as supplier_name, p.unit,
@@ -256,26 +256,26 @@ public class ImportFileService {
             params.addValue("branchIds", branchIds);
         }
         return jdbc.query(sql, params, (rs, index) -> {
-            List<String> values = new ArrayList<>(ImportField.values().length);
-            values.add(nullToEmpty(rs.getString("barcode")));
-            values.add(nullToEmpty(rs.getString("name")));
-            values.add(nullToEmpty(rs.getString("brand")));
-            values.add(nullToEmpty(rs.getString("category_name")));
-            values.add(nullToEmpty(rs.getString("supplier_name")));
-            values.add(nullToEmpty(rs.getString("unit")));
-            values.add(money(rs.getBigDecimal("cost_price")));
-            values.add(money(rs.getBigDecimal("sale_price")));
-            values.add(String.valueOf(rs.getInt("min_stock")));
+            List<Object> values = new ArrayList<>(ImportField.values().length);
+            values.add(rs.getString("barcode"));
+            values.add(rs.getString("name"));
+            values.add(rs.getString("brand"));
+            values.add(rs.getString("category_name"));
+            values.add(rs.getString("supplier_name"));
+            values.add(rs.getString("unit"));
+            values.add(rs.getBigDecimal("cost_price"));
+            values.add(rs.getBigDecimal("sale_price"));
+            values.add(rs.getInt("min_stock"));
             values.add(rs.getBoolean("perishable") ? "sí" : "no");
-            values.add(nullToEmpty(rs.getString("description")));
+            values.add(rs.getString("description"));
             Object quantity = rs.getObject("quantity");
-            values.add(quantity == null ? "" : String.valueOf(((Number) quantity).intValue()));
-            values.add(nullToEmpty(rs.getString("lot_number")));
+            values.add(quantity == null ? null : ((Number) quantity).intValue());
+            values.add(rs.getString("lot_number"));
             java.sql.Date expiry = rs.getDate("expiry_date");
-            values.add(expiry == null ? "" : expiry.toLocalDate().format(DMY));
+            values.add(expiry == null ? null : expiry.toLocalDate());
             Timestamp received = rs.getTimestamp("received_at");
-            values.add(received == null ? "" : received.toInstant().atZone(clock.getZone()).toLocalDate().format(DMY));
-            values.add(nullToEmpty(rs.getString("branch_name")));
+            values.add(received == null ? null : received.toInstant().atZone(clock.getZone()).toLocalDate());
+            values.add(rs.getString("branch_name"));
             return values;
         });
     }
@@ -350,24 +350,36 @@ public class ImportFileService {
         throw new BadRequestException(ErrorCodes.VALIDATION_ERROR, "El formato tiene que ser «xlsx» o «csv».");
     }
 
-    /** CSV con BOM UTF-8 y separador «;»: Excel en español lo abre en columnas sin configurar nada. */
-    byte[] csv(List<String> headers, List<List<String>> rows) {
+    /**
+     * CSV con BOM UTF-8 y separador «;»: Excel en español lo abre en columnas sin configurar nada. Los importes
+     * salen como «1.234,50» y las fechas como dd/mm/aaaa, igual que en la plantilla.
+     */
+    byte[] csv(List<String> headers, List<? extends List<?>> rows) {
         StringBuilder builder = new StringBuilder("﻿");
         appendCsvRow(builder, headers);
-        for (List<String> row : rows) {
+        for (List<?> row : rows) {
             appendCsvRow(builder, row);
         }
         return builder.toString().getBytes(StandardCharsets.UTF_8);
     }
 
-    private void appendCsvRow(StringBuilder builder, List<String> values) {
+    private void appendCsvRow(StringBuilder builder, List<?> values) {
         for (int i = 0; i < values.size(); i++) {
             if (i > 0) {
                 builder.append(CSV_DELIMITER);
             }
-            builder.append(escape(values.get(i)));
+            builder.append(escape(csvText(values.get(i))));
         }
         builder.append("\r\n");
+    }
+
+    private String csvText(Object value) {
+        return switch (value) {
+            case null -> "";
+            case BigDecimal amount -> money(amount);
+            case LocalDate date -> date.format(DMY);
+            default -> value.toString();
+        };
     }
 
     private String escape(String value) {
@@ -377,6 +389,86 @@ public class ImportFileService {
             return '"' + text.replace("\"", "\"\"") + '"';
         }
         return text;
+    }
+
+    /**
+     * Hoja «Productos» con celdas tipadas: los importes, cantidades y fechas se escriben como números y fechas de
+     * Excel (con formato «#,##0.00», entero y dd/mm/aaaa) para que se puedan ordenar, sumar y filtrar antes de
+     * reimportar; el lector de la importación los vuelve a leer igual. El código de barras y el número de lote son
+     * identificadores: quedan como texto, con la columna en formato Texto (lo que se tipee abajo no pierde ceros a la
+     * izquierda ni sale en notación científica) y sin el aviso de «número almacenado como texto».
+     */
+    private void writeProductsSheet(Workbook workbook, Sheet sheet, List<String> headers,
+                                    List<? extends List<?>> rows) {
+        writeHeader(workbook, sheet, headers);
+        CellStyles styles = CellStyles.of(workbook);
+        int rowIndex = 1;
+        for (List<?> values : rows) {
+            Row row = sheet.createRow(rowIndex++);
+            for (int c = 0; c < values.size(); c++) {
+                writeCell(row, c, values.get(c), styles);
+            }
+        }
+        autoSize(sheet, headers.size());
+        for (ImportField field : IDENTIFIER_FIELDS) {
+            int column = field.ordinal();
+            sheet.setDefaultColumnStyle(column, styles.text());
+            if (sheet instanceof XSSFSheet xssf) {
+                xssf.addIgnoredErrors(new CellRangeAddress(0, SpreadsheetVersion.EXCEL2007.getLastRowIndex(),
+                        column, column), IgnoredErrorType.NUMBER_STORED_AS_TEXT);
+            }
+        }
+        sheet.createFreezePane(0, 1);
+    }
+
+    private void writeCell(Row row, int column, Object value, CellStyles styles) {
+        switch (value) {
+            case null -> {
+                // Celda vacía: no se crea.
+            }
+            case String text when text.isEmpty() -> {
+                // Idem.
+            }
+            case String text -> {
+                Cell cell = row.createCell(column);
+                cell.setCellValue(text);
+                if (IDENTIFIER_FIELDS.stream().anyMatch(field -> field.ordinal() == column)) {
+                    cell.setCellStyle(styles.text());
+                }
+            }
+            case BigDecimal amount -> {
+                Cell cell = row.createCell(column);
+                cell.setCellValue(amount.setScale(2, RoundingMode.HALF_UP).doubleValue());
+                cell.setCellStyle(styles.money());
+            }
+            case Number number -> {
+                Cell cell = row.createCell(column);
+                cell.setCellValue(number.longValue());
+                cell.setCellStyle(styles.integer());
+            }
+            case LocalDate date -> {
+                Cell cell = row.createCell(column);
+                cell.setCellValue(date);
+                cell.setCellStyle(styles.date());
+            }
+            default -> row.createCell(column).setCellValue(value.toString());
+        }
+    }
+
+    /** Estilos de las celdas de datos (uno por tipo, compartidos por toda la hoja). */
+    private record CellStyles(CellStyle text, CellStyle money, CellStyle integer, CellStyle date) {
+
+        static CellStyles of(Workbook workbook) {
+            DataFormat format = workbook.createDataFormat();
+            return new CellStyles(style(workbook, format, "@"), style(workbook, format, "#,##0.00"),
+                    style(workbook, format, "0"), style(workbook, format, "dd/mm/yyyy"));
+        }
+
+        private static CellStyle style(Workbook workbook, DataFormat format, String pattern) {
+            CellStyle style = workbook.createCellStyle();
+            style.setDataFormat(format.getFormat(pattern));
+            return style;
+        }
     }
 
     private void writeHeader(Workbook workbook, Sheet sheet, List<String> headers) {

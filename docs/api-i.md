@@ -23,7 +23,7 @@ Base: `/api/tenant/imports`. Errores con el formato estándar (`{timestamp,statu
 |---|---|---|
 | GET | `/fields` | Campos importables con etiqueta, tipo, descripción, sinónimos y grupo (`producto`/`stock`). |
 | GET | `/template?format=xlsx\|csv` | Plantilla con encabezados en español, 4 filas de ejemplo (la leche con 2 lotes) y hoja «Instrucciones» (xlsx). |
-| GET | `/export?format=xlsx\|csv&includeStock=true` | Catálogo actual con **las mismas columnas** de la plantilla; con `includeStock` una fila por lote con stock (`ACTIVE`/`RECALLED`) del alcance, y una fila sin cantidad para los productos sin stock. |
+| GET | `/export?format=xlsx\|csv&includeStock=true` | Catálogo actual con **las mismas columnas** de la plantilla; con `includeStock` una fila por lote con stock (`ACTIVE`/`RECALLED`) del alcance, y una fila sin cantidad para los productos sin stock. En xlsx (y en la plantilla) los importes, cantidades, stock mínimo y fechas son celdas numéricas y de fecha de Excel (`#,##0.00`, entero, `dd/mm/aaaa`), no texto; el código de barras va como texto. |
 | POST | `/` (multipart `file` [+ `sheetName`]) | Sube y parsea el archivo → `ImportJobDto` en `UPLOADED` con encabezados, mapeo sugerido y filas de muestra. |
 | GET | `/?page=&size=` | Historial (`PageResponse<ImportJobSummaryDto>`), más nuevas primero. |
 | GET | `/{id}` | Detalle (`ImportJobDto`). Mientras está `APPLYING`, `processedRows`/`progressPct` sirven para la barra de progreso. |
