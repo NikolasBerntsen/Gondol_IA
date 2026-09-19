@@ -532,8 +532,9 @@ export default function PosTicketPage() {
 }
 ```
 
-- `gd-no-print` (en `index.css`) oculta cualquier cosa al imprimir; el `@media print` global ya pone fondo blanco y
-  **fuerza los tokens claros** (aunque el usuario tenga el tema oscuro, se imprime en claro).
+- `gd-no-print` (en `index.css`) oculta cualquier cosa al imprimir; el `@media print` global ya pone fondo blanco (el
+  body y `--background`, así `bg-background` no imprime el lienzo gris) y **fuerza los tokens claros** (aunque el
+  usuario tenga el tema oscuro, se imprime en claro).
 - El ticket mide 302 px (80 mm) y usa `--paper`/`--paper-ink`: en pantalla sigue siendo papel en tema oscuro.
 - Después de cobrar, mostrá el mismo `Ticket80mm` dentro del diálogo con "Imprimir" y "Nueva venta"; el link a esta
   página sirve para reimprimir desde el historial.
