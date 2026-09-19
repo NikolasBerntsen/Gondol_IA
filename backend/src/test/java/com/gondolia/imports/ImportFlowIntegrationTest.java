@@ -235,6 +235,32 @@ class ImportFlowIntegrationTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void warnsAboutRecallsAndLeavesTheLotInQuarantine() {
+        String barcode = data.barcode();
+        long recall = data.recall(barcode, false, null, null, "PUBLISHED", "R-77/a");
+        try {
+            String csv = "Código;Producto;Cantidad;Lote;Vencimiento\r\n"
+                    + barcode + ";Sopa de tomate test;5;r77a;10/12/2026\r\n"
+                    + barcode + ";Sopa de tomate test;3;OTRO;10/12/2026\r\n";
+
+            ImportDtos.JobDto job = validate(upload(csv.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+
+            assertMessages(job.id(), 1, ImportRowStatus.WARNING, "lotNumber", "alerta de recall");
+            assertThat(job.preview().recallWarnings()).hasSize(1).first().asString().startsWith("Fila 1");
+
+            applyService.run(importService.apply(job.id(), false).id(), tenantA, adminA.id(),
+                    branchAccess.accessibleBranches());
+
+            assertThat(importService.get(job.id()).result().recallMatches()).isEqualTo(1);
+            Long lotId = rowStore.allRows(job.id()).getFirst().lotId();
+            assertThat(jdbc.queryForObject("select status from lots where id = ?", String.class, lotId))
+                    .isEqualTo("RECALLED");
+        } finally {
+            jdbc.update("delete from announcements where id = ?", recall);
+        }
+    }
+
+    @Test
     void keepsEachTenantInsideItsOwnImports() {
         ImportDtos.JobDto job = validate(upload(csv()));
 

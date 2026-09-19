@@ -344,7 +344,7 @@ public class SpreadsheetParser {
             rows.add(aligned);
             if (rows.size() > MAX_ROWS) {
                 throw new BadRequestException(ErrorCodes.INVALID_FILE,
-                        "El archivo tiene más de " + MAX_ROWS + " filas. Dividilo en varias importaciones.");
+                        "El archivo tiene más de 10.000 filas. Dividilo en varias importaciones.");
             }
         }
         if (rows.isEmpty()) {
