@@ -86,9 +86,10 @@ public class ImportChunkProcessor {
                 branchIdsBySlug.putIfAbsent(ImportValues.slug(branch.code()), branch.id());
             }
         }
+        CatalogCache cache = new CatalogCache(tenantId);
         for (ImportRowStore.StoredRow row : rows) {
             try {
-                applyRow(jobId, tenantId, userId, options, branchIdsBySlug, row, totals, base);
+                applyRow(jobId, tenantId, userId, options, branchIdsBySlug, cache, row, totals, base);
             } catch (ApiException e) {
                 totals.rowsFailed++;
                 List<ImportDtos.RowMessageDto> messages = new ArrayList<>(row.messages());
@@ -102,8 +103,8 @@ public class ImportChunkProcessor {
     }
 
     private void applyRow(Long jobId, Long tenantId, Long userId, ImportOptions options,
-                          Map<String, Long> branchIdsBySlug, ImportRowStore.StoredRow row, Totals totals,
-                          Instant base) {
+                          Map<String, Long> branchIdsBySlug, CatalogCache cache, ImportRowStore.StoredRow row,
+                          Totals totals, Instant base) {
         ParsedRow parsed = ImportRowParser.parse(row.data(), options.dateFormat());
         if (parsed.name() == null) {
             List<ImportDtos.RowMessageDto> messages = new ArrayList<>(row.messages());
@@ -112,14 +113,16 @@ public class ImportChunkProcessor {
             totals.rowsFailed++;
             return;
         }
-        Long categoryId = resolveCategory(tenantId, parsed.category(), options, totals);
-        Long supplierId = resolveSupplier(tenantId, parsed.supplier(), options, totals);
-        Product product = findProduct(tenantId, parsed);
+        Long categoryId = cache.category(parsed.category(), options, totals);
+        Long supplierId = cache.supplier(parsed.supplier(), options, totals);
+        Product product = cache.product(parsed);
         if (product == null) {
             product = createProduct(tenantId, parsed, categoryId, supplierId);
+            cache.remember(product);
             totals.productsCreated++;
         } else if (row.action() == ImportRowAction.UPDATE) {
             updateProduct(product, parsed, categoryId, supplierId);
+            cache.remember(product);
             totals.productsUpdated++;
         }
 
@@ -161,17 +164,6 @@ public class ImportChunkProcessor {
             return branchIdsBySlug.get(ImportValues.slug(parsed.branch()));
         }
         return options.defaultBranchId();
-    }
-
-    private Product findProduct(Long tenantId, ParsedRow parsed) {
-        if (parsed.barcode() != null) {
-            return productRepository.findByTenantIdAndBarcode(tenantId, parsed.barcode()).orElse(null);
-        }
-        String slug = ImportValues.slug(parsed.name());
-        return productRepository.findByTenantId(tenantId).stream()
-                .filter(p -> ImportValues.slug(p.getName()).equals(slug))
-                .findFirst()
-                .orElse(null);
     }
 
     private Product createProduct(Long tenantId, ParsedRow parsed, Long categoryId, Long supplierId) {
@@ -236,48 +228,90 @@ public class ImportChunkProcessor {
         if (parsed.perishable() != null) {
             product.setPerishable(parsed.perishable());
         }
+        // Reimportar un producto dado de baja con «Actualizar los existentes» lo vuelve a activar (la validación avisa).
+        product.setActive(true);
         productRepository.saveAndFlush(product);
     }
 
-    private Long resolveCategory(Long tenantId, String name, ImportOptions options, Totals totals) {
-        if (name == null) {
-            return null;
-        }
-        return categoryRepository.findByTenantIdAndNameIgnoreCase(tenantId, name)
-                .map(Category::getId)
-                .orElseGet(() -> {
-                    if (!options.createCategories()) {
-                        return null;
-                    }
-                    Category category = new Category();
-                    category.setTenantId(tenantId);
-                    category.setName(name);
-                    totals.categoriesCreated++;
-                    return categoryRepository.saveAndFlush(category).getId();
-                });
-    }
+    /**
+     * Catálogo del comercio cargado una vez por bloque. Categorías, proveedores y productos sin código se buscan por
+     * nombre sin acentos ni mayúsculas, igual que en la validación: «Almacen» usa la categoría «Almacén» existente.
+     */
+    private final class CatalogCache {
 
-    private Long resolveSupplier(Long tenantId, String name, ImportOptions options, Totals totals) {
-        if (name == null) {
-            return null;
+        private final Long tenantId;
+        private Map<String, Long> categories;
+        private Map<String, Long> suppliers;
+        private Map<String, Product> productsByName;
+
+        private CatalogCache(Long tenantId) {
+            this.tenantId = tenantId;
         }
-        String slug = ImportValues.slug(name);
-        Supplier existing = supplierRepository.findByTenantIdOrderByNameAsc(tenantId).stream()
-                .filter(s -> ImportValues.slug(s.getName()).equals(slug))
-                .findFirst()
-                .orElse(null);
-        if (existing != null) {
-            return existing.getId();
+
+        Long category(String name, ImportOptions options, Totals totals) {
+            if (name == null) {
+                return null;
+            }
+            if (categories == null) {
+                categories = new HashMap<>();
+                categoryRepository.findByTenantIdOrderByNameAsc(tenantId)
+                        .forEach(c -> categories.putIfAbsent(ImportValues.slug(c.getName()), c.getId()));
+            }
+            String slug = ImportValues.slug(name);
+            Long existing = categories.get(slug);
+            if (existing != null || !options.createCategories()) {
+                return existing;
+            }
+            Category category = new Category();
+            category.setTenantId(tenantId);
+            category.setName(name);
+            Long id = categoryRepository.saveAndFlush(category).getId();
+            categories.put(slug, id);
+            totals.categoriesCreated++;
+            return id;
         }
-        if (!options.createSuppliers()) {
-            return null;
+
+        Long supplier(String name, ImportOptions options, Totals totals) {
+            if (name == null) {
+                return null;
+            }
+            if (suppliers == null) {
+                suppliers = new HashMap<>();
+                supplierRepository.findByTenantIdOrderByNameAsc(tenantId)
+                        .forEach(s -> suppliers.putIfAbsent(ImportValues.slug(s.getName()), s.getId()));
+            }
+            String slug = ImportValues.slug(name);
+            Long existing = suppliers.get(slug);
+            if (existing != null || !options.createSuppliers()) {
+                return existing;
+            }
+            Supplier supplier = new Supplier();
+            supplier.setTenantId(tenantId);
+            supplier.setName(name);
+            supplier.setActive(true);
+            Long id = supplierRepository.saveAndFlush(supplier).getId();
+            suppliers.put(slug, id);
+            totals.suppliersCreated++;
+            return id;
         }
-        Supplier supplier = new Supplier();
-        supplier.setTenantId(tenantId);
-        supplier.setName(name);
-        supplier.setActive(true);
-        totals.suppliersCreated++;
-        return supplierRepository.saveAndFlush(supplier).getId();
+
+        /** Producto existente: por código de barras o, si la fila no trae código, por nombre exacto (SPEC §16.2). */
+        Product product(ParsedRow parsed) {
+            if (parsed.barcode() != null) {
+                return productRepository.findByTenantIdAndBarcode(tenantId, parsed.barcode()).orElse(null);
+            }
+            if (productsByName == null) {
+                productsByName = new HashMap<>();
+                productRepository.findByTenantId(tenantId).forEach(this::remember);
+            }
+            return productsByName.get(ImportValues.slug(parsed.name()));
+        }
+
+        void remember(Product product) {
+            if (productsByName != null) {
+                productsByName.putIfAbsent(ImportValues.slug(product.getName()), product);
+            }
+        }
     }
 
     /** Cierra la importación: guarda el resultado y avisa al administrador que la lanzó. */

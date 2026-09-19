@@ -197,6 +197,44 @@ class ImportFlowIntegrationTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void reusesCatalogNamesWithoutAccentsAndReactivatesDeletedProducts() {
+        jdbc.update("insert into categories (tenant_id, name) values (?, 'Almacén')", tenantA);
+        data.supplier(tenantA, "Distribuidora Pérez");
+        long deleted = data.product(tenantA, "7790000000010", "Yerba de baja", "900", "1500");
+        jdbc.update("update products set active = false where id = ?", deleted);
+        String csv = "Código;Producto;Rubro;Proveedor;Cantidad\r\n"
+                + "7790000000010;Yerba reactivada;ALMACEN;distribuidora perez;6\r\n"
+                + ";Galletitas sin código;almacen;Distribuidora Perez;3\r\n";
+
+        ImportDtos.JobDto job = validate(upload(csv.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+
+        assertThat(job.errorRows()).isZero();
+        assertThat(job.preview().categoriesToCreate()).isEmpty();
+        assertThat(job.preview().suppliersToCreate()).isEmpty();
+        assertMessages(job.id(), 1, ImportRowStatus.WARNING, null, "estaba dado de baja");
+
+        applyService.run(importService.apply(job.id(), false).id(), tenantA, adminA.id(),
+                branchAccess.accessibleBranches());
+
+        ImportDtos.ResultDto result = importService.get(job.id()).result();
+        assertThat(result.categoriesCreated()).isZero();
+        assertThat(result.suppliersCreated()).isZero();
+        assertThat(result.productsUpdated()).isEqualTo(1);
+        assertThat(result.productsCreated()).isEqualTo(1);
+        assertThat(result.unitsLoaded()).isEqualTo(9);
+        assertThat(jdbc.queryForObject("select count(*) from categories where tenant_id = ?", Long.class, tenantA))
+                .isEqualTo(1L);
+        assertThat(jdbc.queryForObject("select active from products where id = ?", Boolean.class, deleted)).isTrue();
+
+        // Sin «Actualizar los existentes», cargar stock a un producto dado de baja es un error de la fila.
+        jdbc.update("update products set active = false where id = ?", deleted);
+        ImportDtos.JobDto second = importService.saveMapping(upload(csv.getBytes(
+                java.nio.charset.StandardCharsets.UTF_8)).id(), new ImportDtos.MappingRequest(
+                job.columnMapping(), new ImportDtos.OptionsRequest(false, true, true, true, centro, "DMY")));
+        assertMessages(second.id(), 1, ImportRowStatus.ERROR, "quantity", "está dado de baja");
+    }
+
+    @Test
     void keepsEachTenantInsideItsOwnImports() {
         ImportDtos.JobDto job = validate(upload(csv()));
 

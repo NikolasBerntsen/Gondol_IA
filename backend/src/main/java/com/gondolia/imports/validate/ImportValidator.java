@@ -265,6 +265,18 @@ public class ImportValidator {
             }
             String reference = existing.getBarcode() != null ? "código " + existing.getBarcode()
                     : "nombre «" + existing.getName() + "»";
+            if (!existing.isActive()) {
+                if (options.updateExisting()) {
+                    messages.add(warning(null, "El producto estaba dado de baja (" + reference
+                            + "): se vuelve a activar con los datos de esta fila."));
+                    return ImportRowAction.UPDATE;
+                }
+                if (options.importStock() && parsed.quantityOrZero() > 0) {
+                    messages.add(error(ImportField.QUANTITY, "El producto está dado de baja (" + reference
+                            + "): activá «Actualizar los productos existentes» para reactivarlo y cargarle stock."));
+                    return ImportRowAction.SKIP;
+                }
+            }
             if (options.updateExisting()) {
                 messages.add(warning(null,
                         "El producto ya existe en tu catálogo (" + reference + "): se van a actualizar sus datos."));

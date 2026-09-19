@@ -4,8 +4,9 @@ import com.gondolia.domain.imports.ImportFileFormat;
 import com.gondolia.domain.imports.ImportRowAction;
 import com.gondolia.domain.imports.ImportRowStatus;
 import com.gondolia.domain.imports.ImportStatus;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Pattern;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -75,13 +76,13 @@ public final class ImportDtos {
     // -----------------------------------------------------------------------
 
     /** {@code PUT /api/tenant/imports/{id}/mapping}. */
-    public record MappingRequest(Map<String, String> columnMapping, OptionsRequest options) {
+    public record MappingRequest(Map<String, String> columnMapping, @Valid OptionsRequest options) {
     }
 
     /** Opciones enviadas por el frontend (los booleanos nulos toman el valor por defecto). */
     public record OptionsRequest(Boolean updateExisting, Boolean createCategories, Boolean createSuppliers,
                                  Boolean importStock, Long defaultBranchId,
-                                 @Size(max = 3, message = "tiene que ser DMY, MDY o YMD") String dateFormat) {
+                                 @Pattern(regexp = "DMY|MDY|YMD", message = "tiene que ser DMY, MDY o YMD") String dateFormat) {
     }
 
     /** {@code PATCH /api/tenant/imports/{id}/rows/{rowId}}. */
