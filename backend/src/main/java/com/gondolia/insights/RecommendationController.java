@@ -102,7 +102,7 @@ public class RecommendationController {
 
     @Operation(summary = "Anotar un pedido de reposición desde el Inicio (acepta la REORDER pendiente o crea una)")
     @PostMapping("/reorder")
-    @PreAuthorize(Roles.TENANT_ADMIN)
+    @PreAuthorize(Roles.TENANT_DASHBOARD)
     public RecommendationDecisionDto reorder(@RequestBody @Valid RestockBody body) {
         return recommendationService.orderRestock(CurrentUser.tenantId(), CurrentUser.id(), scope(),
                 new RestockRequest(body.branchId(), body.productId(), body.quantity(), body.note()));
