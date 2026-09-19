@@ -149,7 +149,12 @@ export function Table<T>({
 
   return (
     <div className={className}>
-      <div className={cn('overflow-x-auto', cards && 'hidden md:block')}>
+      {/*
+       * `relative`: el contenedor con scroll es el bloque contenedor de los hijos absolutos de la tabla (los textos
+       * `sr-only` de los encabezados, como "Acciones"). Sin eso quedan fuera del recorte y, en una tabla más ancha que
+       * la pantalla, estiran el scroll horizontal de toda la página en vez del de la tabla.
+       */}
+      <div className={cn('relative overflow-x-auto', cards && 'hidden md:block')}>
         <table className="min-w-full border-collapse text-base">
           {caption && <caption className="sr-only">{caption}</caption>}
           <thead>
