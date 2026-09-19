@@ -827,7 +827,11 @@ Si `!window.isSecureContext` y no es localhost, mostrar aviso "Para usar la cám
   `localhost`, `127.0.0.1`, `LAN_IPS`, `CERT_HOSTNAMES` (se regenera si cambian los SAN; validez 825 días).
   nginx: SPA fallback, gzip, cache de assets, `/api/` → `http://backend:8080` (`client_max_body_size 15m`,
   `proxy_read_timeout 180s`), `/ws` con upgrade, `/gondolia-ca.crt` descargable, en :80 redirigir a HTTPS si el host
-  no es localhost/127.0.0.1, header `Permissions-Policy: camera=(self)`.
+  no es localhost/127.0.0.1, header `Permissions-Policy: camera=(self)`. nginx es el único que pone los headers de
+  seguridad hacia el navegador (oculta los de Spring Security para no duplicarlos; `X-Frame-Options: DENY`, sin HSTS
+  porque la CA es local y en localhost se usa HTTP) y la SPA lleva `Content-Security-Policy` (`script-src 'self'`: sin
+  scripts inline). Sus errores propios en `/api/` usan el formato de error de la API: backend caído → 503
+  `SERVICE_UNAVAILABLE`, cuerpo > 15 MB → 400 `INVALID_FILE`.
 - `backend/Dockerfile`: maven:3.9-eclipse-temurin-21 (cache de dependencias) → eclipse-temurin:21-jre-alpine, usuario no root.
 - `ai-service/Dockerfile`: python:3.12-slim + tesseract (spa, eng) + requirements; usuario no root.
 - `start.sh` (bash, LF, funciona en Git Bash de Windows, Linux y macOS):

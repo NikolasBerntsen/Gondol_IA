@@ -373,7 +373,7 @@ Cada usuario elige el tema; la preferencia se guarda **por navegador** en `local
 
 | Pieza | Qué hace |
 |---|---|
-| `index.html` (script inline en `<head>`) | Lee la preferencia y pone `data-theme` **antes del primer pintado** (sin parpadeo). No hay CSP que lo bloquee (`frontend/nginx`); si algún día se agrega una, pasalo a `public/theme-init.js` y permití `'self'`. |
+| `public/theme-init.js` (`<script src>` bloqueante en el `<head>` de `index.html`) | Lee la preferencia y pone `data-theme` **antes del primer pintado** (sin parpadeo). Es un archivo aparte y no un script inline porque la CSP de nginx (`frontend/nginx/snippets/gondolia-csp.conf`) solo permite `script-src 'self'`: no agregues scripts inline en `index.html`. |
 | `ThemeProvider` (`@/theme`, montado en la raíz de `App.tsx`) | Mantiene el atributo: `data-theme="light\|dark"` o **sin atributo** para "Sistema" (el CSS sigue a `prefers-color-scheme`). Escucha el cambio del sistema operativo (`matchMedia`) y de otras pestañas (`storage`), actualiza `<meta name="theme-color">` / `color-scheme` y cambia sin transiciones para que todo pase a la vez. Funciona en el login, el splash y el ticket (fuera del AppShell). |
 | `useTheme()` | `{ preference: 'system' \| 'light' \| 'dark', resolved: 'light' \| 'dark', setPreference }`. `resolved` es el tema que se ve. |
 | `ThemeToggle` (`@/components/layout/ThemeToggle`) | Botón "Cambiar tema" (Monitor / Sol / Luna según la preferencia) con menú Sistema / Claro / Oscuro. Está en la barra superior para **todos los roles**, también en la variante compacta del POS, y en la esquina del login. |

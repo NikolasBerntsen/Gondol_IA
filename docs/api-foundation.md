@@ -175,7 +175,9 @@ Todas las respuestas de error (controladores, filtro de seguridad y errores del 
 {"timestamp":"2026-09-17T12:00:00.123Z","status":400,"error":"Bad Request","code":"VALIDATION_ERROR",
  "message":"Revisá los datos ingresados","path":"/api/tenant/products","fieldErrors":[{"field":"name","message":"es obligatorio"}]}
 ```
-`fieldErrors` siempre está presente (lista vacía si no aplica).
+`fieldErrors` siempre está presente (lista vacía si no aplica). Detrás de nginx, los errores que genera el propio proxy en
+`/api/` usan el mismo formato: 503 `SERVICE_UNAVAILABLE` si el backend no responde y 400 `INVALID_FILE` ("El archivo
+supera el tamaño máximo permitido (15 MB)") si el cuerpo supera los 15 MB (`frontend/nginx/snippets/gondolia-app.conf`).
 
 Mapeo de `GlobalExceptionHandler`:
 | Excepción | Respuesta |

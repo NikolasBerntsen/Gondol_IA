@@ -7,24 +7,8 @@
     <meta name="theme-color" content="#0D1410" media="(prefers-color-scheme: dark)" />
     <meta name="description" content="GondolIA: gestión inteligente de inventario para comercios. Tu negocio siempre a tiempo." />
     <meta name="color-scheme" content="light dark" />
-    <script>
-      // Tema elegido (Claro / Oscuro) antes del primer pintado, para que no parpadee. "Sistema" = sin atributo.
-      // Misma clave y colores que src/theme/theme.ts; después lo mantiene el ThemeProvider.
-      (function () {
-        try {
-          var theme = window.localStorage.getItem('gondolia.theme');
-          if (theme !== 'light' && theme !== 'dark') return;
-          document.documentElement.setAttribute('data-theme', theme);
-          document.querySelector('meta[name="color-scheme"]').setAttribute('content', theme);
-          var metas = document.querySelectorAll('meta[name="theme-color"]');
-          for (var i = 0; i < metas.length; i++) {
-            metas[i].setAttribute('content', theme === 'dark' ? '#0D1410' : '#F3F5F1');
-          }
-        } catch (e) {
-          // Sin storage (navegación privada): sigue al sistema.
-        }
-      })();
-    </script>
+    <!-- Aplica el tema elegido antes del primer pintado (sin parpadeo). Sin defer/async: tiene que bloquear. -->
+    <script src="/theme-init.js"></script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/favicon.svg" />
     <title>GondolIA</title>

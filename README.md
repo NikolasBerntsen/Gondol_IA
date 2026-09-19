@@ -370,8 +370,10 @@ FastAPI sin estado (todo el contexto llega en cada request), solo accesible desd
 
 React 18 + TypeScript + Vite 5 + Tailwind CSS 3, con React Query, React Router, STOMP para tiempo real, Recharts y
 ZXing para el escáner. Diseño *mobile first* para empleados. Cada módulo vive en `src/features/<módulo>/`.
-En Docker lo sirve nginx (`frontend/nginx/`): SPA con cache de assets, gzip, headers de seguridad
-(`Permissions-Policy: camera=(self)`), proxy a `/api` y `/ws`, y el script `docker-entrypoint.d/40-gondolia-certs.sh`
+En Docker lo sirve nginx (`frontend/nginx/`): SPA con cache de assets, gzip, headers de seguridad una sola vez por
+respuesta (`Permissions-Policy: camera=(self)`, `X-Frame-Options: DENY`, `nosniff`, sin HSTS) y una
+`Content-Security-Policy` para la app, proxy a `/api` y `/ws` (sus errores propios, como un archivo de más de 15 MB o el
+backend caído, responden con el JSON de error de la API), y el script `docker-entrypoint.d/40-gondolia-certs.sh`
 que genera la CA local (10 años) y el certificado del servidor (825 días) con las IPs de `LAN_IPS`, `CERT_HOSTNAMES`,
 `localhost` y `127.0.0.1`, regenerándolo solo cuando cambian.
 

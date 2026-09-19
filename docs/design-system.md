@@ -479,8 +479,8 @@ cuarentena", motivo, pasos numerados, "Entendido" (contorno) y "Ver detalle y re
    StockStatusPill, SeverityRow, Ticket, BarcodeDigits, Sparkline, Panel, Controls, Toaster, Logo) y
    `src/gondola/format.ts` a `lib/format.ts` (o fusionalo con el existente: mismos formatos es-AR).
 6. El tema lo resuelve un atributo `data-theme` en `<html>` (sin `next-themes`); "Sistema" quita el atributo. En el
-   frontend real ya está hecho: `ThemeProvider` / `useTheme()` en `src/theme/`, script inline en `index.html` (sin
-   parpadeo) y `ThemeToggle` en la barra superior (`docs/frontend-guide.md` §7.1).
+   frontend real ya está hecho: `ThemeProvider` / `useTheme()` en `src/theme/`, `public/theme-init.js` en el `<head>`
+   de `index.html` (sin parpadeo) y `ThemeToggle` en la barra superior (`docs/frontend-guide.md` §7.1).
 7. Recharts: colores con `hsl(var(--token))`, grilla solo horizontal, ejes en `muted-foreground` 12 px, tooltip propio.
 8. Si se vuelve a empaquetar con Parcel (skill web-artifacts-builder), el `package.json` necesita
    `"@parcel/resolver-default": { "packageExports": true }` para resolver los subpaths de Radix.
