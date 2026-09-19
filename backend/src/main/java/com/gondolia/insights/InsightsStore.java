@@ -34,12 +34,14 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -85,6 +87,7 @@ public class InsightsStore {
     private final ProductInsightRepository insightRepository;
     private final RecommendationRepository recommendationRepository;
     private final TenantSettingsRepository settingsRepository;
+    private final StockoutCalendar stockoutCalendar;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
@@ -147,7 +150,10 @@ public class InsightsStore {
 
     // ------------------------------------------------------------------ entrada
 
-    /** Arma el pedido de análisis de una sucursal con 180 días de ventas, lotes vivos y feedback. */
+    /**
+     * Arma el pedido de análisis de una sucursal con 180 días de ventas, lotes vivos, días sin stock (demanda
+     * censurada) y feedback.
+     */
     @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
     public AnalyzeInput buildInput(long tenantId, long branchId, String branchName) {
         LocalDate today = LocalDate.now(clock);
@@ -163,6 +169,11 @@ public class InsightsStore {
                         utc(today.minusDays(FEEDBACK_DAYS).atStartOfDay(clock.getZone()).toInstant()));
 
         Map<Long, List<DailySale>> salesByProduct = dailySales(params);
+        Map<Long, Set<LocalDate>> salesDays = new HashMap<>();
+        salesByProduct.forEach((productId, sales) -> salesDays.put(productId,
+                sales.stream().map(DailySale::date).collect(Collectors.toSet())));
+        Map<Long, List<LocalDate>> stockoutDays = stockoutCalendar.stockoutDays(tenantId, branchId, null,
+                today.minusDays(SALES_HISTORY_DAYS - 1L), today.minusDays(1), clock.getZone(), salesDays);
         Map<Long, List<LotInput>> lotsByProduct = new LinkedHashMap<>();
         Set<Long> lotIds = new HashSet<>();
         jdbc.query("""
@@ -216,7 +227,8 @@ public class InsightsStore {
                             leadTime == null ? settings.getDefaultLeadTimeDays() : leadTime.intValue(),
                             AnalyticsSql.instant(rs, "created_at").atZone(clock.getZone()).toLocalDate(),
                             salesByProduct.getOrDefault(productId, List.of()),
-                            lotsByProduct.getOrDefault(productId, List.of()));
+                            lotsByProduct.getOrDefault(productId, List.of()),
+                            stockoutDays.getOrDefault(productId, List.of()));
                 });
 
         AnalyzeSettings analyzeSettings = new AnalyzeSettings(settings.getStockRotation(),

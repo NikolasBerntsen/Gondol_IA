@@ -3,6 +3,7 @@ package com.gondolia.insights;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.gondolia.ai.dto.AnalyzeResponse;
+import com.gondolia.ai.dto.ProductInput;
 import com.gondolia.ai.dto.RecommendationResult;
 import com.gondolia.analytics.BranchScopeService.Scope;
 import com.gondolia.domain.ai.AiRun;
@@ -22,6 +23,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -55,6 +57,8 @@ class InsightsStoreIntegrationTest {
     private InsightsStore store;
     @Autowired
     private RecommendationService recommendationService;
+    @Autowired
+    private StockoutCalendar stockoutCalendar;
     @Autowired
     private Clock clock;
 
@@ -124,7 +128,49 @@ class InsightsStoreIntegrationTest {
         assertThat(apply(centro, discount(15)).recommendationsCreated()).isEqualTo(1);
     }
 
+    @Test
+    void theRequestToTheAiCarriesTheDaysWithoutStock() {
+        // Leche que vendía 5 u/día: el último lote entró hace 10 días y se terminó hace 7 (el proveedor no volvió).
+        TestData data = new TestData(jdbc);
+        long milk = data.product(tenant, data.barcode(), "Leche descremada 1 L", "980", "1450");
+        long milkLot = data.lot(tenant, centro, milk, "LD1", "LD1", LocalDate.now(clock).plusDays(20), 20, "ACTIVE",
+                10);
+        movement(milk, milkLot, "ENTRY", 20, 10);
+        for (int daysAgo = 10; daysAgo >= 7; daysAgo--) {
+            movement(milk, milkLot, "SALE", 5, daysAgo);
+        }
+        jdbc.update("update lots set quantity = 0, status = 'DEPLETED' where id = ?", milkLot);
+
+        AnalyzeInput input = store.buildInput(tenant, centro, "Sucursal Centro");
+
+        LocalDate today = LocalDate.now(clock);
+        List<LocalDate> expected = IntStream.rangeClosed(1, 6)
+                .mapToObj(daysAgo -> today.minusDays(7 - daysAgo)).toList();
+        ProductInput milkInput = input.request().products().stream().filter(item -> item.productId() == milk)
+                .findFirst().orElseThrow();
+        assertThat(milkInput.sellableStock()).isZero();
+        assertThat(milkInput.stockoutDays()).containsExactlyElementsOf(expected);
+        // El pan (siempre con stock) no informa faltantes.
+        assertThat(input.request().products().stream().filter(item -> item.productId() == product)
+                .findFirst().orElseThrow().stockoutDays()).isEmpty();
+
+        // La ficha del producto usa el mismo cálculo, filtrado por producto.
+        Map<Long, List<LocalDate>> byProduct = stockoutCalendar.stockoutDays(tenant, centro, milk, today.minusDays(89), today.minusDays(1),
+                clock.getZone(), Map.of(milk, Set.of(today.minusDays(10), today.minusDays(9), today.minusDays(8),
+                        today.minusDays(7))));
+        assertThat(byProduct).containsOnlyKeys(milk);
+        assertThat(byProduct.get(milk)).containsExactlyElementsOf(expected);
+    }
+
     // ------------------------------------------------------------------ apoyo
+
+    private void movement(long productId, long lotId, String type, int quantity, int daysAgo) {
+        jdbc.update("""
+                insert into stock_movements (tenant_id, branch_id, product_id, lot_id, type, quantity, unit_price,
+                                             total_amount, source, batch_ref, occurred_at)
+                values (?, ?, ?, ?, ?, ?, 1450, ? * 1450, 'MANUAL', 'S-TEST', now() - make_interval(days => ?))
+                """, tenant, centro, productId, lotId, type, quantity, quantity, daysAgo);
+    }
 
     private ApplyResult apply(long branchId, RecommendationResult result) {
         AiRun run = store.startRun(tenant, branchId, AiRunTrigger.MANUAL);
