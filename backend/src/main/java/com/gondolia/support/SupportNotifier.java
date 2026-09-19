@@ -44,12 +44,13 @@ public class SupportNotifier {
     }
 
     /**
-     * {@code {"event":"TICKET_UPDATED","ticket":…}} a la conversación. El destino es compartido por el comercio y el
-     * agente, así que el contador de no leídos viaja en cero y cada cliente conserva el suyo.
+     * {@code {"event":"TICKET_UPDATED","ticket":…,"ratingComment":…,"firstResponseAt":…}} a la conversación. El destino
+     * es compartido por el comercio y el agente, así que el contador de no leídos viaja en cero y cada cliente conserva
+     * el suyo. Lleva también el comentario de la calificación y la primera respuesta, que no están en el resumen.
      */
-    public void broadcastTicket(TicketSummary ticket) {
+    public void broadcastTicket(TicketSummary ticket, String ratingComment, Instant firstResponseAt) {
         realtimePublisher.toTopic(Destinations.ticketTopic(ticket.id()),
-                TicketEvents.TicketEvent.updated(ticket.withoutUnread()));
+                new TicketEvents.TicketUpdatedEvent(ticket.withoutUnread(), ratingComment, firstResponseAt));
     }
 
     public void broadcastRead(Long ticketId, MessageSenderType reader, Instant readAt) {
@@ -121,6 +122,14 @@ public class SupportNotifier {
                 "Te asignaron un ticket · %s".formatted(tenantName),
                 "%s te asignó «%s».".formatted(actorName, ticket.getSubject()),
                 AGENT_LINK + ticket.getId(), REFERENCE_TYPE, ticket.getId()));
+    }
+
+    /**
+     * Quien leyó la conversación (o escribió en ella) ya vio sus novedades: sus notificaciones de ese ticket quedan
+     * leídas y la campana no sigue contando mensajes que ya están en pantalla.
+     */
+    public void markTicketNotificationsRead(Long userId, Long ticketId) {
+        notificationService.markReadByReference(userId, REFERENCE_TYPE, ticketId);
     }
 
     private static Severity severityOf(SupportTicket ticket) {

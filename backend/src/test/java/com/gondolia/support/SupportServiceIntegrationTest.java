@@ -122,7 +122,7 @@ class SupportServiceIntegrationTest extends PostgresIntegrationTest {
         assertThat(detail.unreadCount()).isZero();
         assertThat(customerView(ticketId).unreadCount()).isEqualTo(1);
 
-        supportService.tenantRead(tenant, ticketId);
+        supportService.tenantRead(admin, ticketId);
         assertThat(customerView(ticketId).unreadCount()).isZero();
     }
 
@@ -197,6 +197,31 @@ class SupportServiceIntegrationTest extends PostgresIntegrationTest {
         assertThat(rated.ratingComment()).isEqualTo("Muy rápidos");
     }
 
+    @Test
+    void ratingCommentReachesTheOpenConversationLive() {
+        long ticketId = createTicket(admin, "Calificar en vivo").id();
+        supportService.agentMessage(agent, ticketId, "Listo", null);
+        supportService.changeStatus(agent, ticketId, TicketStatus.RESOLVED);
+        String topic = "/topic/tickets/" + ticketId;
+
+        clearInvocations(realtimePublisher);
+        supportService.tenantRate(admin, ticketId, new RateTicketRequest(4, "Rápido y claro"));
+        // El TICKET_UPDATED de la conversación trae el comentario (no está en TicketSummary): el agente lo ve sin recargar.
+        verify(realtimePublisher).toTopic(eq(topic), argThat(payload ->
+                payload instanceof TicketEvents.TicketUpdatedEvent event
+                        && TicketEvents.TICKET_UPDATED.equals(event.event())
+                        && event.ticket().rating() == 4
+                        && "Rápido y claro".equals(event.ratingComment())
+                        && event.firstResponseAt() != null));
+
+        // Corregir solo el comentario (mismas estrellas) también viaja; sin comentario, va en null.
+        clearInvocations(realtimePublisher);
+        supportService.tenantRate(admin, ticketId, new RateTicketRequest(4, "  "));
+        verify(realtimePublisher).toTopic(eq(topic), argThat(payload ->
+                payload instanceof TicketEvents.TicketUpdatedEvent event
+                        && event.ticket().rating() == 4 && event.ratingComment() == null));
+    }
+
     // ------------------------------------------------------------------ bandeja del agente
 
     @Test
@@ -209,6 +234,22 @@ class SupportServiceIntegrationTest extends PostgresIntegrationTest {
         assertThatThrownBy(() -> supportService.assign(agent, ticketId, admin.id()))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("agente");
+    }
+
+    @Test
+    void assignmentSystemLineSaysWhoDidWhat() {
+        jdbc.update("update users set full_name = 'Tomás Aguirre' where id = ?", otherAgent.id());
+        long delegated = createTicket(admin, "Delegado").id();
+        long taken = createTicket(admin, "Tomado").id();
+
+        supportService.assign(agent, delegated, otherAgent.id());
+        supportService.assign(agent, taken, null);
+
+        MessageDto delegation = lastMessage(delegated);
+        assertThat(delegation.senderType()).isEqualTo(MessageSenderType.SYSTEM);
+        assertThat(delegation.senderId()).isEqualTo(agent.id());
+        assertThat(delegation.body()).isEqualTo(agent.fullName() + " asignó la consulta a Tomás Aguirre.");
+        assertThat(lastMessage(taken).body()).isEqualTo(agent.fullName() + " tomó la consulta.");
     }
 
     @Test
@@ -228,11 +269,55 @@ class SupportServiceIntegrationTest extends PostgresIntegrationTest {
         PageResponse<TicketSummary> search = supportService.listForAgent(
                 new AgentFilter(TicketStatusFilter.ACTIVE, AssignedFilter.ALL, "impresora"), agent.id(), 0, 20);
         assertThat(search.content()).extracting(TicketSummary::id).containsExactly(mine);
+        PageResponse<TicketSummary> accented = supportService.listForAgent(
+                new AgentFilter(TicketStatusFilter.ACTIVE, AssignedFilter.ALL, "IMPRESÓRA"), agent.id(), 0, 20);
+        assertThat(accented.content()).extracting(TicketSummary::id).containsExactly(mine);
 
         supportService.changeStatus(agent, mine, TicketStatus.CLOSED);
         PageResponse<TicketSummary> active = supportService.listForAgent(
                 new AgentFilter(TicketStatusFilter.ACTIVE, AssignedFilter.ALL, "impresora"), agent.id(), 0, 20);
         assertThat(active.content()).isEmpty();
+    }
+
+    @Test
+    void searchIgnoresAccentsOnSubjectTenantAndPerson() {
+        String token = "zq" + System.nanoTime();
+        jdbc.update("update tenants set name = ? where id = ?", "Almacén Doña Rosa " + token, tenant);
+        jdbc.update("update users set full_name = ? where id = ?", "Marta Fernández " + token, admin.id());
+        long camara = createTicket(admin, "Cámara de frío " + token).id();
+        long other = createTicket(otherAdmin, "Balanza " + token).id();
+
+        assertThat(search("camara de frio " + token)).containsExactly(camara);
+        assertThat(search("CÁMARA DE FRÍO")).contains(camara).doesNotContain(other);
+        assertThat(search("almacen dona rosa " + token)).containsExactly(camara);
+        assertThat(search("marta fernandez " + token)).containsExactly(camara);
+        assertThat(search("balanza " + token)).containsExactly(other);
+    }
+
+    @Test
+    void readingTheConversationMarksItsNotificationsAsRead() {
+        long ticketId = createTicket(admin, "Notificaciones").id();
+        long otherTicket = createTicket(admin, "Otra consulta").id();
+        // Ticket nuevo: avisa a todo el equipo de soporte.
+        assertThat(unreadNotifications(agent.id(), ticketId)).isEqualTo(1);
+        assertThat(unreadNotifications(otherAgent.id(), ticketId)).isEqualTo(1);
+
+        supportService.agentMessage(agent, ticketId, "Hola, ¿en qué te ayudo?", null);
+        supportService.changeStatus(agent, ticketId, TicketStatus.WAITING_CUSTOMER);
+        supportService.agentMessage(agent, otherTicket, "Ya lo miro", null);
+        assertThat(unreadNotifications(admin.id(), ticketId)).isEqualTo(2);
+
+        // El agente que escribió ya vio la conversación; el resto del equipo, no.
+        assertThat(unreadNotifications(agent.id(), ticketId)).isZero();
+        assertThat(unreadNotifications(otherAgent.id(), ticketId)).isEqualTo(1);
+
+        supportService.tenantRead(admin, ticketId);
+        assertThat(unreadNotifications(admin.id(), ticketId)).isZero();
+        assertThat(unreadNotifications(admin.id(), otherTicket)).isEqualTo(1);
+
+        supportService.agentRead(otherAgent, ticketId);
+        assertThat(unreadNotifications(otherAgent.id(), ticketId)).isZero();
+        assertThat(unreadNotifications(otherAgent.id(), otherTicket)).isEqualTo(1);
     }
 
     @Test
@@ -287,7 +372,7 @@ class SupportServiceIntegrationTest extends PostgresIntegrationTest {
                         && event.userId().equals(agent.id())));
 
         clearInvocations(realtimePublisher);
-        supportService.tenantRead(tenant, ticketId);
+        supportService.tenantRead(admin, ticketId);
         verify(realtimePublisher).toTopic(eq(topic), argThat(payload ->
                 payload instanceof TicketEvents.ReadEvent event
                         && event.senderType() == MessageSenderType.CUSTOMER && event.readAt() != null));
@@ -305,7 +390,7 @@ class SupportServiceIntegrationTest extends PostgresIntegrationTest {
                 .isInstanceOf(NotFoundException.class);
         assertThatThrownBy(() -> supportService.tenantClose(otherAdmin, ticketId))
                 .isInstanceOf(NotFoundException.class);
-        assertThatThrownBy(() -> supportService.tenantRead(otherTenant, ticketId))
+        assertThatThrownBy(() -> supportService.tenantRead(otherAdmin, ticketId))
                 .isInstanceOf(NotFoundException.class);
 
         List<TicketSummary> theirs = supportService.listForTenant(otherTenant, TicketStatusFilter.ALL);
@@ -329,6 +414,7 @@ class SupportServiceIntegrationTest extends PostgresIntegrationTest {
     void searchEscapesWildcards() {
         assertThat(SupportQueryRepository.normalizeSearch("  ")).isNull();
         assertThat(SupportQueryRepository.normalizeSearch("100%")).isEqualTo("%100\\%%");
+        assertThat(SupportQueryRepository.normalizeSearch(" Cámara ÑANDÚ ")).isEqualTo("%camara nandu%");
         assertThat(new String("ñ".getBytes(StandardCharsets.UTF_8), StandardCharsets.UTF_8)).isEqualTo("ñ");
     }
 
@@ -337,6 +423,24 @@ class SupportServiceIntegrationTest extends PostgresIntegrationTest {
     private TicketDetail createTicket(AuthUser user, String subject) {
         return supportService.createTicket(user, new CreateTicketRequest(subject, TicketCategory.TECNICO,
                 TicketPriority.ALTA, TicketChannel.CHAT, "Hola, no me anda la carga"));
+    }
+
+    private List<Long> search(String q) {
+        return supportService.listForAgent(new AgentFilter(TicketStatusFilter.ALL, AssignedFilter.ALL, q), agent.id(),
+                0, 100).content().stream().map(TicketSummary::id).toList();
+    }
+
+    private MessageDto lastMessage(long ticketId) {
+        List<MessageDto> messages = supportService.agentDetail(ticketId).messages();
+        return messages.get(messages.size() - 1);
+    }
+
+    private long unreadNotifications(long userId, long ticketId) {
+        Long count = jdbc.queryForObject("""
+                select count(*) from notifications
+                where user_id = ? and reference_type = 'SUPPORT_TICKET' and reference_id = ? and read_at is null
+                """, Long.class, userId, ticketId);
+        return count == null ? 0 : count;
     }
 
     private TicketSummary agentView(Long ticketId) {

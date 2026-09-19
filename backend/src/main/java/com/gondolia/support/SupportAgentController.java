@@ -102,7 +102,7 @@ public class SupportAgentController {
     @PostMapping("/tickets/{id}/read")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void markRead(@PathVariable Long id) {
-        supportService.agentRead(id);
+        supportService.agentRead(CurrentUser.get(), id);
     }
 
     @Operation(summary = "Tablero de la bandeja",

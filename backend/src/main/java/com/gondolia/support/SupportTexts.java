@@ -24,8 +24,14 @@ public final class SupportTexts {
         return "%s cambió el estado a «%s».".formatted(actorName, statusLabel(status));
     }
 
-    public static String assigned(String agentName) {
-        return "%s tomó la consulta.".formatted(agentName);
+    /**
+     * Mensaje del sistema al asignar el ticket. Si el agente se lo asigna a sí mismo, "tomó la consulta"; si se lo
+     * pasa a otro, queda quién lo hizo y a quién ("Sofía asignó la consulta a Tomás").
+     */
+    public static String assigned(String actorName, String agentName, boolean selfAssigned) {
+        return selfAssigned
+                ? "%s tomó la consulta.".formatted(agentName)
+                : "%s asignó la consulta a %s.".formatted(actorName, agentName);
     }
 
     public static String closedByCustomer(String actorName) {

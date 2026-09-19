@@ -213,6 +213,18 @@ public class NotificationService {
         return notificationRepository.markAllRead(userId, Timestamps.now());
     }
 
+    /**
+     * Marca como leídas las notificaciones propias sobre una misma entidad (p. ej. las de un ticket de soporte cuando
+     * el usuario ya leyó la conversación). Devuelve cuántas cambiaron.
+     */
+    @Transactional
+    public int markReadByReference(Long userId, String referenceType, Long referenceId) {
+        if (userId == null || referenceType == null || referenceId == null) {
+            return 0;
+        }
+        return notificationRepository.markReadByReference(userId, referenceType, referenceId, Timestamps.now());
+    }
+
     // ------------------------------------------------------------------ internos
 
     @FunctionalInterface
