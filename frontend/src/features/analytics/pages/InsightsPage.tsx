@@ -7,6 +7,7 @@ import {
   CartesianGrid,
   ComposedChart,
   Line,
+  ReferenceArea,
   ReferenceDot,
   ResponsiveContainer,
   Tooltip,
@@ -14,7 +15,7 @@ import {
   YAxis,
 } from 'recharts';
 import type { TooltipProps } from 'recharts';
-import { AlertTriangle, ArrowLeft, Boxes, RefreshCw, Sparkles, TrendingDown, TrendingUp } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Boxes, MoveRight, RefreshCw, Sparkles, TrendingDown, TrendingUp } from 'lucide-react';
 import {
   Alert,
   Badge,
@@ -178,6 +179,30 @@ interface SeriesPoint {
   yhat: number | null;
   /** Banda de confianza `[lo, hi]` del pronóstico (recharts dibuja el área entre los dos valores). */
   band: [number, number] | null;
+  /** Día sin stock vendible ni ventas. */
+  stockout: boolean;
+}
+
+const STOCKOUT_FILL = 'hsl(var(--warn) / 0.14)';
+const STOCKOUT_LEGEND = 'hsl(var(--warn) / 0.45)';
+
+/** Tramos consecutivos de días sin stock, para sombrearlos en el gráfico. */
+function stockoutRuns(points: SeriesPoint[]): { from: string; to: string }[] {
+  const runs: { from: string; to: string }[] = [];
+  points.forEach((point, index) => {
+    if (!point.stockout) return;
+    const last = runs[runs.length - 1];
+    if (last && points[index - 1]?.stockout) last.to = point.date;
+    else runs.push({ from: point.date, to: point.date });
+  });
+  return runs;
+}
+
+/** Texto de la tendencia debajo de la venta diaria: "sin tendencia clara" en vez de un "0%" que confunde. */
+function trendHint(trendPct: number | null): string {
+  if (trendPct == null) return 'promedio del período';
+  if (Math.abs(trendPct) < 0.5) return 'sin tendencia clara';
+  return `tendencia ${trendPct > 0 ? '+' : ''}${formatPercent(trendPct, 0)}`;
 }
 
 function DetailTooltip({ active, payload }: TooltipProps<number, string>) {
@@ -188,6 +213,7 @@ function DetailTooltip({ active, payload }: TooltipProps<number, string>) {
     <ChartTooltipBox
       title={formatDate(point.date)}
       lines={[
+        ...(point.stockout ? [{ label: 'Sin stock', value: 'no se pudo vender', color: STOCKOUT_LEGEND }] : []),
         ...(point.units != null
           ? [{ label: 'Vendido', value: `${formatNumber(point.units)} u.`, color: SERIES_COLORS[5], shape: 'line' as const }]
           : []),
@@ -237,21 +263,25 @@ function ProductDetail({
       units: point.units,
       yhat: null,
       band: null,
+      stockout: !!point.stockout,
     }));
     const forecast: SeriesPoint[] = (detail.forecast ?? []).map((point) => ({
       date: point.date,
       units: null,
       yhat: point.yhat,
       band: point.lo != null && point.hi != null ? [point.lo, point.hi] : null,
+      stockout: false,
     }));
-    // El último día real también arranca la línea del pronóstico, así no queda un hueco entre las dos series.
+    // El último día real también arranca la línea del pronóstico, así no queda un hueco entre las dos series
+    // (salvo que ese día no hubo stock: el pronóstico no sale de un 0 que no muestra la demanda).
     const bridge = history.length ? history[history.length - 1] : undefined;
-    if (bridge && forecast.length) bridge.yhat = bridge.units;
+    if (bridge && forecast.length && !bridge.stockout) bridge.yhat = bridge.units;
     return [...history, ...forecast];
   }, [detail]);
 
   const anomalies = detail?.anomalies ?? [];
   const historyDates = useMemo(() => new Set((detail?.history ?? []).map((point) => point.date)), [detail]);
+  const outOfStock = useMemo(() => stockoutRuns(series), [series]);
 
   if (query.isPending) {
     return (
@@ -328,9 +358,15 @@ function ProductDetail({
         <StatCard
           label="Venta diaria"
           value={`${formatNumber(insight.avgDailySales ?? 0, { decimals: 1 })} u.`}
-          icon={insight.trendPct != null && insight.trendPct < 0 ? TrendingDown : TrendingUp}
+          icon={
+            insight.trendPct == null || Math.abs(insight.trendPct) < 0.5
+              ? MoveRight
+              : insight.trendPct < 0
+                ? TrendingDown
+                : TrendingUp
+          }
           tone="primary"
-          hint={insight.trendPct != null ? `tendencia ${formatPercent(insight.trendPct)}` : 'promedio del período'}
+          hint={trendHint(insight.trendPct)}
         />
         <StatCard
           label="Stock vendible"
@@ -373,6 +409,7 @@ function ProductDetail({
               items={[
                 { label: 'Vendido', color: SERIES_COLORS[5], shape: 'line' },
                 { label: 'Pronóstico', color: SERIES_COLORS[0], shape: 'line' },
+                ...(outOfStock.length ? [{ label: 'Sin stock', color: STOCKOUT_LEGEND }] : []),
               ]}
             />
           }
@@ -405,6 +442,16 @@ function ProductDetail({
                     tick={AXIS_TICK}
                     tickFormatter={(value: number) => formatNumber(value)}
                   />
+                  {outOfStock.map((run) => (
+                    <ReferenceArea
+                      key={run.from}
+                      x1={run.from}
+                      x2={run.to}
+                      fill={STOCKOUT_FILL}
+                      stroke="none"
+                      ifOverflow="hidden"
+                    />
+                  ))}
                   <Tooltip content={<DetailTooltip />} cursor={CURSOR} />
                   <Area
                     type="monotone"

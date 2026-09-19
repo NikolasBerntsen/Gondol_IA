@@ -532,10 +532,10 @@ Roles: lectura **y decisiones** (gestionar alertas, aceptar/descartar recomendac
   esa anomalía siga en la ventana de 7 días.
   Filas: `{id,branchId,branchName,type,severity,status,productId,productName,lotId,lotNumber,title,message,createdAt,handledByName,resolvedAt}`.
 - IA (**por sucursal**): `GET /api/tenant/insights/summary` · `GET /api/tenant/insights/products?pattern=&abc=&page=` (filas con branchId/branchName) ·
-  `GET /api/tenant/insights/products/{productId}?branchId=` (incluye historia diaria 90 días + pronóstico de esa sucursal; si falta branchId y el scope es una sola sucursal, usa esa) ·
+  `GET /api/tenant/insights/products/{productId}?branchId=` (incluye historia diaria 90 días, día por día con los días sin stock marcados, + pronóstico de esa sucursal; si falta branchId y el scope es una sola sucursal, usa esa) ·
   `POST /api/tenant/insights/run` (jefe + admin, asincrónico → un `ai_runs` por sucursal del scope) · `GET /api/tenant/insights/runs/latest` → `[{branchId,branchName,status,startedAt,finishedAt,productsAnalyzed,recommendationsCreated,errorMessage}]`.
   `InsightsService` arma un `AnalyzeRequest` (§8.2) **por sucursal** con 180 días de ventas de esa sucursal, persiste `product_insights`,
-  upsert de `recommendations` (dedupe por sucursal), expira las PENDING que ya no aplican. Programado diario 03:00 y al arrancar
+  upsert de `recommendations` (dedupe por sucursal; una recomendación descartada no se recrea por 7 días), expira las PENDING que ya no aplican. Programado diario 03:00 y al arrancar
   (si no hay run OK en 24 h) para todas las sucursales activas de tenants ACTIVE, con reintentos si la IA no está lista.
 - Recomendaciones: `GET /api/tenant/recommendations?status=PENDING&type=&page=` →
   `PageResponse<{id,branchId,branchName,type,status,productId,productName,lotId,lotNumber,title,explanation,suggestedQuantity,suggestedDiscountPct,suggestedDate,priority,confidence,expectedImpact,createdAt,decidedAt,decidedByName,decisionNote,outcome}>`
@@ -651,13 +651,16 @@ Request:
  "products":[{"productId":10,"name":"Yogur bebible frutilla 1L","category":"Lácteos","salePrice":2100.0,"costPrice":1400.0,
    "minStock":10,"sellableStock":25,"perishable":true,"leadTimeDays":3,"createdAt":"2026-03-01",
    "dailySales":[{"date":"2026-09-16","quantity":4,"discountPct":0}],
-   "lots":[{"lotId":55,"lotNumber":"L2409A","expiryDate":"2026-09-25","receivedAt":"2026-09-02T13:10:00Z","quantity":12,"discountPct":null,"status":"ACTIVE"}]}],
+   "lots":[{"lotId":55,"lotNumber":"L2409A","expiryDate":"2026-09-25","receivedAt":"2026-09-02T13:10:00Z","quantity":12,"discountPct":null,"status":"ACTIVE"}],
+   "stockoutDays":["2026-09-12","2026-09-13"]}],
  "feedback":[{"recommendationId":90,"type":"DISCOUNT","productId":10,"category":"Lácteos","status":"ACCEPTED","discountPct":20,
    "outcome":{"unitsBefore7d":10,"unitsAfter7d":18,"lift":1.8}}]}
 ```
 (`dailySales` y `lots` son **de esa sucursal**; `sellableStock` también. `dailySales` puede venir esparcido: días faltantes = 0
-desde `createdAt`/primera venta hasta `asOfDate`. La simulación de consumo por lote usa `settings.stockRotation`: FIFO ordena
-por `receivedAt`, FEFO por `expiryDate`; los lotes vencidos no se consumen.)
+desde `createdAt`/primera venta hasta `asOfDate`. `stockoutDays` (opcional) son los días sin stock vendible y sin ventas:
+demanda **censurada**, que la IA completa con la demanda previa en vez de tomarla como una caída de la venta. La simulación
+de consumo por lote usa `settings.stockRotation`: primero los lotes con `discountPct`, luego FIFO por `receivedAt` o FEFO por
+`expiryDate`; los lotes vencidos no se consumen.)
 
 Response:
 ```json

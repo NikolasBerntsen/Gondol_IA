@@ -24,8 +24,11 @@ public record ProductInsightDetail(
         List<LotRow> lots,
         List<RecommendationDto> recommendations) {
 
-    /** Un día de ventas netas del producto en la sucursal. */
-    public record HistoryPoint(LocalDate date, long units, BigDecimal amount) {
+    /**
+     * Un día de ventas netas del producto en la sucursal (los días sin ventas van en 0). {@code stockout}: el día no
+     * hubo stock vendible ni ventas, así que ese 0 no muestra la demanda (la IA lo toma como demanda censurada).
+     */
+    public record HistoryPoint(LocalDate date, long units, BigDecimal amount, boolean stockout) {
     }
 
     /** Lote vivo del producto en la sucursal, en orden de rotación. */

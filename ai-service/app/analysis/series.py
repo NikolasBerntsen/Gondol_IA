@@ -9,6 +9,14 @@ import numpy as np
 
 HISTORY_WINDOW_DAYS = 180
 MAX_HISTORY_DAYS = 366
+STOCKOUT_REFERENCE_DAYS = 28
+"""Días previos a un faltante con los que se estima la demanda que no se pudo vender."""
+STOCKOUT_MIN_REFERENCE_DAYS = 7
+STOCKOUT_PROFILE_DAYS = 56
+STOCKOUT_MAX_RUN_DAYS = 56
+"""Un faltante más largo que esto no se completa: la venta de hace más de 8 semanas ya no dice cuánto se vendería hoy."""
+WEEKDAY_SHRINK = 4.0
+"""Observaciones "virtuales" del promedio general con las que se suaviza el factor de cada día de la semana."""
 
 
 @dataclass(frozen=True)
@@ -127,3 +135,76 @@ def coefficient_of_variation(values: np.ndarray) -> float:
     if mean <= 0:
         return 0.0
     return float(values.std(ddof=1) / mean)
+
+
+@dataclass(frozen=True)
+class Censoring:
+    """Días sin stock (demanda censurada) que se completaron con la demanda esperada."""
+
+    days: int = 0
+    runs: int = 0
+    since: date | None = None
+    """Primer día del faltante que llega hasta ayer (el producto sigue o seguía sin stock al final de la serie)."""
+
+
+def _runs(mask: np.ndarray) -> list[tuple[int, int]]:
+    """Tramos consecutivos `[inicio, fin)` donde `mask` es verdadero."""
+    runs: list[tuple[int, int]] = []
+    start: int | None = None
+    for i, flag in enumerate(mask):
+        if flag and start is None:
+            start = i
+        elif not flag and start is not None:
+            runs.append((start, i))
+            start = None
+    if start is not None:
+        runs.append((start, len(mask)))
+    return runs
+
+
+def impute_stockouts(series: DailySeries, stockout_days: Iterable[date]) -> tuple[DailySeries, Censoring]:
+    """Completa los días sin stock con la demanda esperada: no vender por falta de stock no es una caída de la venta.
+
+    El backend informa los días en que el producto no tuvo stock vendible y no registró ventas (`stockoutDays`).
+    Esas ventas en 0 son demanda **censurada**: tomarlas como datos haría ver una caída que no existió (tendencia de
+    -90%, pronóstico a la baja) justo cuando hay que reponer. Cada tramo se completa con el promedio de los 28 días
+    previos con stock, ajustado por día de la semana (8 semanas, suavizado hacia 1). No se completan tramos sin
+    historia previa suficiente ni más largos que 8 semanas.
+    """
+    mask = np.zeros(series.n, dtype=bool)
+    for day in stockout_days:
+        index = series.index_of(day)
+        if 0 <= index < series.n and series.values[index] <= 0:
+            mask[index] = True
+    if not mask.any():
+        return series, Censoring()
+
+    values = series.values.copy()
+    imputed = runs = 0
+    since: date | None = None
+    for start, end in _runs(mask):
+        if end - start > STOCKOUT_MAX_RUN_DAYS:
+            continue
+        reference = [i for i in range(max(0, start - STOCKOUT_REFERENCE_DAYS), start) if not mask[i]]
+        if len(reference) < STOCKOUT_MIN_REFERENCE_DAYS:
+            continue
+        level = float(series.values[reference].mean())
+        if level <= 0:
+            continue
+        observed = [i for i in range(max(0, start - STOCKOUT_PROFILE_DAYS), start) if not mask[i]]
+        observed_values = series.values[observed]
+        observed_weekdays = series.weekdays[observed]
+        overall = float(observed_values.mean())
+        factors = np.ones(7)
+        for weekday in range(7):
+            same = observed_values[observed_weekdays == weekday]
+            factors[weekday] = (float(same.sum()) + WEEKDAY_SHRINK * overall) / ((len(same) + WEEKDAY_SHRINK) * overall)
+        values[start:end] = level * factors[series.weekdays[start:end]]
+        imputed += end - start
+        runs += 1
+        if end == series.n:
+            since = series.date_at(start)
+    if not imputed:
+        return series, Censoring()
+    completed = DailySeries(series.start, series.as_of, values, series.discount, series.sold_today)
+    return completed, Censoring(imputed, runs, since)

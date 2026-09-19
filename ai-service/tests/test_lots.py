@@ -11,7 +11,6 @@ from app.analysis.lots import (
     RISK_NONE,
     SimLot,
     assess_lots,
-    promote,
     rotation_order,
     simulate,
 )
@@ -133,21 +132,62 @@ def test_lot_without_expiry_date_has_no_risk_entry():
     assert assessment.risks == []
 
 
-def test_promoted_lot_only_jumps_lots_that_expire_after_it():
-    queue = [SimLot(1, 10, 3), SimLot(2, 10, 30), SimLot(3, 10, 5), SimLot(None, 5, None)]
-    assert [lot.key for lot in promote(queue, 3)] == [1, 3, 2, None]
-    assert [lot.key for lot in promote(queue, 1)] == [1, 2, 3, None]
+def test_lots_in_liquidation_sell_first_with_both_rotations():
+    """SPEC §4.2: `(discount_pct IS NULL) ASC, <FIFO|FEFO>`, igual que el backend."""
+    lots = [
+        SimLot(1, 5, 40, received(30)),
+        SimLot(2, 5, 6, received(10), on_sale=True),
+        SimLot(3, 5, 3, received(5)),
+        SimLot(4, 5, 20, received(20), on_sale=True),
+        SimLot(None, 5, None, None),
+    ]
+    assert [lot.key for lot in rotation_order(lots, FIFO)] == [4, 2, 1, 3, None]
+    assert [lot.key for lot in rotation_order(lots, FEFO)] == [2, 4, 3, 1, None]
 
 
-def test_discount_does_not_count_sales_taken_from_a_lot_that_expires_earlier():
+def test_discounted_lot_is_simulated_first_even_behind_older_fifo_stock():
+    """Lote en liquidación detrás de 71 u. más viejas: igual sale primero y se vende a tiempo (sin nuevo descuento)."""
+    older = make_lot(1, 71, 40, 30, lot_number="LP0820A")
+    discounted = make_lot(2, 10, 6, 3, lot_number="LP0914B", discount_pct=10)
+    risks = by_id(assess([older, discounted], 3, FIFO))
+
+    risk = risks[2]
+    assert risk.rotation_rank == 1
+    assert risk.first_sale_day == 0
+    assert risk.expected_sales_before_expiry == pytest.approx(10)
+    assert risk.units_at_risk == 0
+    assert risk.risk_level == RISK_NONE
+    assert not risk.rotation_blocked
+    assert risk.blocking_units == 0 and risk.liquidation_units == 0
+    assert risk.recommended_discount_pct is None
+    assert risks[1].rotation_rank == 2
+    assert risks[1].units_at_risk == 0
+
+
+def test_lot_behind_a_liquidation_reports_the_units_on_sale_ahead():
+    on_sale = make_lot(1, 40, 30, 2, discount_pct=20)
+    regular = make_lot(2, 12, 4, 20)
+    risk = by_id(assess([on_sale, regular], 4, FIFO, elasticity=0.0))[2]
+    assert risk.rotation_rank == 2
+    assert risk.liquidation_units == pytest.approx(40)
+    assert risk.blocking_units == 0
+    assert risk.units_at_risk == 12
+    # Con el descuento también pasa a liquidación y, dentro del grupo, sale primero (FIFO: ingresó antes).
+    assert risk.recommended_discount_pct is not None
+
+
+def test_simulated_discount_puts_the_lot_first_like_the_backend():
     earlier = make_lot(1, 10, 3, 5)
     later = make_lot(2, 30, 5, 5)
-    risk = by_id(assess([earlier, later], 4, FEFO))[2]
+    risks = by_id(assess([earlier, later], 4, FEFO))
+    risk = risks[2]
     assert risk.expected_sales_before_expiry == pytest.approx(14)
     assert risk.units_at_risk == 16
-    # Solo se vende con descuento desde que se termina el lote que vence antes: 14 u. x 1,8 = 25,2 < 30.
-    assert risk.recommended_discount_pct == 40
-    assert risk.expected_units_sold_with_discount == pytest.approx(14 * 1.8)
+    # Al aceptar el descuento el lote pasa a liquidación y sale antes que el que vence antes: con 15% se vende
+    # completo (5,2 u/día durante 6 días), pero el otro lote vence sin venderse, así que no "alcanza" del todo.
+    assert risk.recommended_discount_pct == 15
+    assert risk.expected_units_sold_with_discount == pytest.approx(30)
+    assert not risk.discount_clears_lot
     assert not risk.discount_clears_lot
 
 

@@ -28,17 +28,20 @@ import com.gondolia.domain.tenant.TenantSettings;
 import com.gondolia.domain.tenant.TenantSettingsRepository;
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -70,6 +73,12 @@ public class InsightsStore {
 
     private static final int MAX_FEEDBACK_ROWS = 200;
 
+    /**
+     * Días en que una recomendación descartada no se vuelve a sugerir en esa sucursal (misma {@code dedupeKey}),
+     * igual que las alertas descartadas: "Descartar" la saca de la bandeja y el próximo análisis no la repite.
+     */
+    static final int DISCARD_QUIET_DAYS = 7;
+
     /** Campo propio dentro de {@code recommendations.outcome} con el descuento realmente aplicado. */
     static final String APPLIED_DISCOUNT_FIELD = "appliedDiscountPct";
 
@@ -78,6 +87,7 @@ public class InsightsStore {
     private final ProductInsightRepository insightRepository;
     private final RecommendationRepository recommendationRepository;
     private final TenantSettingsRepository settingsRepository;
+    private final StockoutCalendar stockoutCalendar;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
@@ -140,7 +150,10 @@ public class InsightsStore {
 
     // ------------------------------------------------------------------ entrada
 
-    /** Arma el pedido de análisis de una sucursal con 180 días de ventas, lotes vivos y feedback. */
+    /**
+     * Arma el pedido de análisis de una sucursal con 180 días de ventas, lotes vivos, días sin stock (demanda
+     * censurada) y feedback.
+     */
     @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
     public AnalyzeInput buildInput(long tenantId, long branchId, String branchName) {
         LocalDate today = LocalDate.now(clock);
@@ -156,6 +169,11 @@ public class InsightsStore {
                         utc(today.minusDays(FEEDBACK_DAYS).atStartOfDay(clock.getZone()).toInstant()));
 
         Map<Long, List<DailySale>> salesByProduct = dailySales(params);
+        Map<Long, Set<LocalDate>> salesDays = new HashMap<>();
+        salesByProduct.forEach((productId, sales) -> salesDays.put(productId,
+                sales.stream().map(DailySale::date).collect(Collectors.toSet())));
+        Map<Long, List<LocalDate>> stockoutDays = stockoutCalendar.stockoutDays(tenantId, branchId, null,
+                today.minusDays(SALES_HISTORY_DAYS - 1L), today.minusDays(1), clock.getZone(), salesDays);
         Map<Long, List<LotInput>> lotsByProduct = new LinkedHashMap<>();
         Set<Long> lotIds = new HashSet<>();
         jdbc.query("""
@@ -209,7 +227,8 @@ public class InsightsStore {
                             leadTime == null ? settings.getDefaultLeadTimeDays() : leadTime.intValue(),
                             AnalyticsSql.instant(rs, "created_at").atZone(clock.getZone()).toLocalDate(),
                             salesByProduct.getOrDefault(productId, List.of()),
-                            lotsByProduct.getOrDefault(productId, List.of()));
+                            lotsByProduct.getOrDefault(productId, List.of()),
+                            stockoutDays.getOrDefault(productId, List.of()));
                 });
 
         AnalyzeSettings analyzeSettings = new AnalyzeSettings(settings.getStockRotation(),
@@ -282,7 +301,8 @@ public class InsightsStore {
 
     /**
      * Guarda los patrones por producto, hace el upsert de las recomendaciones PENDING (dedupe por sucursal) y expira
-     * las que ya no aplican.
+     * las que ya no aplican. Una recomendación descartada en los últimos {@value #DISCARD_QUIET_DAYS} días no se
+     * vuelve a crear.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public ApplyResult applyResults(AiRun run, AnalyzeResponse response, AnalyzeInput input) {
@@ -321,6 +341,7 @@ public class InsightsStore {
         }
 
         Set<String> keys = new HashSet<>();
+        Set<String> recentlyDiscarded = recentlyDiscarded(tenantId, branchId);
         int created = 0;
         int updated = 0;
         for (RecommendationResult result : response.recommendations()) {
@@ -334,9 +355,12 @@ public class InsightsStore {
                 continue;
             }
             String dedupeKey = trim(result.dedupeKey(), 150);
-            keys.add(dedupeKey);
             Optional<Recommendation> existing = recommendationRepository
                     .findByBranchIdAndDedupeKeyAndStatus(branchId, dedupeKey, RecommendationStatus.PENDING);
+            if (existing.isEmpty() && recentlyDiscarded.contains(dedupeKey)) {
+                continue;
+            }
+            keys.add(dedupeKey);
             Recommendation recommendation = existing.orElseGet(Recommendation::new);
             boolean isNew = existing.isEmpty();
             recommendation.setTenantId(tenantId);
@@ -377,6 +401,19 @@ public class InsightsStore {
             expired++;
         }
         return new ApplyResult(analyzed, created, updated, expired);
+    }
+
+    /** Claves de las recomendaciones de la sucursal descartadas dentro del período de silencio. */
+    private Set<String> recentlyDiscarded(long tenantId, long branchId) {
+        return new HashSet<>(jdbc.queryForList("""
+                select distinct dedupe_key from recommendations
+                where tenant_id = :tenantId and branch_id = :branchId and status = 'DISCARDED'
+                  and decided_at >= :since
+                """, new MapSqlParameterSource()
+                .addValue("tenantId", tenantId)
+                .addValue("branchId", branchId)
+                .addValue("since", utc(clock.instant().minus(Duration.ofDays(DISCARD_QUIET_DAYS)))),
+                String.class));
     }
 
     // ------------------------------------------------------------------ utilidades

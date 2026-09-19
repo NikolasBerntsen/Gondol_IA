@@ -378,6 +378,8 @@ export interface HistoryPoint {
   date: string;
   units: number;
   amount: number;
+  /** Ese día no hubo stock vendible ni ventas: el 0 no muestra la demanda (la IA lo toma como censurado). */
+  stockout?: boolean;
 }
 
 export interface InsightLotRow {

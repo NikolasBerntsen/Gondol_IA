@@ -79,6 +79,15 @@ producto (o la primera venta, si es anterior) hasta **ayer**. El día `asOfDate`
 análisis corre a las 03:00, así que sus ventas están incompletas; no entran en la historia pero se descuentan de la
 demanda de hoy. Por eso el pronóstico de la respuesta empieza en `asOfDate + 1`.
 
+**Días sin stock (demanda censurada).** El backend informa en `stockoutDays` los días en que el producto no tuvo
+stock vendible ni ventas. Esos ceros no muestran la demanda (no había qué vender): tomarlos como datos haría ver una
+caída que no existió (una leche agotada hace 6 días figuraba "Venta estable de 6,9 u/día" con "tendencia −92%" y una
+reposición calculada con 3,8 u/día). `impute_stockouts` completa cada tramo con el promedio de los 28 días previos con
+stock, ajustado por día de la semana (8 semanas, suavizado hacia 1), **antes** de medir features, patrón, pronóstico
+y anomalías. No se completan tramos sin al menos 7 días de historia previa ni más largos que 8 semanas. Si el faltante
+llega hasta ayer, la reposición lo dice: "No hay stock vendible desde el 13/09 y la demanda es de 6,9 u/día (los días
+sin stock no se toman como una caída de la venta)…", y `summary.modelNotes` cuenta cuántos productos se completaron.
+
 **Picos extremos acotados.** Antes de calcular features, patrón y pronóstico, cada día se compara con su nivel local
 (mediana móvil de 15 días, desestacionalizada) y se acota si lo supera en más de 6 desvíos robustos; en demanda
 esporádica se compara el tamaño de cada venta con el de las demás ventas. Así una venta mayorista o un error de carga
@@ -105,6 +114,11 @@ Detalles de la **tendencia** que conviene saber defender:
 - Solo se informa si es **estadísticamente significativa** (p < 0,01) o si la regresión de 16 semanas, más robusta,
   confirma la misma dirección. Si no, se informa 0: con ruido diario, 8 semanas de un producto estable pueden
   mostrar ±30% por pura casualidad, y mostrar eso en pantalla sería engañoso.
+- **Coherente con el patrón**: en `EN_CRECIMIENTO` / `EN_DECLIVE` el `trendPct` de la respuesta (y el de las
+  explicaciones) es la misma variación que cuenta la descripción del patrón ("pasó de 2,4 a 3,8 u/día (+62%)" →
+  `trendPct` 62). Antes podía salir 0 si el alza ya se había estabilizado en las últimas 8 semanas, y la ficha mostraba
+  "en alza +62%" junto a "tendencia 0%". Y un `ALTA_ROTACION_ESTABLE` con tendencia de 8 semanas de ±10% o más ya no
+  se describe como "Venta estable" sino "Rotación alta: 6,9 u/día, en baja en las últimas 8 semanas (−15%)".
 
 ### 2.3 Patrón de ventas: reglas + KMeans
 
@@ -210,6 +224,8 @@ Cada ingreso de mercadería es un lote propio, así que un producto puede tener 
 El servicio **simula día a día** cómo se va a vender la demanda pronosticada, lote por lote, en el mismo orden que usa
 el backend para registrar las ventas (`SPEC §4.2`):
 
+- **Lotes en liquidación primero**: los lotes con `discountPct` > 0 (descuento aceptado) se venden antes que el resto,
+  con cualquier rotación; dentro de cada grupo rige FIFO o FEFO. Es el orden `(discount_pct IS NULL) ASC, …` del backend.
 - **FIFO** (default, "primero sale lo que entró antes"): `receivedAt` ascendente, luego id.
 - **FEFO** ("primero sale lo que vence antes"): `expiryDate` ascendente (sin vencimiento al final), luego `receivedAt` e id.
 - Un lote **vencido nunca se vende**: al pasar su fecha, lo que queda se cuenta como merma y no atiende demanda.
@@ -227,22 +243,24 @@ pasaría. La IA lo detecta simulando ambas rotaciones y lo explica:
 > El lote L2409A vence el 24/09/2026 (en 7 días) y tiene 18 u. Con rotación FIFO primero sale la mercadería que
 > entró antes: hay 40 u. de lotes que ingresaron antes y vencen después (hasta el 08/10/2026), así que este lote no
 > llegaría a venderse antes de vencer. Al ritmo actual se venderían 0 u. antes del vencimiento y quedan 18 u. en
-> riesgo ($ 25.200 a costo). Con 10% de descuento y exhibiéndolo adelante se estima vender 18 u., suficiente para
-> liquidar el lote. Con rotación FEFO (primero lo que vence antes) quedarían 0 u. en riesgo en lugar de 18 u.:
+> riesgo ($ 25.200 a costo). Con 10% de descuento, que lo pasa adelante en la fila de venta, se estima vender 18 u.,
+> suficiente para liquidar el lote. Con rotación FEFO (primero lo que vence antes) quedarían 0 u. en riesgo en lugar de 18 u.:
 > evaluá cambiarla en Configuración. Elasticidad usada para Lácteos: 2,9, ajustada con 1 resultado medido de descuentos.
 
 ### 2.9 Descuentos y aprendizaje con feedback (`lots.py`, `discounts.py`)
 
 **Efecto de un descuento.** Se modela con una **elasticidad** e por categoría: con d% de descuento las ventas se
 multiplican por `1 + e · d/100`. Con e = 2 (default: +2% de ventas por cada 1% de descuento), 20% de descuento
-vende 1,4 veces más. En la simulación, el lote en oferta **se exhibe adelante** solo frente a los lotes que vencen
-**después** que él (con FIFO saltea la mercadería vieja que vence más tarde; con FEFO el orden no cambia) y mientras
-se vende la demanda se multiplica por ese factor. Nunca se adelanta a un lote que vence antes: eso liquidaría el lote
-en oferta a costa de hacer vencer otro.
+vende 1,4 veces más. Aceptar el descuento pone el lote **en liquidación**, y el backend lo vende antes que el resto
+(SPEC §4.2): la simulación de cada escalón hace lo mismo, y mientras ese lote se vende la demanda se multiplica por el
+factor. Un lote que **ya** está en liquidación se simula primero desde el principio, así que no se lo informa en riesgo
+por mercadería más vieja ni se le sugiere otro descuento si a su ritmo se vende a tiempo. Si el lote queda detrás de
+otros en liquidación, la explicación lo dice ("Los lotes en liquidación salen primero: hay 40 u. con descuento…").
 
 **Descuento mínimo.** Se prueban los escalones 10, 15, 20, 25, 30 y 40% (sin superar `maxDiscountPct`) simulando
-**toda la fila de lotes** y se elige el **primero** con el que se estima vender todo el lote antes de vencer **sin
-aumentar la merma de los demás lotes**. Si ninguno alcanza, se propone el mayor permitido y la explicación lo aclara
+**toda la fila de lotes** y se elige el **primero** con el que se estima vender todo el lote antes de vencer. Si al
+pasar primero hace vencer mercadería de otros lotes, la explicación aclara que no alcanza sola ("se demoraría la venta
+de otros lotes… conviene además achicar los próximos pedidos"). Si ninguno alcanza, se propone el mayor permitido y la explicación lo aclara
 ("conviene además exhibirlo… u ofrecerlo en combos"). Si el lote ya tiene un descuento, solo se sugieren escalones
 mayores. Si el producto casi no vende (< 0,05 u/día) el modelo no puede estimar la respuesta al precio: la
 recomendación se titula "Liquidar … antes del vencimiento", sugiere el máximo permitido, combos o donación, y su
@@ -411,7 +429,7 @@ Los logs son **JSON de una línea** (`ts`, `level`, `logger`, `message` + campos
 recomendaciones y duración. No se registran datos de ventas ni imágenes. `/health` se loguea en nivel DEBUG para no
 llenar el log con los healthchecks. El nivel se cambia con `LOG_LEVEL`.
 
-## 6. Tests (`ai-service/tests`, 184 casos)
+## 6. Tests (`ai-service/tests`, 198 casos)
 
 - `synthetic.py`: generadores de series para **cada patrón** (estable, finde fuerte, intermitente, crecimiento,
   declive, baja rotación, sin movimiento, poca historia) y armado de pedidos.
@@ -422,11 +440,16 @@ llenar el log con los healthchecks. El nivel se cambia con `LOG_LEVEL`.
 - `test_anomalies.py`: tasa de falsos positivos en series limpias (estables, de bajo volumen, estacionales e
   intermitentes), detección de picos reales y ausencia de "caídas" falsas después de un pico.
 - `test_inventory.py`: fórmulas de stock de seguridad, punto de pedido, cantidad sugerida, vida útil, cobertura.
-- `test_lots.py`: orden FIFO/FEFO idéntico al backend, lotes vencidos nunca consumidos, lote nuevo bloqueado por FIFO,
-  escalón mínimo según elasticidad, tope de descuento, el lote en oferta no se adelanta a uno que vence antes.
+- `test_lots.py`: orden FIFO/FEFO idéntico al backend con los lotes en liquidación primero, lotes vencidos nunca
+  consumidos, lote nuevo bloqueado por FIFO, un lote ya en liquidación no queda en riesgo detrás de mercadería vieja,
+  escalón mínimo según elasticidad, tope de descuento, simular el descuento pone el lote primero.
+- `test_stockouts.py`: días sin stock completados (al final y en el medio de la serie, perfil semanal, tramos sin
+  historia o demasiado largos); un producto agotado mantiene su demanda real en patrón, venta diaria, tendencia y
+  reposición; un repuesto no queda "en declive"; la tendencia de un producto en alza es la del patrón.
 - `test_discounts.py`: elasticidad por defecto, el feedback la sube o baja, transferencia entre categorías.
 - `test_recommendations.py`: los 5 tipos, `dedupeKey`, orden por prioridad (vencido > reposición > anomalía),
-  explicación FIFO, FEFO no genera el descuento, el feedback cambia el descuento sugerido, liquidación sin ventas,
+  explicación FIFO, FEFO no genera el descuento, un lote ya en liquidación no recibe otro descuento, un lote detrás
+  de una liquidación lo explica, el feedback cambia el descuento sugerido, liquidación sin ventas,
   fechas de otro año con año, formato es-AR.
 - `test_parse.py`: más de 50 textos de etiquetas reales (`VTO: 12/10/26`, `VENCE 03-2027`, `L.2409A`,
   `LOTE 24091B F.ELAB 10/09/2026 VTO 10/03/2027`, `CONSUMIR ANTES DE 25 SEP 2026`…).
@@ -442,13 +465,13 @@ llenar el log con los healthchecks. El nivel se cambia con `LOG_LEVEL`.
 - **Elasticidad lineal y por categoría**: no distingue productos dentro de una categoría ni efectos no lineales
   (un 40% no rinde el doble que un 20%), ni canibalización con otros productos. El aprendizaje con feedback compensa
   en parte; más datos permitirían elasticidad por producto.
-- **Descuento y rotación**: la simulación supone que el lote en oferta se exhibe adelante de los que vencen después;
-  el backend registra las ventas según la rotación configurada, así que con FIFO el sistema puede descontar primero
-  del lote viejo aunque físicamente se venda el de oferta. Por eso la explicación sugiere evaluar FEFO.
+- **Descuento y rotación**: el backend descuenta primero de los lotes en liquidación y la simulación hace lo mismo,
+  pero supone que en la góndola también sale primero el lote en oferta (que está a la vista y señalizado).
 - **Picos acotados**: un aumento real y brusco de la demanda en los últimos 2-3 días se trata como pico hasta que se
   sostiene (la mediana móvil de 15 días tarda unos días en "creerle"); la anomalía sí se informa enseguida.
-- **Sin factores externos**: no conoce feriados, clima, inflación, cambios de precio, promociones de la competencia ni
-  quiebres de stock pasados (un día con 0 ventas por faltante se toma como demanda 0; la detección de caídas lo señala).
+- **Sin factores externos**: no conoce feriados, clima, inflación, cambios de precio ni promociones de la competencia.
+  Los quiebres de stock sí: el backend informa los días sin stock y se completan con la demanda previa (§2.1). Un
+  faltante de más de 8 semanas no se completa (la venta de hace dos meses ya no dice cuánto se vendería hoy).
 - **Lead time fijo**: se usa el del proveedor sin variabilidad; el stock de seguridad solo cubre la incertidumbre de la demanda.
 - **Productos nuevos**: con menos de 14 días no hay patrón y el pronóstico es una media ponderada con confianza baja.
 - **KMeans** solo reasigna casos dudosos: con pocos productos (< 8) o categorías muy distintas aporta poco.

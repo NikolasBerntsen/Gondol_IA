@@ -36,10 +36,13 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -70,6 +73,7 @@ public class InsightsService {
     private final RecommendationService recommendationService;
     private final StockService stockService;
     private final TenantSettingsRepository settingsRepository;
+    private final StockoutCalendar stockoutCalendar;
     private final AiClient aiClient;
     private final ObjectMapper objectMapper;
     private final Clock clock;
@@ -275,17 +279,7 @@ public class InsightsService {
         Object[] row = base.getFirst();
         ProductInsightRow insight = (ProductInsightRow) row[0];
 
-        List<HistoryPoint> history = jdbc.query("""
-                select (m.occurred_at at time zone :zone)::date as day,
-                       sum(case when m.type = 'SALE' then m.quantity else -m.quantity end) as units,
-                       sum(case when m.type = 'SALE' then coalesce(m.total_amount, 0)
-                                else -coalesce(m.total_amount, 0) end) as amount
-                from stock_movements m
-                where m.tenant_id = :tenantId and m.branch_id = :branchId and m.product_id = :productId
-                  and m.type in ('SALE', 'SALE_VOID') and m.occurred_at >= :from
-                group by 1 order by 1
-                """, params, (rs, rowNum) -> new HistoryPoint(rs.getObject("day", LocalDate.class),
-                        rs.getLong("units"), rs.getBigDecimal("amount")));
+        List<HistoryPoint> history = history(tenantId, branchId, productId, today, params);
 
         TenantSettings settings = settingsRepository.findById(tenantId)
                 .orElseGet(() -> TenantSettings.defaultsFor(tenantId));
@@ -303,6 +297,66 @@ public class InsightsService {
                 (Boolean) row[4], history, readJson((String) row[6]), readJson((String) row[7]), (String) row[5],
                 readJson((String) row[8]), readJson((String) row[9]), lots,
                 recommendationService.forProduct(tenantId, scope, branchId, productId));
+    }
+
+    /**
+     * Historia diaria de ventas netas de los últimos {@value #HISTORY_DAYS} días, <strong>día por día</strong>: los
+     * días sin ventas van en 0 (antes faltaban y el gráfico unía los puntos por encima del hueco) y los días sin
+     * stock vienen marcados con {@code stockout}, los mismos que la IA toma como demanda censurada.
+     */
+    private List<HistoryPoint> history(long tenantId, long branchId, long productId, LocalDate today,
+                                       MapSqlParameterSource params) {
+        Map<LocalDate, DaySales> sales = new LinkedHashMap<>();
+        jdbc.query("""
+                select (m.occurred_at at time zone :zone)::date as day,
+                       sum(case when m.type = 'SALE' then m.quantity else -m.quantity end) as units,
+                       sum(case when m.type = 'SALE' then coalesce(m.total_amount, 0)
+                                else -coalesce(m.total_amount, 0) end) as amount
+                from stock_movements m
+                where m.tenant_id = :tenantId and m.branch_id = :branchId and m.product_id = :productId
+                  and m.type in ('SALE', 'SALE_VOID') and m.occurred_at >= :from
+                group by 1 order by 1
+                """, params, rs -> {
+                    sales.put(rs.getObject("day", LocalDate.class),
+                            new DaySales(rs.getLong("units"), rs.getBigDecimal("amount")));
+                });
+        if (sales.isEmpty()) {
+            return List.of();
+        }
+
+        LocalDate windowStart = today.minusDays(HISTORY_DAYS - 1L);
+        List<LocalDate> created = jdbc.query("select created_at from products where id = :productId"
+                + " and tenant_id = :tenantId", params, (rs, rowNum) -> {
+                    Instant instant = AnalyticsSql.instant(rs, "created_at");
+                    return instant == null ? windowStart : instant.atZone(clock.getZone()).toLocalDate();
+                });
+        LocalDate start = created.isEmpty() || created.getFirst().isBefore(windowStart)
+                ? windowStart : created.getFirst();
+        LocalDate firstSale = sales.keySet().iterator().next();
+        if (firstSale.isBefore(start)) {
+            start = firstSale;
+        }
+
+        Map<Long, Set<LocalDate>> salesDays = Map.of(productId, sales.entrySet().stream()
+                .filter(entry -> entry.getValue().units() > 0)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toSet()));
+        Set<LocalDate> stockout = new HashSet<>(stockoutCalendar
+                .stockoutDays(tenantId, branchId, productId, start, today.minusDays(1), clock.getZone(), salesDays)
+                .getOrDefault(productId, List.of()));
+
+        // Hoy está en curso: solo se muestra si ya tiene ventas (un 0 a media mañana no es un día sin ventas).
+        LocalDate end = sales.containsKey(today) ? today : today.minusDays(1);
+        List<HistoryPoint> history = new ArrayList<>();
+        for (LocalDate day = start; !day.isAfter(end); day = day.plusDays(1)) {
+            DaySales row = sales.getOrDefault(day, DaySales.NONE);
+            history.add(new HistoryPoint(day, row.units(), row.amount(), stockout.contains(day)));
+        }
+        return history;
+    }
+
+    private record DaySales(long units, BigDecimal amount) {
+        static final DaySales NONE = new DaySales(0, BigDecimal.ZERO);
     }
 
     // ------------------------------------------------------------------ runs

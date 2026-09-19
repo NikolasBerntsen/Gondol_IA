@@ -366,7 +366,7 @@
       "abcClass": "A",
       "xyzClass": "X",
       "avgDailySales": 3.12,
-      "trendPct": 49.1,
+      "trendPct": 106.1,
       "weekdayProfile": [0.95, 0.92, 1.4, 1.09, 1.06, 0.73, 0.84],
       "forecastMethod": "HOLT_WINTERS",
       "forecast": [
@@ -411,7 +411,7 @@
       "abcClass": "A",
       "xyzClass": "X",
       "avgDailySales": 7.09,
-      "trendPct": 19.2,
+      "trendPct": 90.8,
       "weekdayProfile": [0.8, 0.89, 0.93, 0.66, 0.84, 1.39, 1.5],
       "forecastMethod": "HOLT_WINTERS",
       "forecast": [
@@ -501,7 +501,7 @@
       "abcClass": "A",
       "xyzClass": "X",
       "avgDailySales": 3.73,
-      "trendPct": -84.1,
+      "trendPct": -53.5,
       "weekdayProfile": [0.9, 0.94, 0.94, 1.08, 0.94, 1.17, 1.02],
       "forecastMethod": "HOLT_WINTERS",
       "forecast": [
@@ -790,7 +790,7 @@
       "priority": 87,
       "confidence": 0.899,
       "title": "Reponer Fernet 750 ml Tres Sierras",
-      "explanation": "Al ritmo actual (3,5 u/día, tendencia +49%) el stock de 14 u. alcanza para 4,4 días y el proveedor tarda 5 días. Sugerimos pedir 57 u. hoy.",
+      "explanation": "Al ritmo actual (3,5 u/día, tendencia +106%) el stock de 14 u. alcanza para 4,4 días y el proveedor tarda 5 días. Sugerimos pedir 57 u. hoy.",
       "suggestedQuantity": 57,
       "suggestedDiscountPct": null,
       "suggestedDate": "2026-09-17",
@@ -832,7 +832,7 @@
       "priority": 82,
       "confidence": 0.905,
       "title": "Reponer Papas fritas clásicas 150 g Crocantitas",
-      "explanation": "Al ritmo actual (7,6 u/día, tendencia +19%) el stock de 35 u. alcanza para 4,4 días y el proveedor tarda 3 días. Sugerimos pedir 102 u. antes del 18/09.",
+      "explanation": "Al ritmo actual (7,6 u/día, tendencia +91%) el stock de 35 u. alcanza para 4,4 días y el proveedor tarda 3 días. Sugerimos pedir 102 u. antes del 18/09.",
       "suggestedQuantity": 102,
       "suggestedDiscountPct": null,
       "suggestedDate": "2026-09-18",
@@ -846,7 +846,7 @@
       "priority": 80,
       "confidence": 0.746,
       "title": "Aplicar 10% de descuento a Yogur bebible frutilla 1L (lote L2409A)",
-      "explanation": "El lote L2409A vence el 24/09/2026 (en 7 días) y tiene 18 u. Con rotación FIFO primero sale la mercadería que entró antes: hay 40 u. de lotes que ingresaron antes y vencen después (hasta el 08/10/2026), así que este lote no llegaría a venderse antes de vencer. Al ritmo actual se venderían 0 u. antes del vencimiento y quedan 18 u. en riesgo ($ 25.200 a costo). Con 10% de descuento y exhibiéndolo adelante se estima vender 18 u., suficiente para liquidar el lote. Con rotación FEFO (primero lo que vence antes) quedarían 0 u. en riesgo en lugar de 18 u.: evaluá cambiarla en Configuración. Elasticidad usada para Lácteos: 2,9, ajustada con 1 resultado medido de descuentos.",
+      "explanation": "El lote L2409A vence el 24/09/2026 (en 7 días) y tiene 18 u. Con rotación FIFO primero sale la mercadería que entró antes: hay 40 u. de lotes que ingresaron antes y vencen después (hasta el 08/10/2026), así que este lote no llegaría a venderse antes de vencer. Al ritmo actual se venderían 0 u. antes del vencimiento y quedan 18 u. en riesgo ($ 25.200 a costo). Con 10% de descuento, que lo pasa adelante en la fila de venta, se estima vender 18 u., suficiente para liquidar el lote. Con rotación FEFO (primero lo que vence antes) quedarían 0 u. en riesgo en lugar de 18 u.: evaluá cambiarla en Configuración. Elasticidad usada para Lácteos: 2,9, ajustada con 1 resultado medido de descuentos.",
       "suggestedQuantity": null,
       "suggestedDiscountPct": 10,
       "suggestedDate": "2026-09-17",
@@ -953,7 +953,7 @@
       "KMeans agrupó los productos en 3 perfiles de venta (0 casos dudosos reclasificados según su grupo).",
       "Anomalías de los últimos 30 días: 1 (z-score robusto sobre los residuos del pronóstico, con Isolation Forest como segunda opinión).",
       "La elasticidad por descuento se ajustó con 2 resultados medidos de descuentos aceptados.",
-      "Con FIFO, 1 lote vence antes que mercadería que ingresó antes y quedaría sin vender: conviene exhibirlos adelante o evaluar la rotación FEFO.",
+      "Con FIFO, 1 lote vence antes que mercadería que ingresó antes y quedaría sin vender: conviene liquidarlos con un descuento (los lotes en liquidación salen primero) o evaluar la rotación FEFO.",
       "Hay 1 lote vencido con stock para retirar y registrar como merma."
     ]
   }

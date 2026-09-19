@@ -27,6 +27,8 @@ HIGH_ROTATION_MIN_DAILY = 1.0
 LUMPY_MIN_SIZE = 2.0
 TREND_MIN_LEVEL = 0.7
 TREND_SIGNIFICANCE = 0.01
+STABLE_MAX_TREND_PCT = 10.0
+"""Con una tendencia de 8 semanas mayor que esto la venta ya no se describe como "estable"."""
 
 ALTA_ROTACION_ESTABLE = "ALTA_ROTACION_ESTABLE"
 ESTACIONAL_SEMANAL = "ESTACIONAL_SEMANAL"
@@ -283,9 +285,10 @@ def describe(pattern: str, f: SeriesFeatures) -> str:
         before, after = f.level_before, f.level_after
         verb = "en alza" if pattern == EN_CRECIMIENTO else "en baja"
         text = f"Ventas {verb}: pasó de {fmt_num(before)} a {fmt_num(after)} u/día"
-        if before < 0.05:
+        change = level_change_pct(f)
+        if change is None:
             return text
-        return f"{text} ({fmt_pct((after / before - 1.0) * 100.0, signed=True)})"
+        return f"{text} ({fmt_pct(change, signed=True)})"
     if pattern == INTERMITENTE:
         share = (1.0 - f.zero_share) * 100.0
         return f"Ventas esporádicas: vende en el {fmt_pct(share)} de los días, {fmt_num(f.avg_size)} u. por vez"
@@ -298,9 +301,35 @@ def describe(pattern: str, f: SeriesFeatures) -> str:
             return f"Vende {fmt_pct((1.0 - f.weekend_ratio) * 100.0)} menos los fines de semana"
         best = int(np.argmax(f.profile))
         return f"Su mejor día es el {WEEKDAY_NAMES[best]} ({fmt_pct((f.profile[best] - 1.0) * 100.0, signed=True)} sobre el promedio)"
+    if abs(f.trend_pct) >= STABLE_MAX_TREND_PCT:
+        direction = "en alza" if f.trend_pct > 0 else "en baja"
+        return (
+            f"Rotación alta: {fmt_num(f.mean_recent)} u/día, {direction} en las últimas 8 semanas "
+            f"({fmt_pct(f.trend_pct, signed=True)})"
+        )
     if f.cv_weekly < 0.5:
         return f"Venta estable de {fmt_num(f.mean_recent)} u/día"
     return f"Rotación alta con variaciones irregulares ({fmt_num(f.mean_recent)} u/día)"
+
+
+def level_change_pct(f: SeriesFeatures) -> float | None:
+    """Variación entre el primer y el último mes de la ventana de 16 semanas (la que muestra el patrón)."""
+    if f.level_before < 0.05:
+        return None
+    return float(max(-100.0, min(300.0, (f.level_after / f.level_before - 1.0) * 100.0)))
+
+
+def reported_trend_pct(pattern: str, f: SeriesFeatures) -> float:
+    """Tendencia que se informa (`trendPct`), coherente con el patrón que ve el usuario en la misma ficha.
+
+    En crecimiento o declive es la variación que cuenta la descripción del patrón (16 semanas): así la ficha no
+    muestra "Ventas en alza (+62%)" junto a "tendencia 0%" cuando el alza ya se estabilizó en las últimas semanas.
+    En el resto de los patrones es la tendencia de 8 semanas (0 si no es significativa).
+    """
+    if pattern in (EN_CRECIMIENTO, EN_DECLIVE):
+        change = level_change_pct(f)
+        return change if change is not None else f.long_trend_pct
+    return f.trend_pct
 
 
 def classify(f: SeriesFeatures) -> PatternResult:
