@@ -290,13 +290,19 @@ final class DemoWorldBuilder {
         return ApiKeyService.KEY_PREFIX + key.substring(0, ApiKeyService.RANDOM_LENGTH);
     }
 
-    private void catalog(TenantRecord record) {
-        TenantSpec spec = record.spec;
+    /** Productos del catálogo maestro que vende el comercio (su rubro, sin los excluidos, hasta su límite). */
+    static List<DemoCatalog.Template> templatesFor(TenantSpec spec) {
         List<DemoCatalog.Template> templates = new ArrayList<>(DemoCatalog.forTag(spec.catalogTag()));
         templates.removeIf(template -> spec.excludedProducts().contains(template.key()));
         if (templates.size() > spec.productLimit()) {
             templates = spreadPick(templates, spec.productLimit());
         }
+        return templates;
+    }
+
+    private void catalog(TenantRecord record) {
+        TenantSpec spec = record.spec;
+        List<DemoCatalog.Template> templates = templatesFor(spec);
         Instant productsCreated;
         if (spec.key().equals(DemoWorld.EL_SOL)) {
             record.importCreatedAt = daysAgo(DemoWorld.RICH_HISTORY_DAYS + 2, LocalTime.of(10, 5));

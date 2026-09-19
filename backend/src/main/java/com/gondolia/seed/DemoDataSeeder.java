@@ -67,7 +67,14 @@ public class DemoDataSeeder implements ApplicationRunner {
         }
         long started = System.nanoTime();
         log.info("Datos demo: sembrando el mundo de GondolIA (180 días de historia)…");
-        Summary summary = transaction.execute(status -> seed());
+        Summary summary;
+        try {
+            summary = transaction.execute(status -> seed());
+        } catch (RuntimeException e) {
+            // La transacción se revirtió entera: la aplicación arranca igual (sin datos demo) y el error queda en el log.
+            log.error("No se pudieron cargar los datos demo; la base quedó sin cambios", e);
+            return;
+        }
         long millis = (System.nanoTime() - started) / 1_000_000;
         if (summary != null) {
             log.info("Datos demo listos en {} ms: {} comercios, {} lotes, {} movimientos, {} tickets del POS, "

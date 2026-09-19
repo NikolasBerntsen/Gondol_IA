@@ -397,8 +397,14 @@ final class StoreSimulator {
             switch (template.pattern()) {
                 case NONE -> units = 0;
                 case INTERMITTENT -> {
-                    double probability = Math.min(0.85, base / 1.5);
-                    units = rnd.chance(probability) ? 1 + (rnd.chance(0.35) ? 1 : 0) + (rnd.chance(0.1) ? 1 : 0) : 0;
+                    // Pocos días con venta y compras "de a varios" (demanda irregular, promedio ≈ 2,4 u por venta).
+                    double probability = Math.min(0.5, base / 2.4);
+                    if (rnd.chance(probability)) {
+                        double r = rnd.nextDouble();
+                        units = r < 0.35 ? 1 : r < 0.65 ? 2 : r < 0.85 ? 3 : rnd.between(4, 6);
+                    } else {
+                        units = 0;
+                    }
                 }
                 default -> {
                     double[] week = switch (template.pattern()) {
@@ -696,13 +702,19 @@ final class StoreSimulator {
         }
         int lead = stock.product.leadTimeDays;
         int position = coveringStock(stock, day.plusDays(lead)) + stock.pendingQuantity;
-        double safety = template.perishable() && template.shelfLifeDays() <= 30 ? 2 : 3;
-        double reorderPoint = Math.max(1, daily * (lead + safety));
+        double safety = (template.perishable() && template.shelfLifeDays() <= 30 ? 3 : 4) + (lead >= 5 ? 2 : 0);
+        double reorderPoint = Math.max(2, daily * (lead + safety));
         if (position > reorderPoint) {
             return 0;
         }
-        double target = daily * (coverDays(template) + lead);
-        return roundUp(Math.max(target - position, template.packSize()), template.packSize());
+        double target = daily * (coverDays(template) + lead + safety * 0.5);
+        int quantity = roundUp(Math.max(target - position, template.packSize()), template.packSize());
+        // Compras de oportunidad (oferta del proveedor): más lotes vivos y, en perecederos, riesgo de merma.
+        double bonus = template.perishable() && template.shelfLifeDays() <= 60 ? 0.12 : 0.07;
+        if (rnd.chance(bonus)) {
+            quantity = roundUp(quantity * (1.6 + rnd.nextDouble() * 0.7), template.packSize());
+        }
+        return quantity;
     }
 
     private int coveringStock(Stock stock, LocalDate until) {
@@ -1272,7 +1284,7 @@ final class StoreSimulator {
             }
         }
         if (byPair.isEmpty() && fallback != null) {
-            byPair.put("fallback", List.of(fallback));
+            byPair.put("fallback", new ArrayList<>(List.of(fallback)));
         }
         for (List<Candidate> candidates : byPair.values()) {
             candidates.sort(Comparator.comparingDouble(candidate -> -candidate.gap()));
