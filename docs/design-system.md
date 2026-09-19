@@ -47,6 +47,12 @@ body { background: hsl(var(--background)); color: hsl(var(--foreground)); }
 - Sin atributo = sigue al sistema. `data-theme="light"`/`"dark"` en `<html>` = elección explícita.
 - **No** se usa la estrategia `.dark` de Tailwind (queda `darkMode: ["class"]` sin uso) ni `next-themes`.
 - Cada token se declara primero en `:root`; los bloques oscuros solo lo redefinen.
+- **Selector de tema en la app real:** "Sistema / Claro / Oscuro" (íconos Monitor / Sol / Luna) en la barra superior
+  (todos los roles, también en el POS), en el menú de usuario, en "Apariencia" del perfil y en una esquina del login.
+  La preferencia se guarda por navegador (`localStorage["gondolia.theme"]`) y se aplica antes del primer pintado;
+  detalle en `docs/frontend-guide.md` §7.1.
+- **Impresión siempre en claro:** `@media print` vuelve a declarar los tokens claros sobre los bloques oscuros, así el
+  ticket sale en papel claro aunque la pantalla esté en oscuro.
 
 ### 2.2 Base (variables shadcn)
 
@@ -297,10 +303,12 @@ Todos en `design/gondola-ui/src/gondola/components/` → en el frontend real, `c
   siempre" + colapsar. El foco dentro del riel usa el amarillo.
 - **Barra superior** al ras, 56 px, `card` + borde inferior: menú (móvil), buscador "Buscar productos o códigos…"
   (hasta 420 px, se encoge antes que el resto), selector de alcance **"Minimercado El Sol · Todas las sucursales ▾"**
-  (control de 8 px, no píldora), campana con contador y lista con franjas, avatar con nombre y rol. Solo producto: los
-  controles del prototipo viven en la franja punteada de arriba.
+  (control de 8 px, no píldora), botón de tema (ícono de la preferencia, menú Sistema / Claro / Oscuro), campana con
+  contador y lista con franjas, avatar con nombre y rol. Solo producto: los controles del prototipo viven en la franja
+  punteada de arriba. En celulares los botones de ícono van más juntos y el alcance se recorta antes que ellos.
 - **Franja de demo** (punteada, fuera del producto): "Prototipo · datos ficticios", "Ver como" (5 roles), "Simular
-  recall" y el selector de tema. Nada de esto existe en la app real.
+  recall" y el selector de tema. La franja no existe en la app real, pero el **selector de tema sí**: pasó a la barra
+  superior (botón "Cambiar tema"), al menú de usuario, al perfil ("Apariencia") y al login (§2.1).
 - Menú por rol según Addendum (Admin, Jefe, Empleado, Cajero, Dueño). Empleado y Cajero ven su sucursal fija.
 - POS usa la variante **compacta** (riel colapsado).
 
@@ -469,8 +477,9 @@ cuarentena", motivo, pasos numerados, "Entendido" (contorno) y "Ver detalle y re
 5. Copiá `src/gondola/components/*` a `components/gondola/` (PriceTag, ExpiryChip, LotRankChip, StatusPill,
    StockStatusPill, SeverityRow, Ticket, BarcodeDigits, Sparkline, Panel, Controls, Toaster, Logo) y
    `src/gondola/format.ts` a `lib/format.ts` (o fusionalo con el existente: mismos formatos es-AR).
-6. El tema lo resuelve un atributo `data-theme` en `<html>` (sin `next-themes`); guardá la preferencia del usuario si
-   hace falta y respetá "Sistema" quitando el atributo.
+6. El tema lo resuelve un atributo `data-theme` en `<html>` (sin `next-themes`); "Sistema" quita el atributo. En el
+   frontend real ya está hecho: `ThemeProvider` / `useTheme()` en `src/theme/`, script inline en `index.html` (sin
+   parpadeo) y `ThemeToggle` en la barra superior (`docs/frontend-guide.md` §7.1).
 7. Recharts: colores con `hsl(var(--token))`, grilla solo horizontal, ejes en `muted-foreground` 12 px, tooltip propio.
 8. Si se vuelve a empaquetar con Parcel (skill web-artifacts-builder), el `package.json` necesita
    `"@parcel/resolver-default": { "packageExports": true }` para resolver los subpaths de Radix.

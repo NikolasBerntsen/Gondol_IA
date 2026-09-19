@@ -1,16 +1,19 @@
 import { Bell, ChevronDown, LogOut, UserRound } from 'lucide-react';
+import { useId, useRef, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROLE_LABELS } from '@/api/types';
 import { useAuth } from '@/auth/AuthContext';
 import { Avatar } from '@/components/ui/Avatar';
-import { DropdownItem, DropdownPanel, DropdownSeparator, useDropdown } from '@/components/ui/Dropdown';
+import { DropdownItem, DropdownLabel, DropdownPanel, DropdownSeparator, useDropdown } from '@/components/ui/Dropdown';
 import { cn } from '@/lib/cn';
+import { THEME_OPTIONS, useTheme } from '@/theme';
 
-/** Avatar con nombre y rol; menú con Perfil, Notificaciones y Cerrar sesión. */
+/** Avatar con nombre y rol; menú con Perfil, Notificaciones, Tema y Cerrar sesión. */
 export function UserMenu() {
   const { me, logout } = useAuth();
   const navigate = useNavigate();
-  const dropdown = useDropdown();
+  // El foco arranca en "Mi perfil" aunque el tema tenga una opción marcada.
+  const dropdown = useDropdown({ initialFocus: 'first' });
 
   if (!me) return null;
   const roleLabel = ROLE_LABELS[me.role];
@@ -62,6 +65,8 @@ export function UserMenu() {
             Notificaciones
           </DropdownItem>
           <DropdownSeparator />
+          <ThemeSection />
+          <DropdownSeparator />
           <DropdownItem
             icon={<LogOut />}
             tone="danger"
@@ -75,5 +80,63 @@ export function UserMenu() {
         </DropdownPanel>
       )}
     </div>
+  );
+}
+
+/**
+ * "Tema" dentro del menú: segmentado Sistema / Claro / Oscuro (`menuitemradio`). Cambia en el momento y deja el
+ * menú abierto para comparar. Las flechas ↑/↓ recorren el menú entero; ←/→ se mueven dentro del segmentado.
+ */
+function ThemeSection() {
+  const { preference, setPreference } = useTheme();
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  const labelId = useId();
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    const index = refs.current.findIndex((element) => element === document.activeElement);
+    if (index < 0) return;
+    event.preventDefault();
+    const next = (index + (event.key === 'ArrowRight' ? 1 : -1) + THEME_OPTIONS.length) % THEME_OPTIONS.length;
+    refs.current[next]?.focus();
+  };
+
+  return (
+    <>
+      <DropdownLabel id={labelId}>Tema</DropdownLabel>
+      <div
+        role="group"
+        aria-labelledby={labelId}
+        onKeyDown={onKeyDown}
+        className="mx-1 mb-1 grid grid-cols-3 gap-0.5 rounded-control border border-border bg-muted p-0.5"
+      >
+        {THEME_OPTIONS.map((option, index) => {
+          const checked = option.value === preference;
+          const Icon = option.icon;
+          return (
+            <button
+              key={option.value}
+              ref={(element) => {
+                refs.current[index] = element;
+              }}
+              type="button"
+              role="menuitemradio"
+              aria-checked={checked}
+              tabIndex={-1}
+              onClick={() => setPreference(option.value)}
+              className={cn(
+                'inline-flex h-8 min-w-0 items-center justify-center gap-1 rounded-[6px] px-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                checked
+                  ? 'bg-card text-foreground shadow-[0_0_0_1px_hsl(var(--border))]'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span className="truncate">{option.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </>
   );
 }

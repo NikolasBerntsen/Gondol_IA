@@ -18,6 +18,7 @@ import { ROLE_LABELS, type MeDto, type Role } from '@/api/types';
 import { useAuth, type SessionNotice } from '@/auth/AuthContext';
 import { roleHome } from '@/auth/roleHome';
 import { Logo } from '@/components/layout/Logo';
+import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { Alert, type AlertTone } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
@@ -265,7 +266,12 @@ export default function LoginPage() {
       </aside>
 
       {/* Formulario */}
-      <main className="flex flex-1 flex-col">
+      <main className="relative flex flex-1 flex-col">
+        {/* Tema: en móvil queda sobre el encabezado verde del riel; en escritorio, sobre el lienzo. */}
+        <ThemeToggle
+          className="absolute right-3 top-6 z-10 sm:right-4 lg:top-4"
+          triggerClassName="text-rail-foreground hover:bg-rail-hover hover:text-rail-strong aria-expanded:bg-rail-hover aria-expanded:text-rail-strong focus-visible:ring-accent lg:text-muted-foreground lg:hover:bg-muted lg:hover:text-foreground lg:aria-expanded:bg-muted lg:aria-expanded:text-foreground lg:focus-visible:ring-ring"
+        />
         <div className="bg-rail px-5 pb-14 pt-8 text-rail-foreground lg:hidden">
           <Logo variant="light" showTagline />
         </div>

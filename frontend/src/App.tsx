@@ -1,5 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useState, type CSSProperties } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { AuthProvider, useAuth } from '@/auth/AuthContext';
@@ -14,6 +14,7 @@ import { createQueryClient } from '@/lib/queryClient';
 import { RequireModule } from '@/modules/RequireModule';
 import { StompProvider } from '@/realtime/StompProvider';
 import { useSessionEvents } from '@/realtime/useSessionEvents';
+import { ThemeProvider, useTheme } from '@/theme';
 
 // Páginas de la fundación
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
@@ -198,43 +199,67 @@ function AppRoutes() {
   );
 }
 
+/**
+ * Toaster con los tokens de Góndola UI: superficie `card`, radio de panel y sombra de flotante.
+ * `theme` sigue al tema de la app (sonner trae sus propios colores por tema) y las variables `--normal-*` los
+ * reemplazan por tokens: sus reglas `[data-styled]` le ganan a las clases de Tailwind.
+ */
+const TOASTER_STYLE = {
+  '--normal-bg': 'hsl(var(--card))',
+  '--normal-bg-hover': 'hsl(var(--muted))',
+  '--normal-border': 'hsl(var(--border))',
+  '--normal-border-hover': 'hsl(var(--input))',
+  '--normal-text': 'hsl(var(--foreground))',
+} as CSSProperties;
+
+function ThemedToaster() {
+  const { resolved } = useTheme();
+  return (
+    <Toaster
+      theme={resolved}
+      closeButton
+      position="top-right"
+      style={TOASTER_STYLE}
+      toastOptions={{
+        classNames: {
+          toast:
+            'font-sans rounded-panel border border-border bg-card text-foreground shadow-pop text-base items-start',
+          title: 'font-semibold',
+          description: 'text-muted-foreground text-sm',
+          actionButton: 'rounded-control bg-primary text-primary-foreground font-semibold',
+          cancelButton: 'rounded-control bg-muted text-foreground font-semibold',
+          closeButton: 'bg-card border-border text-muted-foreground hover:text-foreground',
+          error: 'text-crit-ink [&_[data-icon]]:text-crit',
+          success: 'text-ok-ink [&_[data-icon]]:text-ok',
+          warning: 'text-warn-ink [&_[data-icon]]:text-warn',
+          info: 'text-info-ink [&_[data-icon]]:text-info',
+        },
+      }}
+    />
+  );
+}
+
 export default function App() {
   const [queryClient] = useState(createQueryClient);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <AuthProvider>
-          <BranchProvider>
-            <StompProvider>
-              <SessionEventsListener />
-              <Suspense fallback={<SplashScreen />}>
-                <AppRoutes />
-              </Suspense>
-            </StompProvider>
-          </BranchProvider>
-        </AuthProvider>
-      </BrowserRouter>
-      {/* Toaster con los tokens de Góndola UI: superficie `card`, radio de panel y sombra de flotante. */}
-      <Toaster
-        closeButton
-        position="top-right"
-        toastOptions={{
-          classNames: {
-            toast:
-              'font-sans rounded-panel border border-border bg-card text-foreground shadow-pop text-base items-start',
-            title: 'font-semibold',
-            description: 'text-muted-foreground text-sm',
-            actionButton: 'rounded-control bg-primary text-primary-foreground font-semibold',
-            cancelButton: 'rounded-control bg-muted text-foreground font-semibold',
-            closeButton: 'bg-card border-border text-muted-foreground hover:text-foreground',
-            error: 'text-crit-ink [&_[data-icon]]:text-crit',
-            success: 'text-ok-ink [&_[data-icon]]:text-ok',
-            warning: 'text-warn-ink [&_[data-icon]]:text-warn',
-            info: 'text-info-ink [&_[data-icon]]:text-info',
-          },
-        }}
-      />
-    </QueryClientProvider>
+    // El tema va afuera de todo: lo usan el login, el splash, el ticket de impresión y el Toaster.
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <AuthProvider>
+            <BranchProvider>
+              <StompProvider>
+                <SessionEventsListener />
+                <Suspense fallback={<SplashScreen />}>
+                  <AppRoutes />
+                </Suspense>
+              </StompProvider>
+            </BranchProvider>
+          </AuthProvider>
+        </BrowserRouter>
+        <ThemedToaster />
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }

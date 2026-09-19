@@ -19,13 +19,18 @@ const ITEM_SELECTOR = '[role="menuitem"]:not([aria-disabled="true"]),[role="menu
 export interface UseDropdownOptions {
   /** Rol ARIA del panel: `menu` (acciones) o `dialog` (contenido libre, p. ej. notificaciones). */
   kind?: 'menu' | 'dialog';
+  /**
+   * Qué ítem recibe el foco al abrir un menú: el marcado (`aria-checked="true"`, p. ej. la sucursal elegida) o
+   * siempre el primero (menús de acciones que además incluyen una opción marcada, como el tema en el menú de usuario).
+   */
+  initialFocus?: 'checked' | 'first';
 }
 
 /**
  * Estado y accesibilidad de un desplegable anclado a un botón: click afuera, ESC (devuelve el foco),
  * navegación con flechas entre ítems de menú y cierre al cambiar de ruta.
  */
-export function useDropdown({ kind = 'menu' }: UseDropdownOptions = {}) {
+export function useDropdown({ kind = 'menu', initialFocus = 'checked' }: UseDropdownOptions = {}) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -56,11 +61,12 @@ export function useDropdown({ kind = 'menu' }: UseDropdownOptions = {}) {
     document.addEventListener('keydown', onKeyDown);
     if (kind === 'menu') {
       const items = panelRef.current?.querySelectorAll<HTMLElement>(ITEM_SELECTOR);
-      const checked = panelRef.current?.querySelector<HTMLElement>('[aria-checked="true"]');
+      const checked =
+        initialFocus === 'checked' ? panelRef.current?.querySelector<HTMLElement>('[aria-checked="true"]') : null;
       (checked ?? items?.[0])?.focus({ preventScroll: true });
     }
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [open, kind, close]);
+  }, [open, kind, initialFocus, close]);
 
   const onPanelKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (kind !== 'menu') return;

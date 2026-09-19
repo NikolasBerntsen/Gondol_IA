@@ -1,4 +1,4 @@
-import { Blocks, Building2, Eye, EyeOff, KeyRound, LogOut, ShieldCheck, Store, UserRound } from 'lucide-react';
+import { Blocks, Building2, Check, Eye, EyeOff, KeyRound, LogOut, Palette, ShieldCheck, Store, UserRound } from 'lucide-react';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -21,7 +21,9 @@ import { Card, CardHeader } from '@/components/ui/Card';
 import { Field } from '@/components/ui/Field';
 import { Input } from '@/components/ui/Input';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { cn } from '@/lib/cn';
 import { useModules } from '@/modules/useModules';
+import { RESOLVED_THEME_LABELS, THEME_OPTIONS, useTheme } from '@/theme';
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -76,10 +78,17 @@ export default function ProfilePage() {
         </Alert>
       )}
 
-      <div className={forced ? 'grid gap-6' : 'grid gap-6 lg:grid-cols-5'}>
-        {!forced && <AccountCard />}
-        <ChangePasswordCard className={forced ? undefined : 'lg:col-span-3'} />
-      </div>
+      {forced ? (
+        <ChangePasswordCard />
+      ) : (
+        <div className="grid items-start gap-6 lg:grid-cols-5">
+          <AccountCard />
+          <div className="grid gap-6 lg:col-span-3">
+            <ChangePasswordCard />
+            <AppearanceCard />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -168,6 +177,74 @@ function ModulesRow() {
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * Tema de la app (docs/frontend-guide.md §7.1): Sistema / Claro / Oscuro. Es el mismo ajuste que el botón de la
+ * barra superior; se guarda en este navegador.
+ */
+function AppearanceCard() {
+  const { preference, resolved, setPreference } = useTheme();
+
+  return (
+    <Card>
+      <CardHeader
+        icon={Palette}
+        title="Apariencia"
+        description="Elegí cómo se ve GondolIA. Se guarda en este navegador: en otro dispositivo podés elegir otro."
+      />
+      <div role="radiogroup" aria-label="Tema" className="mt-5 grid gap-3 sm:grid-cols-3">
+        {THEME_OPTIONS.map((option) => {
+          const selected = option.value === preference;
+          const Icon = option.icon;
+          return (
+            <label
+              key={option.value}
+              className={cn(
+                'relative flex cursor-pointer flex-col gap-3 rounded-panel border p-4 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-card',
+                selected ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted',
+              )}
+            >
+              <input
+                type="radio"
+                name="theme-preference"
+                className="sr-only"
+                value={option.value}
+                checked={selected}
+                onChange={() => setPreference(option.value)}
+              />
+              <span className="flex items-center justify-between gap-3">
+                <span
+                  className={cn(
+                    'grid size-9 shrink-0 place-items-center rounded-control',
+                    selected ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
+                  )}
+                >
+                  <Icon className="size-5" aria-hidden="true" />
+                </span>
+                <span
+                  className={cn(
+                    'grid size-5 shrink-0 place-items-center rounded-full border',
+                    selected ? 'border-primary bg-primary text-primary-foreground' : 'border-input',
+                  )}
+                  aria-hidden="true"
+                >
+                  {selected && <Check className="size-3.5" />}
+                </span>
+              </span>
+              <span className="min-w-0">
+                <span className="block text-md font-semibold text-foreground">{option.label}</span>
+                <span className="mt-0.5 block text-sm text-muted-foreground">
+                  {option.description}
+                  {option.value === 'system' && ` Ahora se ve ${RESOLVED_THEME_LABELS[resolved]}.`}
+                </span>
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </Card>
   );
 }
 

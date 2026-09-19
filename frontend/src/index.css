@@ -354,4 +354,48 @@
   body {
     background: #fff;
   }
+
+  /* Siempre se imprime en claro, aunque la pantalla esté en oscuro (por sistema o elegido): papel claro y tinta
+     oscura. Mismos selectores (y especificidad) que los bloques oscuros, declarados después: ganan. */
+  :root:not([data-theme='light']),
+  :root[data-theme='dark'] {
+    color-scheme: light;
+    --background: 90 16.7% 95.3%;
+    --foreground: 141.4 25% 11%;
+    --card: 0 0% 100%;
+    --muted: 102.9 17.1% 92%;
+    --muted-foreground: 138.8 8.2% 38.4%;
+    --border: 103.6 15.5% 86.1%;
+    --input: 105 12.1% 74.1%;
+    --ring: 148.4 55.9% 26.7%;
+    --scrim: 144 40.5% 7.3%;
+    --primary: 148.4 55.9% 26.7%;
+    --primary-foreground: 140 37.5% 96.9%;
+    --rail: 150.7 58.9% 14.3%;
+    --rail-foreground: 142.5 26.7% 88.2%;
+    --rail-active: 148.4 55.9% 26.7%;
+    --rail-hover: 150.6 54.6% 19%;
+    --rail-muted: 145 19.1% 63.1%;
+    --rail-strong: 0 0% 100%;
+    --accent: 44.2 89% 60.8%;
+    --accent-foreground: 43.6 89.2% 7.3%;
+    --ok: 145.1 49.2% 36.3%;
+    --ok-soft: 140 34.9% 91.6%;
+    --ok-ink: 144 50% 27.5%;
+    --warn: 28.9 83.6% 42.9%;
+    --warn-soft: 30 80% 92.2%;
+    --warn-ink: 28.6 85.7% 30.2%;
+    --crit: 6.1 63.2% 45.9%;
+    --crit-soft: 7.2 67.6% 92.7%;
+    --crit-ink: 5.9 64.2% 37.3%;
+    --info: 204.3 55.8% 39%;
+    --info-soft: 204 50% 92.2%;
+    --info-ink: 204.3 58% 31.8%;
+    --on-solid: 0 0% 100%;
+    --paper: 48 100% 99%;
+    --paper-ink: 120 5.1% 11.6%;
+    --shadow-color: 150 40% 12%;
+    --shadow-pop: 0 1px 2px hsl(var(--shadow-color) / 0.08), 0 14px 36px -10px hsl(var(--shadow-color) / 0.28);
+    --shadow-sheet: 0 -2px 6px hsl(var(--shadow-color) / 0.06), 0 -18px 48px -12px hsl(var(--shadow-color) / 0.3);
+  }
 }

@@ -31,10 +31,11 @@ src/
 ├── branches/   BranchContext (useBranch, useBranchQueryKey, useWriteBranch), BranchSelector, BranchPicker, branchColumn
 ├── modules/    useModules, RequireModule, ModuleDisabledPage          ← módulos por tenant (SPEC §14)
 ├── realtime/   StompProvider, useStompSubscription, useStompPublish, useSessionEvents
+├── theme/      ThemeProvider, useTheme, THEME_OPTIONS (importar desde '@/theme')   ← tema Sistema/Claro/Oscuro (§7.1)
 ├── components/ui/          kit base (importar desde '@/components/ui')
 ├── components/gondola/     componentes firma (PriceTag, ExpiryChip, Ticket80mm…)
 ├── components/scanner/     BarcodeScanner, useBarcodeWedge, CameraCapture
-├── components/layout/      AppShell, Sidebar (riel), Topbar, NotificationBell, UserMenu, Logo
+├── components/layout/      AppShell, Sidebar (riel), Topbar, ThemeToggle, NotificationBell, UserMenu, Logo
 ├── components/notifications/  NotificationItem, useNotificationActions
 ├── config/     navigation.ts (menú por rol + módulo), access.ts (ROLE_GROUPS, canAccessPath, requiredModuleForPath)
 ├── lib/        format.ts, cn.ts, useDebounce.ts, queryClient.ts, secureContext.ts, focus.ts, scrollLock.ts
@@ -311,9 +312,8 @@ Ya resuelto por la fundación (no volver a suscribirse para lo mismo):
 ## 7. Diseño: tokens de Góndola UI
 
 Todo color sale de un **token** (`src/index.css`), nunca de un literal ni de la paleta de Tailwind
-(`slate-500`, `brand-600` y `emerald-*` ya no existen). Los tokens tienen versión clara y oscura; el tema sigue al
-sistema operativo (`prefers-color-scheme`) y se puede forzar con `data-theme="light|dark"` en `<html>`.
-**Probá siempre las dos.**
+(`slate-500`, `brand-600` y `emerald-*` ya no existen). Los tokens tienen versión clara y oscura; cada usuario elige
+**Sistema / Claro / Oscuro** (§7.1). **Probá siempre las dos.**
 
 | Token / clase | Cuándo se usa |
 |---|---|
@@ -345,6 +345,50 @@ Reglas rápidas (detalle en `docs/design-system.md`):
 - Utilidades propias: `gd-stripe-crit|warn|info|ok|none` (franja de severidad), `gd-eyebrow` (rótulo en mayúsculas),
   `gd-kbd`, `gd-scroll`, `gd-skeleton`, `gd-no-print`.
 - `cn(...)` (de `@/lib/cn`) conoce estas escalas: `cn('rounded-panel', 'rounded-tag')` deja solo la última.
+
+### 7.1 Tema: Sistema / Claro / Oscuro
+
+Cada usuario elige el tema; la preferencia se guarda **por navegador** en `localStorage["gondolia.theme"]`
+(`system` por defecto) y no viaja con la cuenta.
+
+| Pieza | Qué hace |
+|---|---|
+| `index.html` (script inline en `<head>`) | Lee la preferencia y pone `data-theme` **antes del primer pintado** (sin parpadeo). No hay CSP que lo bloquee (`frontend/nginx`); si algún día se agrega una, pasalo a `public/theme-init.js` y permití `'self'`. |
+| `ThemeProvider` (`@/theme`, montado en la raíz de `App.tsx`) | Mantiene el atributo: `data-theme="light\|dark"` o **sin atributo** para "Sistema" (el CSS sigue a `prefers-color-scheme`). Escucha el cambio del sistema operativo (`matchMedia`) y de otras pestañas (`storage`), actualiza `<meta name="theme-color">` / `color-scheme` y cambia sin transiciones para que todo pase a la vez. Funciona en el login, el splash y el ticket (fuera del AppShell). |
+| `useTheme()` | `{ preference: 'system' \| 'light' \| 'dark', resolved: 'light' \| 'dark', setPreference }`. `resolved` es el tema que se ve. |
+| `ThemeToggle` (`@/components/layout/ThemeToggle`) | Botón "Cambiar tema" (Monitor / Sol / Luna según la preferencia) con menú Sistema / Claro / Oscuro. Está en la barra superior para **todos los roles**, también en la variante compacta del POS, y en la esquina del login. |
+| Menú de usuario · perfil | Sección "Tema" (segmentado) en `UserMenu` y tarjeta "Apariencia" en `/profile`: es el mismo ajuste. |
+| `THEME_OPTIONS` | Etiquetas, íconos y textos de las tres opciones, para no repetirlos. |
+
+```tsx
+import { useTheme } from '@/theme';
+
+const { preference, resolved, setPreference } = useTheme();
+setPreference('dark');           // 'system' vuelve a seguir al sistema operativo
+```
+
+**Colores leídos desde JS.** Lo normal es no leer colores: pasale a recharts, SVG y estilos inline
+**strings con tokens** (`'hsl(var(--primary))'`), que el navegador resuelve en vivo y cambian solos con el tema (así
+están `features/analytics/components/chart.tsx`, `Sparkline` y `GrowthChart`). Solo si necesitás el **valor**
+(canvas, `getComputedStyle(...).getPropertyValue('--x')`, una librería que no entiende `var()`):
+
+- leelo en el momento de usarlo (como la captura de pantalla del soporte), o
+- recalculalo cuando cambia el tema, poniendo `resolved` en las dependencias:
+
+```tsx
+const { resolved } = useTheme();
+const colors = useMemo(() => {
+  const css = getComputedStyle(document.documentElement);
+  return { primary: `hsl(${css.getPropertyValue('--primary').trim()})` };
+}, [resolved]);
+```
+
+Nunca guardes un color leído en una constante de módulo ni en un `useRef` sin dependencia: queda con el tema de
+cuando cargó la pantalla. El `Toaster` (sonner) recibe `theme={resolved}` y sus variables `--normal-*` apuntan a
+tokens (`ThemedToaster` en `App.tsx`).
+
+**Impresión:** `@media print` vuelve a poner los tokens claros aunque la pantalla esté en oscuro, así el ticket sale en
+papel claro con tinta oscura (§9.1). No hace falta nada en la página.
 
 ---
 
@@ -386,7 +430,7 @@ Reglas rápidas (detalle en `docs/design-system.md`):
 | `Progress` | Barra de progreso (Radix) para la aplicación de una importación. |
 | `Tooltip` + `TooltipProvider/Trigger/Content` | Requiere un `TooltipProvider` arriba. |
 | `Popover`, `DropdownMenu*`, `Sheet*`, `Separator`, `Label` | Primitivas de Radix ya adaptadas a los tokens. |
-| `useDropdown`, `DropdownPanel`, `DropdownItem`, `DropdownSeparator`, `DropdownLabel` | Desplegable propio (click afuera, ESC, flechas) para paneles con contenido libre. |
+| `useDropdown`, `DropdownPanel`, `DropdownItem`, `DropdownSeparator`, `DropdownLabel` | Desplegable propio (click afuera, ESC, flechas) para paneles con contenido libre. Al abrir enfoca el ítem marcado (`aria-checked`); `useDropdown({ initialFocus: 'first' })` enfoca siempre el primero (menús de acciones con una opción marcada adentro, como el tema del menú de usuario). |
 | `AuthImage` | `src` (ruta `/api/...` protegida), `alt`, `fallback`, `placeholderClassName`. |
 | `Avatar` | `name`, `size: sm \| md \| lg \| xl`. |
 | `SecureContextWarning` | Aviso de cámara en HTTP (ver §11). |
@@ -488,8 +532,9 @@ export default function PosTicketPage() {
 }
 ```
 
-- `gd-no-print` (en `index.css`) oculta cualquier cosa al imprimir; el `@media print` global ya pone fondo blanco.
-- El ticket mide 302 px (80 mm) y usa `--paper`/`--paper-ink`: **no** cambia con el tema oscuro.
+- `gd-no-print` (en `index.css`) oculta cualquier cosa al imprimir; el `@media print` global ya pone fondo blanco y
+  **fuerza los tokens claros** (aunque el usuario tenga el tema oscuro, se imprime en claro).
+- El ticket mide 302 px (80 mm) y usa `--paper`/`--paper-ink`: en pantalla sigue siendo papel en tema oscuro.
 - Después de cobrar, mostrá el mismo `Ticket80mm` dentro del diálogo con "Imprimir" y "Nueva venta"; el link a esta
   página sirve para reimprimir desde el historial.
 
@@ -563,7 +608,8 @@ Etiquetas en español para enums (todas en `@/api/types`): `ROLE_LABELS`, `PLAN_
 
 ## 13. Charts (recharts)
 
-- Colores con `hsl(var(--primary))`, `hsl(var(--info))`…: nunca literales, así funcionan en los dos temas.
+- Colores con `hsl(var(--primary))`, `hsl(var(--info))`…: nunca literales, así funcionan en los dos temas y cambian
+  en vivo cuando el usuario cambia el tema. Si necesitás el valor resuelto, dependé de `useTheme().resolved` (§7.1).
 - Grilla solo horizontal y tenue, ejes en `muted-foreground` de 12 px, tooltip propio con superficie `card`,
   `rounded-panel` y `shadow-pop`.
 - Área verde para stock (eje izquierdo) + línea tinta para ventas (eje derecho), con el punto final destacado.
@@ -579,4 +625,5 @@ Etiquetas en español para enums (todas en `@/api/types`): `ROLE_LABELS`, `PLAN_
 5. `PageHeader` + estados de carga / error / vacío, los tres con texto en voseo.
 6. Componentes firma donde correspondan (precio, vencimiento, lote, estado de stock, código de barras).
 7. Toasts de éxito en participio; errores con `getErrorMessage`.
-8. Probar en **375 px** y en escritorio, en **tema claro y oscuro**. `npm run build` sin errores.
+8. Probar en **375 px** y en escritorio, en **tema claro y oscuro** (cambialo con el botón de la barra superior, con
+   la pantalla abierta: nada tiene que quedar con los colores del tema anterior). `npm run build` sin errores.

@@ -9,6 +9,7 @@ import { cn } from '@/lib/cn';
 import { formatLongDate } from '@/lib/format';
 import { LogoMark } from './Logo';
 import { NotificationBell } from './NotificationBell';
+import { ThemeToggle } from './ThemeToggle';
 import { UserMenu } from './UserMenu';
 
 const INVENTORY_PATH = '/app/inventory';
@@ -20,7 +21,7 @@ export interface TopbarProps {
 
 /**
  * Barra superior al ras (56 px): menú (mobile), buscador, alcance (comercio · sucursal),
- * campana y usuario (docs/design-system.md §7.1).
+ * tema, campana y usuario (docs/design-system.md §7.1). Es la misma en la variante compacta del POS.
  */
 export function Topbar({ onOpenSidebar }: TopbarProps) {
   const { me, isTenantUser } = useAuth();
@@ -50,7 +51,7 @@ export function Topbar({ onOpenSidebar }: TopbarProps) {
   return (
     <header className="sticky top-0 z-20 shrink-0 border-b border-border bg-card">
       <div className="flex h-14 items-center gap-2 px-3 sm:gap-3 sm:px-4">
-        <Button variant="ghost" size="icon" className="lg:hidden" onClick={onOpenSidebar} aria-label="Abrir menú">
+        <Button variant="ghost" size="icon" className="shrink-0 lg:hidden" onClick={onOpenSidebar} aria-label="Abrir menú">
           <Menu className="h-5 w-5" aria-hidden="true" />
         </Button>
 
@@ -74,7 +75,8 @@ export function Topbar({ onOpenSidebar }: TopbarProps) {
         <div className="flex-1" />
 
         {isTenantUser ? (
-          <BranchSelector />
+          // En celulares el alcance se recorta ("Todas las sucurs…") antes que aplastar los botones de la derecha.
+          <BranchSelector className="shrink sm:shrink-0" />
         ) : (
           <span className="hidden h-9 items-center gap-2 rounded-control border border-dashed border-input px-2.5 text-sm font-semibold text-foreground sm:inline-flex">
             <LogoMark size={18} />
@@ -86,25 +88,29 @@ export function Topbar({ onOpenSidebar }: TopbarProps) {
           {formatLongDate()}
         </p>
 
-        {canSearch && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="md:hidden"
-            onClick={() => setMobileSearchOpen((open) => !open)}
-            aria-label={mobileSearchOpen ? 'Cerrar buscador' : 'Buscar productos'}
-            aria-expanded={mobileSearchOpen}
-          >
-            {mobileSearchOpen ? (
-              <X className="h-5 w-5" aria-hidden="true" />
-            ) : (
-              <Search className="h-5 w-5" aria-hidden="true" />
-            )}
-          </Button>
-        )}
+        {/* Botones de 36 px: nunca se encogen; en celulares van más juntos para que entren con el alcance. */}
+        <div className="flex shrink-0 items-center gap-1 sm:gap-3">
+          {canSearch && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden"
+              onClick={() => setMobileSearchOpen((open) => !open)}
+              aria-label={mobileSearchOpen ? 'Cerrar buscador' : 'Buscar productos'}
+              aria-expanded={mobileSearchOpen}
+            >
+              {mobileSearchOpen ? (
+                <X className="h-5 w-5" aria-hidden="true" />
+              ) : (
+                <Search className="h-5 w-5" aria-hidden="true" />
+              )}
+            </Button>
+          )}
 
-        <NotificationBell />
-        <UserMenu />
+          <ThemeToggle />
+          <NotificationBell />
+          <UserMenu />
+        </div>
       </div>
 
       {canSearch && mobileSearchOpen && (
