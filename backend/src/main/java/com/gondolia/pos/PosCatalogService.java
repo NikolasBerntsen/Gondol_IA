@@ -18,9 +18,9 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -169,10 +169,12 @@ public class PosCatalogService {
      */
     @Transactional(readOnly = true)
     public List<PosProductDto> byIds(Long tenantId, Long branchId, Collection<Long> ids) {
-        if (ids == null || ids.isEmpty()) {
+        List<Long> distinct = ids == null ? List.of()
+                : ids.stream().filter(Objects::nonNull).distinct().toList();
+        if (distinct.isEmpty()) {
             return List.of();
         }
-        return enrich(tenantId, branchId, rowsByIds(tenantId, List.copyOf(new LinkedHashSet<>(ids))));
+        return enrich(tenantId, branchId, rowsByIds(tenantId, distinct));
     }
 
     private List<PosProductDto> enrich(Long tenantId, Long branchId, List<Row> rows) {

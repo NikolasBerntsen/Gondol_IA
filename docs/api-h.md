@@ -45,7 +45,7 @@ Los compartidos están en `ErrorCodes` (`REGISTER_BUSY`, `SESSION_ALREADY_OPEN`,
 | 409 | `REGISTER_INACTIVE` | Se quiso abrir un turno en una caja desactivada |
 | 409 | `REGISTER_NAME_TAKEN` | Ya hay otra caja con ese nombre en la sucursal |
 | 409 | `REGISTER_IN_USE` | Se quiso desactivar o mudar de sucursal una caja con turno abierto |
-| 409 | `PRODUCT_RECALLED` | El producto tiene stock en cuarentena por un recall: no se vende |
+| 409 | `PRODUCT_RECALLED` | El producto tiene stock en cuarentena por un recall, o tiene un recall vigente y se piden más unidades que las de lotes cargados: no se vende |
 | 400 | `CHANGE_NOT_ALLOWED` | El excedente a devolver no llegó en efectivo |
 
 `POST /sales` con falta de stock devuelve el formato de error estándar **más** un campo `details`
@@ -179,7 +179,9 @@ primeros por nombre: así el mostrador arranca con mosaicos para tocar.
  "brand":"Vaquita","categoryId":5,"categoryName":"Lácteos","unit":"UNIDAD","listPrice":2100.00,
  "sellableStock":10,
  "nextLot":{"lotId":88,"lotNumber":"YV0925","expiryDate":"2026-09-25","discountPct":20.00,"unitPrice":1680.00},
- "hasRecalledStock":false,"hasExpiredStock":true,"outOfStock":false,
+ "priceTiers":[{"quantity":4,"discountPct":20.00,"unitPrice":1680.00},
+               {"quantity":6,"discountPct":null,"unitPrice":2100.00}],
+ "hasRecalledStock":false,"activeRecall":null,"hasExpiredStock":true,"outOfStock":false,
  "branchId":3,"branchName":"Sucursal Centro"}
 ```
 
@@ -188,9 +190,24 @@ primeros por nombre: así el mostrador arranca con mosaicos para tocar.
   — primero los lotes en liquidación (`discount_pct` activo) y dentro de cada grupo la rotación del
   comercio (FIFO o FEFO). `unitPrice` ya trae el descuento aplicado, así el mosaico y el carrito
   muestran el precio que se va a cobrar.
+- `priceTiers`: los tramos de precio en el orden en el que se venden (los mismos lotes y el mismo orden
+  que `nextLot`, agrupando lotes consecutivos con igual descuento). El carrito cotiza cada línea tramo
+  por tramo: 16 u. de un jamón con 15 u. al 25 % son `15 × $ 2.850 + 1 × $ 3.800 = $ 46.550`, lo mismo
+  que va a cobrar el núcleo. Lo que pase de la suma de los tramos es faltante, a precio de lista.
 - `hasRecalledStock`: hay lotes `RECALLED` con remanente → el frontend bloquea el producto y el backend
   rechaza el cobro con 409 `PRODUCT_RECALLED`.
+- `activeRecall`: `{announcementId,title,allLots,lotNumbers}` del recall `PUBLISHED` más reciente con el
+  código de barras del producto, o `null`. Los lotes cargados ya pasaron por el chequeo de recall y se
+  venden; lo que no se vende es una unidad **sin lote registrado** (faltante), porque puede ser del lote
+  retirado: el mostrador no ofrece "Vender igual" y el backend rechaza con 409 `PRODUCT_RECALLED` aunque
+  venga `allowShortage`. Pasa, por ejemplo, después de retirar del stock el lote en cuarentena.
 - `hasExpiredStock`: hay lotes vencidos pendientes de descarte (aviso para el encargado, no bloquea).
+
+### `GET /products?ids=42,11&branchId=3`
+Los mismos datos para los productos del carrito (hasta 200 ids; incluye los dados de baja, que el cobro
+rechaza). El mostrador los vuelve a pedir al abrir el cobro: entre el escaneo y el pago otra caja pudo
+vender el lote en liquidación (cambian los tramos) o pudo publicarse un recall. La hoja de cobro no deja
+confirmar hasta tener la respuesta.
 
 ### `GET /products/categories`
 Categorías con al menos un producto con stock vendible en la sucursal, para los filtros rápidos del
@@ -213,9 +230,11 @@ Validaciones, en orden:
 
 1. Turno `OPEN` que el usuario pueda operar (409 `SESSION_NOT_OPEN`, 403 si es de otro cajero y no es ADMIN).
 2. Productos del comercio y activos (404 / 409 `CONFLICT`).
-3. Ningún producto con stock en cuarentena → 409 `PRODUCT_RECALLED`.
+3. Ningún producto con stock en cuarentena → 409 `PRODUCT_RECALLED`. Con un recall vigente del
+   producto, tampoco más unidades que las de lotes cargados (sin faltante) → 409 `PRODUCT_RECALLED`.
 4. Stock vendible suficiente → 409 `INSUFFICIENT_STOCK` con `details`, **salvo** `allowShortage:true`.
-5. Σ pagos ≥ total → 400 `PAYMENT_INSUFFICIENT`.
+5. Σ pagos ≥ total → 400 `PAYMENT_INSUFFICIENT` ("Los pagos no cubren el total: faltan $ 950,00.",
+   importe en formato de pesos porque el mostrador muestra el mensaje tal cual).
 6. El excedente no puede superar el efectivo recibido → 400 `CHANGE_NOT_ALLOWED` (el vuelto solo sale
    del efectivo).
 
@@ -247,6 +266,10 @@ cliente. El empleado y el cajero solo ven las ventas de **sus** turnos.
 Datos listos para imprimir el comprobante de 80 mm: comercio y CUIT, sucursal y dirección, caja,
 cajero, fecha, código, ítems (con precio de lista tachado, lote, vencimiento y `discountPct` cuando
 hubo descuento), totales, pagos, vuelto y la leyenda **"Comprobante no válido como factura"**.
+Si una línea cruzó de un lote en liquidación a otro sin descuento (o tuvo faltante), va un renglón por
+precio en el orden en que se consumió (`15 x $ 2.850` con el lote y el descuento, y `1 x $ 3.800`), así
+`cantidad × precio` de cada renglón es lo que se cobró. La página `/app/pos/sales/:id/ticket` imprime en
+una hoja `@page` de 80 mm de ancho y el alto del ticket, sin márgenes y con fondo blanco.
 
 ### `POST /sales/{id}/void`
 ```json
@@ -254,6 +277,8 @@ hubo descuento), totales, pagos, vuelto y la leyenda **"Comprobante no válido c
 ```
 - ADMIN: cualquier venta de su alcance.
 - EMPLOYEE / CASHIER: solo ventas de **su** turno y mientras siga `OPEN` (si ya cerró, la anula el admin).
+  403 con "El turno de esa venta ya cerró: solo el administrador puede anularla. Pedile que la anule." si
+  el turno es propio y cerró, o "Solo el administrador puede anular ventas de otro turno." si es ajeno.
 - Llama a `StockService.voidSale` (SPEC §15.1): devuelve las unidades a los mismos lotes y deja la
   auditoría en `SALE_VOID`.
 - 409 `ALREADY_VOIDED` si ya estaba anulada.
@@ -303,7 +328,9 @@ sucursal (cajas, búsqueda, categorías, turnos, ventas). Después de cobrar o a
 
 1. **El total lo calcula el núcleo.** El POS no vuelve a aplicar descuentos: suma los
    `totalAmount` de los movimientos que devuelve `registerSale`. Si mañana cambia la regla de
-   liquidación (SPEC §4.2), el ticket sigue cuadrando sin tocar este módulo.
+   liquidación (SPEC §4.2), el ticket sigue cuadrando sin tocar este módulo. El carrito muestra lo mismo
+   porque cotiza con `priceTiers` (mismo orden de lotes) y recotiza con `GET /products?ids=` al abrir el
+   cobro; si igual no coincide, el 400 `PAYMENT_INSUFFICIENT` dispara otra recotización.
 2. **Las anuladas entran y salen del arqueo.** Sumar los pagos de todas las ventas y restar después el
    neto de las anuladas da el mismo número que ignorarlas, pero deja los dos importes visibles en el
    reporte (`voidedCount`, `voidedTotal`) para que el encargado vea qué pasó en el turno.
@@ -316,7 +343,8 @@ sucursal (cajas, búsqueda, categorías, turnos, ventas). Después de cobrar o a
    POS lo muestra `outOfStock` con `hasExpiredStock:true`: el cajero ve "Sin stock" y el encargado sabe
    que hay mercadería para descartar.
 6. **Cuarentena por recall = bloqueo duro.** Se valida en el mostrador (mosaico bloqueado) y otra vez
-   en el backend, porque entre la búsqueda y el cobro puede publicarse un recall.
+   en el backend, porque entre la búsqueda y el cobro puede publicarse un recall. Mientras el recall
+   siga publicado, tampoco se vende con faltante: la unidad sin lote registrado no se puede verificar.
 7. **`allowShortage` es explícito.** El cajero tiene que confirmar "vender igual" en el aviso; el
    frontend nunca lo manda solo.
 

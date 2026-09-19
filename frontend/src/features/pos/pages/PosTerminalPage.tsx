@@ -375,8 +375,10 @@ export default function PosTerminalPage() {
         return;
       }
       if (isApiError(error, 'PRODUCT_RECALLED')) {
-        // Se publicó un recall entre el escaneo y el cobro: volvemos al carrito para que el cajero lo saque.
+        // Se publicó un recall entre el escaneo y el cobro: volvemos al carrito (con las banderas al día) para
+        // que el cajero lo saque.
         setPayOpen(false);
+        requestFreshCart(cart);
       } else if (isApiError(error, 'PAYMENT_INSUFFICIENT')) {
         // El núcleo cobra otro total que el de la hoja (cambió un lote en liquidación): volvemos a cotizar.
         requestFreshCart(cart);
