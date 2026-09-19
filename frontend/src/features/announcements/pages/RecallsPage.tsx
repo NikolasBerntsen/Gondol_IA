@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Check, PackageX, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { RECALL_MATCH_STATUS_LABELS, RECALL_RESOLUTION_LABELS, type RecallResolution } from '@/api/types';
-import { useAuth } from '@/auth/AuthContext';
+import { useAccess } from '@/auth/useAccess';
 import { useBranch, useBranchQueryKey } from '@/branches/BranchContext';
 import { BarcodeDigits, ExpiryChip, StatusPill } from '@/components/gondola';
 import {
@@ -45,14 +45,14 @@ const RESOLUTION_OPTIONS: ReadonlyArray<{ value: RecallResolution; label: string
  * retiro del stock. Solo el administrador y el empleado pueden resolver (matriz §3.3).
  */
 export default function RecallsPage() {
-  const { hasRole } = useAuth();
+  const { can } = useAccess();
   const { isAll, scopeLabel } = useBranch();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [filter, setFilter] = useState<RecallMatchFilter>('ACTIVE');
   const [resolving, setResolving] = useState<RecallMatch | null>(null);
 
-  const canResolve = hasRole('TENANT_ADMIN', 'TENANT_EMPLOYEE');
+  const canResolve = can('recalls.resolve');
   const highlightedId = Number(searchParams.get('match')) || null;
 
   const queryKey = useBranchQueryKey('recall-matches', 'list', filter);

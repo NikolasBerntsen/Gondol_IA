@@ -36,7 +36,7 @@ public class LotController {
 
     /** Lotes de un producto en el alcance, por sucursal y en orden de rotación. */
     @GetMapping
-    @PreAuthorize(Roles.TENANT_INVENTORY)
+    @PreAuthorize(Roles.TENANT_INVENTORY_READ)
     public List<LotDto> list(@RequestParam Long productId,
                              @RequestParam(defaultValue = "false") boolean includeEmpty) {
         return lotService.list(productId, includeEmpty);

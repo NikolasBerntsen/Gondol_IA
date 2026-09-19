@@ -9,7 +9,7 @@ import { roleHome } from '@/auth/roleHome';
 import { BranchProvider } from '@/branches/BranchContext';
 import { AppShell } from '@/components/layout/AppShell';
 import { SplashScreen } from '@/components/layout/SplashScreen';
-import { ROLE_GROUPS } from '@/config/access';
+import { ROLE_GROUPS, rolesWith } from '@/config/access';
 import { createQueryClient } from '@/lib/queryClient';
 import { RequireModule } from '@/modules/RequireModule';
 import { StompProvider } from '@/realtime/StompProvider';
@@ -98,7 +98,7 @@ function AppRoutes() {
         path="/app/pos/sales/:id/ticket"
         element={
           <RequireAuth>
-            <RequireRole roles={ROLE_GROUPS.TENANT_POS}>
+            <RequireRole roles={rolesWith('pos.use')}>
               <RequireModule module="POS_GONDOLIA">
                 <PosTicketPage />
               </RequireModule>
@@ -138,54 +138,76 @@ function AppRoutes() {
         <Route path="app">
           <Route index element={<HomeRedirect />} />
 
-          <Route element={<RequireRole roles={ROLE_GROUPS.TENANT_POS} />}>
+          {/* Cada grupo usa los roles de un permiso de config/access.ts (SPEC §3.3, §9.3). */}
+          <Route element={<RequireRole roles={rolesWith('pos.use')} />}>
             <Route element={<RequireModule module="POS_GONDOLIA" />}>
               <Route path="pos" element={<PosTerminalPage />} />
               <Route path="pos/sessions" element={<PosSessionsPage />} />
             </Route>
           </Route>
 
-          <Route element={<RequireRole roles={ROLE_GROUPS.TENANT_ADMIN} />}>
+          <Route element={<RequireRole roles={rolesWith('pos.admin')} />}>
             <Route element={<RequireModule module="POS_GONDOLIA" />}>
               <Route path="pos/registers" element={<PosRegistersPage />} />
             </Route>
+          </Route>
+          <Route element={<RequireRole roles={rolesWith('integrations.manage')} />}>
             <Route element={<RequireModule module="POS_INTEGRATION" />}>
               <Route path="integrations" element={<IntegrationsPage />} />
             </Route>
-            <Route element={<RequireModule module="MULTI_BRANCH" />}>
-              <Route path="transfers" element={<TransfersPage />} />
-            </Route>
           </Route>
 
-          <Route element={<RequireRole roles={ROLE_GROUPS.TENANT_DASHBOARD} />}>
+          <Route element={<RequireRole roles={rolesWith('dashboard.view')} />}>
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="statistics" element={<StatisticsPage />} />
             <Route path="insights" element={<InsightsPage />} />
             <Route path="alerts" element={<AlertsPage />} />
           </Route>
 
-          <Route element={<RequireRole roles={ROLE_GROUPS.TENANT_INVENTORY} />}>
+          {/* Ver inventario: también el jefe. Crear y editar productos, y cargar mercadería: admin y empleado. */}
+          <Route element={<RequireRole roles={rolesWith('products.view')} />}>
             <Route path="inventory" element={<InventoryPage />} />
-            <Route path="products/new" element={<ProductFormPage />} />
             <Route path="products/:id" element={<ProductDetailPage />} />
+          </Route>
+          <Route element={<RequireRole roles={rolesWith('products.write')} />}>
+            <Route path="products/new" element={<ProductFormPage />} />
             <Route path="products/:id/edit" element={<ProductFormPage />} />
+          </Route>
+          <Route element={<RequireRole roles={rolesWith('intake.use')} />}>
             <Route path="intake" element={<IntakePage />} />
+          </Route>
+          <Route element={<RequireRole roles={rolesWith('expirations.view')} />}>
             <Route path="expirations" element={<ExpirationsPage />} />
           </Route>
 
-          <Route element={<RequireRole roles={ROLE_GROUPS.TENANT_ADMIN} />}>
-            <Route path="categories" element={<CategoriesPage />} />
-            <Route path="suppliers" element={<SuppliersPage />} />
+          {/* Historiales: jefe (solo lectura) y administrador. */}
+          <Route element={<RequireRole roles={rolesWith('sales.view')} />}>
             <Route path="sales" element={<SalesPage />} />
+          </Route>
+          <Route element={<RequireRole roles={rolesWith('movements.view')} />}>
             <Route path="movements" element={<MovementsPage />} />
+          </Route>
+          <Route element={<RequireRole roles={rolesWith('transfers.view')} />}>
+            <Route element={<RequireModule module="MULTI_BRANCH" />}>
+              <Route path="transfers" element={<TransfersPage />} />
+            </Route>
+          </Route>
+
+          <Route element={<RequireRole roles={rolesWith('imports.use')} />}>
             <Route path="imports" element={<ImportsPage />} />
             <Route path="imports/:id" element={<ImportWizardPage />} />
+          </Route>
+          <Route element={<RequireRole roles={rolesWith('catalog.manage')} />}>
+            <Route path="categories" element={<CategoriesPage />} />
+            <Route path="suppliers" element={<SuppliersPage />} />
+          </Route>
+          <Route element={<RequireRole roles={rolesWith('tenant.admin')} />}>
             <Route path="users" element={<UsersPage />} />
             <Route path="branches" element={<BranchesPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
 
-          <Route element={<RequireRole roles={ROLE_GROUPS.TENANT_ANY} />}>
+          <Route element={<RequireRole roles={rolesWith('communication.view')} />}>
             <Route path="notices" element={<NoticesPage />} />
             <Route path="recalls" element={<RecallsPage />} />
             <Route path="support" element={<TenantSupportPage />} />

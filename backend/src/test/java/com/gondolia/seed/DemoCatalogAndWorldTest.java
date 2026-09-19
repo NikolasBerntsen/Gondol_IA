@@ -120,6 +120,8 @@ class DemoCatalogAndWorldTest {
                 .collect(Collectors.toSet());
         assertThat(months).hasSizeGreaterThanOrEqualTo(10);
         assertThat(tenants).allMatch(spec -> spec.createdDaysAgo() <= 365);
+        // El equipo de la plataforma (el dueño da de alta los comercios) es anterior a todos.
+        assertThat(tenants).allMatch(spec -> spec.createdDaysAgo() < DemoWorldBuilder.PLATFORM_TEAM_DAYS_AGO);
     }
 
     @Test
@@ -183,7 +185,15 @@ class DemoCatalogAndWorldTest {
             scenario.spikes().forEach(s -> assertThat(products).contains(s.product()));
             scenario.reorders().forEach(r -> assertThat(products).contains(r.product()));
             scenario.discarded().forEach(d -> assertThat(products).contains(d.product()));
+            for (DemoScenarios.ManualOrders orders : scenario.manualOrders()) {
+                spec.branch(orders.branch());
+                assertThat(DemoWorldBuilder.templatesFor(spec)).as(key + " " + orders)
+                        .anyMatch(template -> orders.categories().contains(template.category()));
+            }
         }
+        // Ventas manuales (datos-demo §2 y §4): el mayorista de Vida Sana y los pedidos del club en El Sol.
+        assertThat(DemoScenarios.forTenant(DemoWorld.VIDA_SANA).manualOrders()).isNotEmpty();
+        assertThat(DemoScenarios.forTenant(DemoWorld.EL_SOL).manualOrders()).isNotEmpty();
         // El lote del recall en vivo solo se arma en Don Pepe y en El Sol Fisherton.
         assertThat(DemoScenarios.forTenant(DemoWorld.DON_PEPE).lots())
                 .filteredOn(lot -> DemoScenarios.LIVE_RECALL_LOT.equals(lot.lotNumber()))

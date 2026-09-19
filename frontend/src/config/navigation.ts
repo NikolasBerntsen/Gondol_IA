@@ -100,8 +100,21 @@ export const NAVIGATION: Record<Role, NavSection[]> = {
     },
   ],
   SUPPORT_AGENT: [{ title: 'Soporte', items: [item.supportInbox] }],
+  // Vista resumida del jefe: lo que abre desde acá lo puede ver completo (inventario, vencimientos, ventas) y
+  // decide sobre la IA y las alertas; no carga ni edita (SPEC §3.3).
   TENANT_BOSS: [
-    { title: 'Mi negocio', items: [item.dashboard, item.statistics, item.insights, item.alerts] },
+    {
+      title: 'Mi negocio',
+      items: [
+        item.dashboard,
+        item.inventory,
+        item.expirations,
+        item.sales,
+        item.statistics,
+        item.insights,
+        item.alerts,
+      ],
+    },
     communication,
   ],
   TENANT_ADMIN: [

@@ -5,9 +5,9 @@ Complementa `docs/api-foundation.md`: el formato de error, la paginación, el en
 autenticación son los del núcleo.
 
 - Base `/api`. JSON camelCase. Fechas `"2026-09-17"`, instantes ISO-8601 UTC, dinero como número.
-- **Roles**: leer = `TENANT_DASHBOARD` (jefe y administrador). **Decidir** (gestionar alertas, aceptar o descartar
-  recomendaciones, recalcular la IA) = `TENANT_ADMIN`. El empleado y el cajero reciben 403 `FORBIDDEN` en todo el
-  módulo.
+- **Roles**: leer **y decidir** (gestionar alertas, aceptar o descartar recomendaciones, recalcular la IA) =
+  `TENANT_DASHBOARD` (jefe y administrador): el jefe es el dueño y toma las decisiones (SPEC §3.3). El empleado y el
+  cajero reciben 403 `FORBIDDEN` en todo el módulo.
 - **Alcance de sucursales** (SPEC §3.5): cada lectura opera sobre las sucursales del encabezado `X-Branch-Id`
   (una, o todas las accesibles si falta o es `all`). Toda fila por sucursal trae `branchId` y `branchName`.
   El `tenantId` **siempre** sale del token. Una sucursal de otro comercio da 403 `BRANCH_FORBIDDEN`; un id de otro
@@ -170,7 +170,7 @@ Ordena por severidad (crítica primero) y después por fecha. Incluye las alerta
 
 `critical`/`warning`/`info` y `byType` cuentan solo las que siguen abiertas (`OPEN` + `ACKNOWLEDGED`).
 
-### 3.3 Cambios de estado (TENANT_ADMIN)
+### 3.3 Cambios de estado (jefe + admin)
 
 `POST /{id}/acknowledge` · `POST /{id}/resolve` · `POST /{id}/dismiss` → devuelven la alerta actualizada.
 Guardan `handled_by` y, salvo en "vista", `resolved_at`. Alerta de otro comercio → 404; de una sucursal sin acceso
@@ -268,7 +268,7 @@ producto"). Sucursal fuera del alcance → 403 `BRANCH_FORBIDDEN`. Sin análisis
   "startedAt":"2026-09-17T22:32:49.092437Z","finishedAt":"2026-09-17T22:32:50.442017Z","errorMessage":null}]
 ```
 
-### 4.5 `POST /run` (TENANT_ADMIN)
+### 4.5 `POST /run` (jefe + admin)
 
 Lanza el análisis **asincrónico**, un `ai_runs` por sucursal del alcance. Una sucursal que ya se está analizando se
 saltea (no se encola dos veces).
@@ -319,7 +319,7 @@ cierra los `ai_runs` que quedaron `RUNNING` más de una hora por un reinicio.
  "decidedByName":null,"decisionNote":null,"outcome":null}
 ```
 
-### 5.2 `POST /{id}/accept` (TENANT_ADMIN)
+### 5.2 `POST /{id}/accept` (jefe + admin)
 
 Body opcional: `{"note":"…","quantity":40,"discountPct":25}`.
 
@@ -351,7 +351,7 @@ el proveedor no lo cargó. Si el teléfono no sirve, `whatsappUrl` es `null` y q
 Errores: 404 `NOT_FOUND` (recomendación de otro comercio), 403 `BRANCH_FORBIDDEN` (sucursal sin acceso),
 409 `CONFLICT` ("Esa recomendación ya fue decidida" o "El lote de la recomendación ya no tiene stock").
 
-### 5.3 `POST /{id}/discard` (TENANT_ADMIN)
+### 5.3 `POST /{id}/discard` (jefe + admin)
 
 Body opcional `{"note":"Fue una promo puntual"}`. La deja en `DISCARDED`; la IA la vuelve a evaluar en el próximo
 análisis (y el descarte viaja como `feedback`).
@@ -377,12 +377,14 @@ aceptadas hace 7 días o más que todavía no tienen resultado. Se guarda en `re
 
 | Ruta | Página | Qué muestra |
 |---|---|---|
-| `/app/dashboard` | `DashboardPage` | "Para hoy" (lo urgente, por severidad), 4 KPI, "Ventas y stock" de 30 días, comparación de sucursales (solo en consolidado), próximos vencimientos, artículos a reponer con "Comprar N" y las recomendaciones de la IA. Comercio sin productos → estado vacío con links a `/app/imports` y `/app/intake`. |
+| `/app/dashboard` | `DashboardPage` | "Para hoy" (lo urgente, por severidad), 4 KPI, "Ventas y stock" de 30 días, comparación de sucursales (solo en consolidado), próximos vencimientos, artículos a reponer con "Comprar N" y las recomendaciones de la IA. Comercio sin productos → estado vacío con links a `/app/imports` y `/app/intake` (solo para quien puede usarlos). "Ver todos" de Próximos vencimientos → `/app/expirations`; "Ver todos" de Artículos a reponer → `/app/inventory?stockStatus=LOW`; cada producto → `/app/products/:id`. |
 | `/app/statistics` | `StatisticsPage` | Pestañas **Ventas**, **Rotación y ABC** y **Pérdidas e impacto**, con selector de período. |
-| `/app/insights` | `InsightsPage` | Resumen, estado de los análisis por sucursal, lotes con más riesgo, tabla de patrones con filtros y la ficha de cada producto (90 días + pronóstico + anomalías + lotes + recomendaciones). "Recalcular IA" solo para el administrador. |
+| `/app/insights` | `InsightsPage` | Resumen, estado de los análisis por sucursal, lotes con más riesgo, tabla de patrones con filtros y la ficha de cada producto (90 días + pronóstico + anomalías + lotes + recomendaciones). "Recalcular IA" para el jefe y el administrador. |
 | `/app/alerts` | `AlertsPage` | Bandeja con filtros por estado, tipo y severidad, franja de severidad por fila y las acciones vista / resolver / descartar. |
 
-El **jefe** ve las cuatro pantallas en modo lectura: sin botones de acción y con un aviso que lo aclara.
+El **jefe** usa las cuatro pantallas igual que el administrador: acepta y descarta recomendaciones, marca alertas y
+recalcula la IA. Desde el Inicio abre inventario, vencimientos y fichas de producto en solo lectura (SPEC §3.3: todo
+botón visible funciona; los botones de carga y edición no se le muestran).
 Las query keys de datos por sucursal usan `useBranchQueryKey`, así que al cambiar de sucursal se refresca todo.
 
 ---

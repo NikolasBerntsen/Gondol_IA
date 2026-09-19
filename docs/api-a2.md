@@ -86,7 +86,7 @@ Respuesta `200`:
 Errores: 400 `VALIDATION_ERROR`, 400 `BRANCH_REQUIRED`, 403 `BRANCH_FORBIDDEN`, 403 `FORBIDDEN` (no es admin),
 404 `NOT_FOUND` (producto inexistente o de otro comercio), 409 `CONFLICT` (producto dado de baja).
 
-### 1.2 `GET /api/tenant/sales` — historial de todas las fuentes (TENANT_ADMIN)
+### 1.2 `GET /api/tenant/sales` — historial de todas las fuentes (TENANT_DASHBOARD: jefe + admin)
 
 Agrupa `stock_movements` por `batch_ref` y **netea las anulaciones**: `units` y `total` son `SALE − SALE_VOID`
 (SPEC §15.1). Una venta anulada por completo queda en 0 y se marca con `voided`.
@@ -117,7 +117,7 @@ curl "http://localhost:8080/api/tenant/sales?source=POS_GONDOLIA&from=2026-09-01
   `/app/pos/sales/{posSaleId}/ticket`. En el resto de las fuentes ambos son `null`.
 - El alcance es el de `X-Branch-Id`: un empleado nunca ve ventas de sucursales que no tiene asignadas.
 
-### 1.3 `GET /api/tenant/sales/{batchRef}` — detalle (TENANT_ADMIN)
+### 1.3 `GET /api/tenant/sales/{batchRef}` — detalle (TENANT_DASHBOARD: jefe + admin)
 
 Cabecera neteada (`sale`) más las líneas con sus lotes, el total **bruto** y el motivo de la anulación.
 
@@ -177,7 +177,7 @@ Parseo (`SalesCsvService`):
 
 ## 2. Movimientos
 
-### 2.1 `GET /api/tenant/movements` (TENANT_ADMIN)
+### 2.1 `GET /api/tenant/movements` (TENANT_DASHBOARD: jefe + admin)
 
 Historial de `stock_movements` del alcance, más reciente primero.
 Parámetros: `productId`, `type`, `source`, `q` (producto, código, lote o referencia), `from`, `to`, `branchId`,
@@ -225,7 +225,7 @@ Estados que aplica el núcleo: a 0 → `DEPLETED`; por `WASTE_EXPIRED` → `EXPI
 
 ---
 
-## 3. Vencimientos (TENANT_ADMIN + TENANT_EMPLOYEE)
+## 3. Vencimientos (ver: TENANT_INVENTORY_READ = jefe + admin + empleado · descartar: TENANT_ADMIN + TENANT_EMPLOYEE)
 
 Buckets de SPEC §4.2 con los umbrales de `tenant_settings` (`expiry_critical_days`, `expiry_warning_days`) y un
 horizonte fijo de 30 días para `UPCOMING`:
@@ -287,7 +287,7 @@ suma a `failed` y los demás siguen. Un empleado solo alcanza sus sucursales.
 
 ---
 
-## 4. Transferencias [MULTI_BRANCH] (TENANT_ADMIN)
+## 4. Transferencias [MULTI_BRANCH] (transferir y `available-lots`: TENANT_ADMIN · historial y detalle: TENANT_DASHBOARD)
 
 ### 4.1 `GET /api/tenant/transfers/available-lots?branchId=1&q=&page=&size=`
 
@@ -407,10 +407,15 @@ curl -X POST http://localhost:8080/api/integrations/pos/sales \
 - Los códigos que no existen en el catálogo se informan en `unknownBarcodes` y **no frenan** el resto del ticket.
 - Las líneas sin stock suficiente se registran igual (faltante + alerta `SALE_WITHOUT_STOCK`) y se informan en
   `shortages`.
-- 401 `INVALID_API_KEY` si la key falta, no existe, la sucursal está desactivada o el comercio no está `ACTIVE`.
+- 401 `INVALID_API_KEY` si la key falta, no tiene el formato, no existe o su sucursal está desactivada.
+- 403 `TENANT_DISABLED` / `TENANT_CANCELLED` (con el mismo mensaje que el login) si la key es válida pero el comercio
+  está deshabilitado o dado de baja (SPEC §3.2): así el integrador sabe que la key está bien y no la regenera.
 - **403 `MODULE_DISABLED`** si el comercio no tiene `POS_INTEGRATION`. Como la ruta no tiene usuario autenticado,
-  el interceptor de `@RequiresModule` no puede resolver el comercio: el controlador lo chequea **a mano** con
-  `moduleService.require(branch.tenantId(), POS_INTEGRATION)` después de `ApiKeyService.resolveBranch`
+  el interceptor de `@RequiresModule` no puede resolver el comercio.
+- Todo eso lo resuelve `PosApiKeyInterceptor` (registrado por `PosWebhookWebConfig` para `/api/integrations/pos/**`)
+  con `ApiKeyService.authenticate` y `moduleService.require(branch.tenantId(), POS_INTEGRATION)` **antes de leer el
+  cuerpo**: sin key válida la respuesta es 401 sea cual sea el payload, y los errores de validación (400) solo le
+  llegan a quien tiene una key válida. El controlador recibe la `PosBranch` como `@RequestAttribute`
   (`api-foundation.md` §12.5).
 
 ---

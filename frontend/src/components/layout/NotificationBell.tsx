@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { notificationKeys, notificationsApi } from '@/api/notifications';
 import type { NotificationDto } from '@/api/types';
 import { NotificationItem } from '@/components/notifications/NotificationItem';
-import { isInternalLink, useNotificationActions } from '@/components/notifications/useNotificationActions';
+import { useNotificationActions } from '@/components/notifications/useNotificationActions';
 import { DropdownPanel, useDropdown } from '@/components/ui/Dropdown';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Spinner } from '@/components/ui/Spinner';
@@ -18,7 +18,7 @@ const LATEST_PARAMS = { page: 0, size: 10 } as const;
 export function NotificationBell() {
   const queryClient = useQueryClient();
   const dropdown = useDropdown({ kind: 'dialog' });
-  const { openNotification, markAllRead } = useNotificationActions();
+  const { openNotification, canOpenNotification, markAllRead } = useNotificationActions();
 
   const countQuery = useQuery({
     queryKey: notificationKeys.unreadCount(),
@@ -39,7 +39,8 @@ export function NotificationBell() {
     );
     void queryClient.invalidateQueries({ queryKey: notificationKeys.all });
 
-    const action = isInternalLink(notification.link)
+    // "Ver" solo si lleva a una pantalla que este rol puede abrir (SPEC §3.3).
+    const action = canOpenNotification(notification)
       ? { label: 'Ver', onClick: () => openNotification(notification) }
       : undefined;
     const options = { id: `notification-${notification.id}`, description: notification.body ?? undefined, action };

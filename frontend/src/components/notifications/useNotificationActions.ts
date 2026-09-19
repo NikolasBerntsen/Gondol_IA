@@ -5,6 +5,8 @@ import { toast } from 'sonner';
 import { getErrorMessage } from '@/api/client';
 import { notificationKeys, notificationsApi } from '@/api/notifications';
 import type { NotificationDto, PageResponse } from '@/api/types';
+import { useAuth } from '@/auth/AuthContext';
+import { linkTargetFor } from '@/config/access';
 
 /** Solo se navega a rutas internas de la app. */
 export function isInternalLink(link: string | null | undefined): link is string {
@@ -15,6 +17,8 @@ export function isInternalLink(link: string | null | undefined): link is string 
 export function useNotificationActions() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { me } = useAuth();
+  const role = me?.role;
 
   const markLocallyRead = useCallback(
     (id: number | 'all') => {
@@ -52,14 +56,26 @@ export function useNotificationActions() {
 
   const markReadMutate = markRead.mutate;
 
-  /** Marca como leída (si hace falta) y navega al `link` de la notificación. */
+  /**
+   * Marca como leída (si hace falta) y navega al `link` de la notificación, o a la pantalla equivalente que el rol
+   * puede abrir (nunca a "Acceso denegado"; SPEC §3.3).
+   */
   const openNotification = useCallback(
     (notification: NotificationDto) => {
       if (!notification.read) markReadMutate(notification.id);
-      if (isInternalLink(notification.link)) navigate(notification.link);
+      if (!isInternalLink(notification.link)) return;
+      const target = linkTargetFor(role, notification.link);
+      if (target) navigate(target);
     },
-    [markReadMutate, navigate],
+    [markReadMutate, navigate, role],
   );
 
-  return { openNotification, markRead, markAllRead };
+  /** `true` si la notificación lleva a una pantalla que el rol puede abrir (para mostrar o no el botón "Ver"). */
+  const canOpenNotification = useCallback(
+    (notification: NotificationDto) =>
+      isInternalLink(notification.link) && linkTargetFor(role, notification.link) != null,
+    [role],
+  );
+
+  return { openNotification, canOpenNotification, markRead, markAllRead };
 }
