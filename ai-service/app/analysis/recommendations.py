@@ -178,6 +178,14 @@ def _rotation_context(risk: LotRisk) -> str:
     return f"Con rotación FIFO primero sale la mercadería que entró antes: {older}, {consequence}. "
 
 
+def _liquidation_context(risk: LotRisk) -> str:
+    """Explica que los lotes en liquidación (con descuento aceptado) se venden antes que este (SPEC §4.2)."""
+    return (
+        f"Los lotes en liquidación salen primero: hay {fmt_units(risk.liquidation_units)} con descuento "
+        "que se venden antes que este lote. "
+    )
+
+
 def _discounts(a: ProductAnalysis, as_of: date, settings: AnalyzeSettings, model: ElasticityModel) -> list[Recommendation]:
     product = a.product
     recs: list[Recommendation] = []
@@ -219,13 +227,17 @@ def _discounts(a: ProductAnalysis, as_of: date, settings: AnalyzeSettings, model
             f"{_capitalize(_lot_label(risk.lot_number))} vence el {fmt_date(risk.expiry_date)} "
             f"(en {fmt_days(days)}) y tiene {fmt_units(risk.quantity)}. "
         )
+        if risk.liquidation_units > 0.5:
+            text += _liquidation_context(risk)
         if rotation_issue:
             text += _rotation_context(risk)
         text += (
             f"Al ritmo actual se venderían {fmt_units(base, 1)} antes del vencimiento y quedan {fmt_units(risk.units_at_risk)} en riesgo "
             f"({fmt_money(risk.units_at_risk * product.cost_price)} a costo). "
         )
-        display = " y exhibiéndolo adelante" if rotation_issue else ""
+        # Al aceptar el descuento el lote pasa a estar en liquidación y se vende antes que el resto (SPEC §4.2).
+        jumps_queue = not risk.current_discount_pct and (risk.rotation_rank or 1) > 1
+        display = ", que lo pone primero en la fila de venta," if jumps_queue else ""
         if risk.discount_clears_lot:
             text += f"Con {pct}% de descuento{display} se estima vender {fmt_units(sold_with, 1)}, suficiente para liquidar el lote."
         elif sells_out:

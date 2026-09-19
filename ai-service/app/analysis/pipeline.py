@@ -243,7 +243,7 @@ def _model_notes(
     if settings.stock_rotation == FIFO and blocked:
         notes.append(
             f"Con FIFO, {blocked} {'lote vence' if blocked == 1 else 'lotes vencen'} antes que mercadería que ingresó antes y "
-            "quedaría sin vender: conviene exhibirlos adelante o evaluar la rotación FEFO."
+            "quedaría sin vender: conviene liquidarlos con un descuento (los lotes en liquidación salen primero) o evaluar la rotación FEFO."
         )
     expired = sum(1 for a in analyses for r in a.lots.risks if r.risk_level == RISK_EXPIRED)
     if expired:

@@ -28,21 +28,25 @@ class SimLot:
     last_sellable_day: int | None
     """Último día (hoy = 0) en que se puede vender; `None` si no vence."""
     received_at: datetime | None = None
+    on_sale: bool = False
+    """Lote en liquidación (tiene `discountPct` > 0): se vende antes que el resto (SPEC §4.2)."""
 
 
 def rotation_key(lot: SimLot, rotation: str) -> tuple:
-    """Mismo orden que el backend (SPEC §4.2).
+    """Mismo orden que el backend (SPEC §4.2): `(discount_pct IS NULL) ASC, <orden FIFO|FEFO>`.
 
-    FIFO: `received_at ASC, id ASC`. FEFO: `expiry_date ASC NULLS LAST, received_at ASC, id ASC`.
+    Primero los lotes en liquidación (con descuento vigente) y, dentro de cada grupo, FIFO
+    (`received_at ASC, id ASC`) o FEFO (`expiry_date ASC NULLS LAST, received_at ASC, id ASC`).
     Un lote sin fecha de ingreso se considera el más antiguo; el stock sin lote va al final.
     """
     unassigned = lot.key is None
+    regular = not lot.on_sale
     received = lot.received_at.timestamp() if lot.received_at is not None else -math.inf
     lot_id = lot.key if lot.key is not None else math.inf
     if rotation == FEFO:
         no_expiry = lot.last_sellable_day is None
-        return (unassigned, no_expiry, lot.last_sellable_day or 0, received, lot_id)
-    return (unassigned, received, lot_id)
+        return (unassigned, regular, no_expiry, lot.last_sellable_day or 0, received, lot_id)
+    return (unassigned, regular, received, lot_id)
 
 
 def rotation_order(lots: list[SimLot], rotation: str) -> list[SimLot]:
@@ -51,23 +55,6 @@ def rotation_order(lots: list[SimLot], rotation: str) -> list[SimLot]:
 
 def _expires_after(lot: SimLot, day: int) -> bool:
     return lot.last_sellable_day is None or lot.last_sellable_day > day
-
-
-def promote(queue: list[SimLot], key: int) -> list[SimLot]:
-    """Adelanta el lote `key` solo por delante de los lotes que vencen después que él (o que no vencen).
-
-    Modela exhibir adelante un lote en oferta sin perjudicar a los que vencen antes: con FIFO saltea la
-    mercadería más vieja que vence después; con FEFO el orden no cambia.
-    """
-    target = next((lot for lot in queue if lot.key == key), None)
-    if target is None or target.last_sellable_day is None:
-        return queue
-    rest = [lot for lot in queue if lot is not target]
-    position = next((i for i, lot in enumerate(rest) if _expires_after(lot, target.last_sellable_day)), len(rest))
-    original = queue.index(target)
-    if position >= original:
-        return queue
-    return rest[:position] + [target] + rest[position:]
 
 
 @dataclass
@@ -93,22 +80,30 @@ def simulate(
     rotation: str,
     days: int | None = None,
     lifts: dict[int, float] | None = None,
-    priority_lot: int | None = None,
+    liquidate: int | None = None,
     until_no_expiring_stock: bool = False,
 ) -> ConsumptionSimulation:
     """Consume la demanda esperada día a día respetando la rotación del comercio.
 
-    Los lotes vencidos nunca se venden. `lifts` multiplica la demanda mientras se vende un lote con
-    descuento; `priority_lot` adelanta ese lote (en oferta, se exhibe adelante) solo frente a los lotes que
-    vencen después. Con `until_no_expiring_stock` la simulación termina cuando ya no queda stock con
-    vencimiento (alcanza para medir mermas y es mucho más rápido).
+    Los lotes vencidos nunca se venden y los lotes en liquidación salen primero (SPEC §4.2). `lifts`
+    multiplica la demanda mientras se vende un lote con descuento; `liquidate` simula aceptar un descuento
+    para ese lote: pasa a estar en liquidación y se vende antes que el resto, igual que en el backend. Con
+    `until_no_expiring_stock` la simulación termina cuando ya no queda stock con vencimiento (alcanza para
+    medir mermas y es mucho más rápido).
     """
     days = len(demand) if days is None else max(0, min(days, len(demand)))
     lifts = lifts or {}
-    queue = [SimLot(lot.key, float(lot.quantity), lot.last_sellable_day, lot.received_at) for lot in rotation_order(lots, rotation)]
-    queue = [lot for lot in queue if lot.quantity > EPSILON]
-    if priority_lot is not None:
-        queue = promote(queue, priority_lot)
+    queue = [
+        SimLot(
+            lot.key,
+            float(lot.quantity),
+            lot.last_sellable_day,
+            lot.received_at,
+            lot.on_sale or (liquidate is not None and lot.key == liquidate),
+        )
+        for lot in lots
+    ]
+    queue = [lot for lot in rotation_order(queue, rotation) if lot.quantity > EPSILON]
 
     sold = {lot.key: 0.0 for lot in queue}
     first_sale: dict[int | None, int | None] = {lot.key: None for lot in queue}
@@ -180,8 +175,10 @@ class LotRisk:
     """Posición en la fila de venta (1 = se vende primero); `None` si no es vendible."""
     first_sale_day: int | None = None
     blocking_units: float = 0.0
-    """Unidades de lotes que se venden antes y vencen después (solo relevante con FIFO)."""
+    """Unidades de lotes que ingresaron antes y vencen después: con FIFO se venden antes que este."""
     blocking_expiry: date | None = None
+    liquidation_units: float = 0.0
+    """Unidades de lotes en liquidación que vencen después y igual se venden antes (salen primero)."""
     units_at_risk_fefo: int | None = None
     recommended_discount_pct: int | None = None
     expected_units_sold_with_discount: float | None = None
@@ -245,8 +242,9 @@ def best_discount(
 ) -> tuple[int, float, bool] | None:
     """Menor escalón de descuento con el que se estima vender todo el lote antes de su vencimiento.
 
-    Cada escalón se simula con toda la fila de lotes: el lote en oferta se adelanta solo frente a los que
-    vencen después, y un escalón no "alcanza" si liquidar este lote hace vencer mercadería de otros lotes.
+    Cada escalón se simula con toda la fila de lotes: al aceptar el descuento el lote pasa a estar en
+    liquidación y se vende antes que el resto (SPEC §4.2), y un escalón no "alcanza" si liquidar este lote
+    hace vencer mercadería de otros lotes.
     Devuelve (descuento, unidades del lote vendidas, ¿alcanza para liquidarlo?). Si ningún escalón
     alcanza, propone el mayor permitido.
     """
@@ -260,7 +258,7 @@ def best_discount(
         lifts = dict(base_lifts)
         lifts[target.key] = discount_lift(elasticity, step)
         simulation = simulate(
-            assessment.sim_lots, demand, assessment.rotation, lifts=lifts, priority_lot=target.key, until_no_expiring_stock=True
+            assessment.sim_lots, demand, assessment.rotation, lifts=lifts, liquidate=target.key, until_no_expiring_stock=True
         )
         sold = simulation.sold_by_lot.get(target.key, 0.0)
         best = (step, sold, False)
@@ -282,7 +280,11 @@ def assess_lots(
     elasticity: float,
     max_discount_pct: float,
 ) -> LotAssessment:
-    """Simula la venta de los lotes vendibles en el orden de rotación y calcula el riesgo de cada uno."""
+    """Simula la venta de los lotes vendibles en el orden de rotación y calcula el riesgo de cada uno.
+
+    El orden es el mismo que usa el backend al registrar ventas (SPEC §4.2): primero los lotes en liquidación
+    (con `discountPct` > 0) y, dentro de cada grupo, FIFO o FEFO.
+    """
     sim_lots: list[SimLot] = []
     expired_inputs: list[LotInput] = []
     by_id: dict[int, LotInput] = {}
@@ -294,7 +296,8 @@ def assess_lots(
             expired_inputs.append(lot)
             continue
         last_day = (lot.expiry_date - as_of).days if lot.expiry_date is not None else None
-        sim_lots.append(SimLot(lot.lot_id, float(lot.quantity), last_day, lot.received_at))
+        on_sale = lot.discount_pct is not None and lot.discount_pct > 0
+        sim_lots.append(SimLot(lot.lot_id, float(lot.quantity), last_day, lot.received_at, on_sale))
 
     unassigned = max(0.0, float(sellable_stock) - sum(lot.quantity for lot in sim_lots))
     if unassigned >= 0.5:
@@ -335,11 +338,14 @@ def assess_lots(
         beyond_horizon = days_to_expiry >= baseline.days and baseline.stock_start[-1:].sum() > EPSILON if baseline.days else False
         at_risk = 0 if beyond_horizon else max(0, round_units(sim_lot.quantity - sold))
 
-        ahead = ordered[: rank - 1]
-        blocking = [a for a in ahead if a.last_sellable_day is None or a.last_sellable_day > days_to_expiry]
-        blocking_units = sum(a.quantity for a in blocking) if rotation == FIFO else 0.0
+        ahead = [a for a in ordered[: rank - 1] if _expires_after(a, days_to_expiry)]
+        # Dentro del mismo grupo (en liquidación o no) solo FIFO deja atrás a un lote que vence antes; un lote
+        # en liquidación sale primero con cualquier rotación.
+        blocking = [a for a in ahead if a.on_sale == sim_lot.on_sale] if rotation == FIFO else []
+        liquidation = [a for a in ahead if a.on_sale and not sim_lot.on_sale]
+        blocking_units = sum(a.quantity for a in blocking)
         dated = [a.last_sellable_day for a in blocking if a.last_sellable_day is not None]
-        blocking_expiry = date.fromordinal(as_of.toordinal() + max(dated)) if dated and rotation == FIFO else None
+        blocking_expiry = date.fromordinal(as_of.toordinal() + max(dated)) if dated else None
 
         risk = LotRisk(
             lot_id=sim_lot.key,
@@ -356,6 +362,7 @@ def assess_lots(
             first_sale_day=baseline.first_sale_day.get(sim_lot.key),
             blocking_units=blocking_units,
             blocking_expiry=blocking_expiry,
+            liquidation_units=sum(a.quantity for a in liquidation),
         )
         if risk.rotation_blocked:
             if fefo_baseline is None:
