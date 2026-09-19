@@ -161,10 +161,14 @@ Fisherton**. Vida Sana no vende el producto; El Sol Centro y Echesortu tienen la
    - Los dos lotes quedan **en cuarentena** (`RECALLED`): dejan de ser vendibles, el POS los bloquea y el Inicio muestra
      la coincidencia abierta.
    - La consola de dueños muestra "2 comercios afectados".
-4. En Don Pepe: **Seguridad alimentaria** → "Entendido" → **Retirar del stock** (o "Devolver al proveedor") con una nota.
-   El lote queda en 0 con su movimiento `Retiro por recall`. Probá vender la sopa desde el POS con `cajero@donpepe.com`:
-   el producto aparece bloqueado por cuarentena.
-5. En El Sol, `empleado@elsol.com` resuelve la de Fisherton. La sopa de Centro (otro lote) se sigue vendiendo.
+4. En Don Pepe, **antes de resolver**, probá vender la sopa desde el POS con `cajero@donpepe.com`: el producto aparece
+   bloqueado por cuarentena ("En cuarentena por recall · no se puede vender").
+   Después, **Seguridad alimentaria** → "Entendido" → **Retirar del stock** (o "Devolver al proveedor") con una nota.
+   El lote queda en 0 con su movimiento `Retiro por recall`. Si volvés a escanear la sopa en el POS, sigue sin poder
+   venderse: mientras el recall esté publicado el mostrador avisa "Recall vigente (lote L2409A)" y **no** ofrece
+   "Vender igual", porque una lata sin lote registrado puede ser del lote retirado.
+5. En El Sol, `empleado@elsol.com` resuelve la de Fisherton. La sopa de Centro (otro lote, ya chequeado al cargarlo) se
+   sigue vendiendo hasta agotar lo cargado; por encima de eso tampoco hay "Vender igual" mientras dure el recall.
 6. Para comparar: en **Seguridad alimentaria** de Don Pepe o de El Sol queda también el **recall histórico resuelto**
    del Dulce de leche (lote `DV2603B`), con quién lo reconoció, quién lo resolvió y la nota.
 

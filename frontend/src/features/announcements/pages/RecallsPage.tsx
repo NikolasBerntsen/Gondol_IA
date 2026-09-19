@@ -339,8 +339,11 @@ function ResolveDialog({
     >
       <div className="space-y-4">
         <p className="text-base text-muted-foreground">
-          Se van a descontar del stock las {formatNumber(match.currentQuantity)} unidades que quedan en cuarentena y
-          queda registrado el movimiento. Esta acción no se puede deshacer.
+          Se van a descontar del stock{' '}
+          {match.currentQuantity === 1
+            ? 'la unidad que queda'
+            : `las ${formatNumber(match.currentQuantity)} unidades que quedan`}{' '}
+          en cuarentena y queda registrado el movimiento. Esta acción no se puede deshacer.
         </p>
         <Field label="¿Qué hiciste con la mercadería?" htmlFor="recall-resolution">
           <Select
