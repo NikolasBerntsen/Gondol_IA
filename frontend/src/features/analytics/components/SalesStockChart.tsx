@@ -2,7 +2,7 @@ import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip,
 import type { TooltipProps } from 'recharts';
 import { formatDate, formatNumber, formatShortDate } from '@/lib/format';
 import type { SalesStockPoint } from '../types';
-import { AXIS_TICK, AXIS_TICK_MONO, ChartFrame, ChartTooltipBox, CURSOR, GRID_STROKE } from './chart';
+import { AXIS_TICK, AXIS_TICK_MONO, ChartFrame, ChartTooltipBox, CURSOR, GRID_STROKE, niceAxes } from './chart';
 
 interface Point extends SalesStockPoint {
   label: string;
@@ -41,8 +41,8 @@ export function SalesStockChart({ data }: { data: SalesStockPoint[] }) {
   const points: Point[] = data.map((row) => ({ ...row, label: formatShortDate(row.date) }));
   const stocks = points.map((p) => p.stockUnits);
   const sales = points.map((p) => p.salesUnits);
-  const stockMax = Math.max(...stocks, 1);
-  const salesMax = Math.max(...sales, 1);
+  // Topes redondos y la misma cantidad de marcas en los dos ejes (no "9.941" arriba de "5.000").
+  const [stockAxis, salesAxis] = niceAxes([Math.max(...stocks, 1), Math.max(...sales, 1)]);
   const last = points.length - 1;
   const step = Math.max(1, Math.floor(last / 4));
   const ticks = Array.from(new Set([0, step, step * 2, step * 3, last])).map((i) => points[Math.min(i, last)]!.label);
@@ -73,8 +73,9 @@ export function SalesStockChart({ data }: { data: SalesStockPoint[] }) {
           />
           <YAxis
             yAxisId="stock"
-            domain={[0, Math.ceil(stockMax * 1.08)]}
-            tickCount={5}
+            domain={[0, stockAxis!.max]}
+            ticks={stockAxis!.ticks}
+            interval={0}
             tickLine={false}
             axisLine={false}
             width={52}
@@ -84,8 +85,9 @@ export function SalesStockChart({ data }: { data: SalesStockPoint[] }) {
           <YAxis
             yAxisId="sales"
             orientation="right"
-            domain={[0, Math.ceil(salesMax * 1.2)]}
-            tickCount={5}
+            domain={[0, salesAxis!.max]}
+            ticks={salesAxis!.ticks}
+            interval={0}
             tickLine={false}
             axisLine={false}
             width={36}

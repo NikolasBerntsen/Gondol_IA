@@ -519,12 +519,17 @@ Roles: lectura **y decisiones** (gestionar alertas, aceptar/descartar recomendac
 - `GET /api/tenant/dashboard/sales-stock-trend?days=30` → `[{date,salesUnits,salesAmount,stockUnits}]`
 - `GET /api/tenant/dashboard/branch-comparison?days=30` → `[{branchId,branchName,salesUnits,salesAmount,inventoryCostValue,expiringSoonCount,lowStockCount,wasteValue,openAlertsCount}]` (útil en la vista "Todas las sucursales")
 - `GET /api/tenant/dashboard/upcoming-expirations?limit=8` → `[{lotId,branchId,branchName,productId,productName,lotNumber,expiryDate,daysLeft,quantity,bucket}]`
-- `GET /api/tenant/dashboard/reorder?limit=8` → `[{productId,productName,branchId,branchName,sellableStock,minStock,suggestedQuantity,status:"SIN_STOCK|CRITICO|BAJO",predictedStockoutDate}]`
+- `GET /api/tenant/dashboard/upcoming-expirations` lista solo lotes **vendibles** (los vencidos van en `expiredCount`); `openRecallMatchesCount` cuenta las coincidencias sin resolver (`OPEN` + `ACKNOWLEDGED`).
+- `GET /api/tenant/dashboard/reorder?limit=8` → `[{productId,productName,branchId,branchName,sellableStock,minStock,suggestedQuantity,status:"SIN_STOCK|CRITICO|BAJO",predictedStockoutDate,orderedQuantity,orderedAt}]`
+  (`orderedQuantity`/`orderedAt`: pedido anotado que todavía no llegó). "Comprar N" → `POST /api/tenant/recommendations/reorder`
+  `{branchId,productId,quantity,note?}` (jefe + admin): acepta la REORDER pendiente de la IA o registra una REORDER aceptada.
 - `GET /api/tenant/statistics/overview?days=90` → ventas por día/semana, por categoría, por sucursal, top/bottom productos, ABC, rotación, merma por mes (valor), ventas perdidas estimadas por faltantes, tasa de aceptación de recomendaciones, ventas recuperadas con descuentos (estructura libre documentada en `docs/api-analytics.md`).
 - Alertas: `GET /api/tenant/alerts?status=OPEN&type=&page=` · `POST /api/tenant/alerts/{id}/acknowledge|resolve|dismiss` (jefe + admin).
   Motor: `AlertEngine` programado (cada 10 min + al inicio + listener `StockChangedEvent`) que abre/cierra alertas **por
   sucursal** `EXPIRING_SOON`, `EXPIRED`, `LOW_STOCK`, `OUT_OF_STOCK`, `STOCKOUT_PREDICTED`, `ANOMALY` con `dedupe_key`
-  (incluye branchId) y notifica a los ADMIN (y a los EMPLOYEE de esa sucursal solo las de vencimiento) cuando se abre una CRITICAL nueva.
+  (incluye branchId) y notifica a los ADMIN (link `/app/alerts`) y a los EMPLOYEE de esa sucursal solo las de vencimiento
+  (link `/app/expirations`) cuando se abre una CRITICAL nueva. Una `ANOMALY` resuelta o descartada no se reabre mientras
+  esa anomalía siga en la ventana de 7 días.
   Filas: `{id,branchId,branchName,type,severity,status,productId,productName,lotId,lotNumber,title,message,createdAt,handledByName,resolvedAt}`.
 - IA (**por sucursal**): `GET /api/tenant/insights/summary` · `GET /api/tenant/insights/products?pattern=&abc=&page=` (filas con branchId/branchName) ·
   `GET /api/tenant/insights/products/{productId}?branchId=` (incluye historia diaria 90 días + pronóstico de esa sucursal; si falta branchId y el scope es una sola sucursal, usa esa) ·

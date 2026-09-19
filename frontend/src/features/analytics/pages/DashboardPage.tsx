@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
@@ -42,16 +42,29 @@ import { Link } from 'react-router-dom';
 import { useCurrentUser } from '@/auth/AuthContext';
 import { useAccess } from '@/auth/useAccess';
 import { EXPIRY_BUCKET_LABELS } from '@/api/types';
-import { capitalize, formatDaysLeft, formatLongDate, formatMoney, formatNumber, pluralize } from '@/lib/format';
+import {
+  capitalize,
+  formatDateTime,
+  formatDaysLeft,
+  formatLongDate,
+  formatMoney,
+  formatNumber,
+  pluralize,
+} from '@/lib/format';
 import { cn } from '@/lib/cn';
 import { dashboardApi, recommendationsApi } from '../api';
 import type { ReorderRow, UpcomingExpirationRow } from '../types';
+import { showDecisionToast } from '../components/decisionToast';
 import { RecommendationCard } from '../components/RecommendationCard';
 import type { AcceptValues } from '../components/RecommendationCard';
 import { SalesStockChart } from '../components/SalesStockChart';
 
 const TREND_DAYS = 30;
 const LIST_LIMIT = 8;
+/** Recomendaciones que entran en el Inicio; el resto se revisa en Inteligencia IA › Recomendaciones. */
+const RECOMMENDATIONS_SHOWN = 3;
+/** Lista completa de recomendaciones (pestaña de `InsightsPage`, filtrable por tipo y estado). */
+const RECOMMENDATIONS_PATH = '/app/insights?tab=recomendaciones';
 
 const BUCKET_SEVERITY: Record<string, StripeSeverity> = {
   EXPIRED: 'crit',
@@ -100,6 +113,7 @@ function ProductName({ productId, name, linked }: { productId: number | null; na
 
 export default function DashboardPage() {
   const me = useCurrentUser();
+  const rotation = me.tenant?.stockRotation ?? 'FIFO';
   const { can } = useAccess();
   const { isAll, scopeLabel, branches } = useBranch();
   const queryClient = useQueryClient();
@@ -108,7 +122,6 @@ export default function DashboardPage() {
   const canViewProducts = can('products.view');
   const branchColumn = useBranchColumn<UpcomingExpirationRow>();
   const reorderBranchColumn = useBranchColumn<ReorderRow>();
-  const [ordered, setOrdered] = useState<Record<string, boolean>>({});
 
   const summaryQuery = useQuery({
     queryKey: useBranchQueryKey('dashboard', 'summary'),
@@ -132,8 +145,8 @@ export default function DashboardPage() {
     queryFn: () => dashboardApi.reorder(LIST_LIMIT),
   });
   const recommendationsQuery = useQuery({
-    queryKey: useBranchQueryKey('recommendations', 'list', { status: 'PENDING', size: 6 }),
-    queryFn: () => recommendationsApi.list({ status: 'PENDING', size: 6 }),
+    queryKey: useBranchQueryKey('recommendations', 'list', { status: 'PENDING', size: RECOMMENDATIONS_SHOWN }),
+    queryFn: () => recommendationsApi.list({ status: 'PENDING', size: RECOMMENDATIONS_SHOWN }),
   });
 
   const invalidateAll = () => {
@@ -146,12 +159,18 @@ export default function DashboardPage() {
   const accept = useMutation({
     mutationFn: ({ id, values }: { id: number; values: AcceptValues }) => recommendationsApi.accept(id, values),
     onSuccess: (decision) => {
-      toast.success(decision.message, {
-        description: decision.whatsappUrl ? 'Podés mandarle el pedido al proveedor por WhatsApp.' : undefined,
-        action: decision.whatsappUrl
-          ? { label: 'Abrir WhatsApp', onClick: () => window.open(decision.whatsappUrl!, '_blank', 'noopener') }
-          : undefined,
-      });
+      showDecisionToast(decision);
+      invalidateAll();
+    },
+  });
+
+  // "Comprar N": queda registrado en el backend (acepta la REORDER pendiente de la IA o anota una nueva), así la fila
+  // sigue mostrando el pedido al recargar, hasta que entre la mercadería.
+  const order = useMutation({
+    mutationFn: (row: ReorderRow) =>
+      recommendationsApi.reorder({ branchId: row.branchId, productId: row.productId, quantity: row.suggestedQuantity }),
+    onSuccess: (decision) => {
+      showDecisionToast(decision);
       invalidateAll();
     },
   });
@@ -169,19 +188,10 @@ export default function DashboardPage() {
   const expirations = expirationsQuery.data ?? [];
   const reorder = reorderQuery.data ?? [];
   const recommendations = recommendationsQuery.data?.content ?? [];
+  const pendingTotal = recommendationsQuery.data?.totalElements ?? summary?.pendingRecommendationsCount ?? 0;
   const comparison = comparisonQuery.data ?? [];
 
   const stockSpark = useMemo(() => trend.map((point) => point.stockUnits), [trend]);
-
-  const pendingReorder = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const rec of recommendations) {
-      if (rec.type === 'REORDER' && rec.productId != null) {
-        map.set(`${rec.branchId}:${rec.productId}`, rec.id);
-      }
-    }
-    return map;
-  }, [recommendations]);
 
   const attention: AttentionItem[] = [];
   if (summary) {
@@ -243,7 +253,11 @@ export default function DashboardPage() {
         severity: 'warn',
         icon: CalendarClock,
         title: `${pluralize(summary.expiringSoonCount, 'lote')} por vencer`,
-        detail: 'Se venden primero. Un descuento a tiempo evita la merma.',
+        // Con FIFO los lotes salen por orden de ingreso, no por vencimiento (SPEC §4.2): solo un descuento los adelanta.
+        detail:
+          rotation === 'FEFO'
+            ? 'Con FEFO se venden primero. Un descuento a tiempo evita la merma.'
+            : 'Con FIFO salen por orden de ingreso, no por vencimiento: un descuento los adelanta y evita la merma.',
         action: (
           <Button size="sm" variant="outline" onClick={() => scrollToId('vencimientos')}>
             Ver vencimientos
@@ -276,11 +290,17 @@ export default function DashboardPage() {
           'recomendaciones',
         )} de la IA ${readOnly ? 'para revisar' : 'sin responder'}`,
         detail: 'Reposición, descuentos por vencimiento, anomalías y compras a reducir.',
-        action: (
-          <Button size="sm" variant="outline" onClick={() => scrollToId('ia')}>
-            Revisar
-          </Button>
-        ),
+        // Si hay más de las que entran en el Inicio, "Revisar" abre la lista completa.
+        action:
+          summary.pendingRecommendationsCount > RECOMMENDATIONS_SHOWN ? (
+            <ButtonLink to={RECOMMENDATIONS_PATH} size="sm" variant="outline">
+              Revisar
+            </ButtonLink>
+          ) : (
+            <Button size="sm" variant="outline" onClick={() => scrollToId('ia')}>
+              Revisar
+            </Button>
+          ),
       });
     }
   }
@@ -331,18 +351,8 @@ export default function DashboardPage() {
 
   const buyLabel = (row: ReorderRow) => `Comprar ${formatNumber(row.suggestedQuantity)}`;
 
-  const onBuy = (row: ReorderRow) => {
-    const key = `${row.branchId}:${row.productId}`;
-    const recommendationId = pendingReorder.get(key);
-    if (recommendationId != null) {
-      accept.mutate({ id: recommendationId, values: { quantity: row.suggestedQuantity } });
-      return;
-    }
-    setOrdered((current) => ({ ...current, [key]: true }));
-    toast.success(`Anotado: ${formatNumber(row.suggestedQuantity)} u. de ${row.productName}`, {
-      description: `${row.branchName} · la lista de compra se arma con lo que marcás acá.`,
-    });
-  };
+  const orderingKey =
+    order.isPending && order.variables ? `${order.variables.branchId}:${order.variables.productId}` : null;
 
   const reorderColumns: Array<TableColumn<ReorderRow> | null> = [
     {
@@ -381,17 +391,27 @@ export default function DashboardPage() {
       mobile: 'actions',
       cell: (row) => {
         const key = `${row.branchId}:${row.productId}`;
-        if (readOnly) return <span className="whitespace-nowrap font-medium">{buyLabel(row)}</span>;
-        if (ordered[key]) {
+        if (row.orderedQuantity != null) {
           return (
-            <span className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap text-sm font-semibold text-ok-ink">
+            <span
+              className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap text-sm font-semibold text-ok-ink"
+              title={row.orderedAt ? `Anotado el ${formatDateTime(row.orderedAt)}` : undefined}
+            >
               <Check className="size-4" aria-hidden="true" />
-              En el pedido
+              Pedido: {formatNumber(row.orderedQuantity)} u.
             </span>
           );
         }
+        if (readOnly) return <span className="whitespace-nowrap font-medium">{buyLabel(row)}</span>;
         return (
-          <Button size="sm" variant="outline" className="whitespace-nowrap" onClick={() => onBuy(row)}>
+          <Button
+            size="sm"
+            variant="outline"
+            className="whitespace-nowrap"
+            loading={orderingKey === key}
+            disabled={order.isPending && orderingKey !== key}
+            onClick={() => order.mutate(row)}
+          >
             {buyLabel(row)}
           </Button>
         );
@@ -670,7 +690,11 @@ export default function DashboardPage() {
           <CardHeader
             className="p-4 sm:p-5"
             title="Próximos vencimientos"
-            description="Lotes de los próximos 30 días · se venden primero"
+            description={
+              rotation === 'FEFO'
+                ? 'Lotes vendibles de los próximos 30 días · con FEFO salen primero'
+                : 'Lotes vendibles de los próximos 30 días · con FIFO salen por orden de ingreso'
+            }
             actions={
               can('expirations.view') ? (
                 <ButtonLink to="/app/expirations" size="sm" variant="ghost" rightIcon={<ArrowRight aria-hidden="true" />}>
@@ -740,10 +764,14 @@ export default function DashboardPage() {
           className="p-4 sm:p-5"
           icon={Sparkles}
           title="Recomendaciones de la IA"
-          description="Reposición, descuentos por vencimiento y anomalías, calculadas con la historia de ventas de cada sucursal"
+          description={
+            pendingTotal > RECOMMENDATIONS_SHOWN
+              ? `Las ${RECOMMENDATIONS_SHOWN} más prioritarias de ${formatNumber(pendingTotal)} pendientes · reposición, descuentos por vencimiento y anomalías`
+              : 'Reposición, descuentos por vencimiento y anomalías, calculadas con la historia de ventas de cada sucursal'
+          }
           actions={
-            <ButtonLink to="/app/insights" size="sm" variant="ghost" rightIcon={<ArrowRight aria-hidden="true" />}>
-              Ver Inteligencia IA
+            <ButtonLink to={RECOMMENDATIONS_PATH} size="sm" variant="ghost" rightIcon={<ArrowRight aria-hidden="true" />}>
+              {pendingTotal > RECOMMENDATIONS_SHOWN ? `Ver las ${formatNumber(pendingTotal)}` : 'Ver todas'}
             </ButtonLink>
           }
         />
@@ -761,7 +789,7 @@ export default function DashboardPage() {
           />
         ) : recommendations.length ? (
           <ul className="grid grid-cols-1 divide-y divide-border border-t border-border lg:grid-cols-3 lg:divide-x lg:divide-y-0">
-            {recommendations.slice(0, 3).map((recommendation) => (
+            {recommendations.slice(0, RECOMMENDATIONS_SHOWN).map((recommendation) => (
               <RecommendationCard
                 key={recommendation.id}
                 recommendation={recommendation}

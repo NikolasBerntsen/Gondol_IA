@@ -20,6 +20,7 @@ import type {
   RecommendationListParams,
   RecommendationRow,
   ReorderRow,
+  RestockBody,
   RunLaunched,
   SalesStockPoint,
   StatisticsOverview,
@@ -68,6 +69,8 @@ export const recommendationsApi = {
     apiPost<RecommendationDecision>(`/tenant/recommendations/${id}/accept`, body),
   discard: (id: number, note?: string) =>
     apiPost<RecommendationDecision>(`/tenant/recommendations/${id}/discard`, { note }),
+  /** "Comprar N" del Inicio: queda registrado como una `REORDER` aceptada. */
+  reorder: (body: RestockBody) => apiPost<RecommendationDecision>('/tenant/recommendations/reorder', body),
 };
 
 /** Prefijos de React Query. Invalidá siempre por el prefijo: alcanza a todas las sucursales. */
