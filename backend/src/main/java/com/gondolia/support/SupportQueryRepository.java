@@ -22,6 +22,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -48,6 +49,16 @@ public class SupportQueryRepository {
     static final String PREVIEW_IMAGE = "Imagen adjunta";
     /** Ventana del promedio de primera respuesta del tablero. */
     static final int FIRST_RESPONSE_WINDOW_DAYS = 30;
+
+    /**
+     * Letras con tilde y su versión sin tilde (mismo orden) para buscar "sin distinguir mayúsculas ni acentos"
+     * (api-e §5): el texto buscado pasa por {@link #plain} y las columnas por {@code translate(...)} en SQL, con la
+     * misma tabla. Van las mayúsculas también para no depender de que {@code lower()} de la base las conozca.
+     */
+    static final String ACCENTED = "áàâäãéèêëíìîïóòôöõúùûüñçÁÀÂÄÃÉÈÊËÍÌÎÏÓÒÔÖÕÚÙÛÜÑÇ";
+    static final String UNACCENTED = "aaaaaeeeeiiiiooooouuuuncAAAAAEEEEIIIIOOOOOUUUUNC";
+    /** Columnas por las que busca la bandeja: asunto, comercio y persona que abrió el ticket. */
+    private static final List<String> SEARCHABLE = List.of("t.subject", "ten.name", "cu.full_name");
 
     /** Desde qué lado se mira la conversación (define qué mensajes cuentan como no leídos). */
     public enum Viewer {
@@ -143,8 +154,13 @@ public class SupportQueryRepository {
         }
         String search = normalizeSearch(filter.q());
         if (search != null) {
-            where.append(" and (lower(t.subject) like :q or lower(ten.name) like :q or lower(cu.full_name) like :q)");
-            params.addValue("q", search);
+            where.append(SEARCHABLE.stream()
+                    .map(column -> "lower(translate(coalesce(" + column + ", ''), :accented, :unaccented))"
+                            + " like :q escape '\\'")
+                    .collect(Collectors.joining(" or ", " and (", ")")));
+            params.addValue("q", search)
+                    .addValue("accented", ACCENTED)
+                    .addValue("unaccented", UNACCENTED);
         }
 
         Long total = jdbc.queryForObject("""
@@ -231,12 +247,26 @@ public class SupportQueryRepository {
         params.addValue("statuses", statuses.stream().map(Enum::name).toList());
     }
 
+    /**
+     * Patrón {@code LIKE} del texto libre: sin tildes y en minúsculas (igual que las columnas, ver {@link #ACCENTED}) y
+     * con la barra invertida, {@code %} y {@code _} escapados para que se busquen literales. {@code null} si no hay texto.
+     */
     static String normalizeSearch(String q) {
         if (q == null || q.isBlank()) {
             return null;
         }
-        String clean = q.strip().toLowerCase(Locale.ROOT).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+        String clean = plain(q.strip()).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
         return "%" + clean + "%";
+    }
+
+    /** Texto sin tildes y en minúsculas, igual que {@code lower(translate(columna, ACCENTED, UNACCENTED))}. */
+    static String plain(String text) {
+        StringBuilder out = new StringBuilder(text.length());
+        for (char character : text.toCharArray()) {
+            int index = ACCENTED.indexOf(character);
+            out.append(index < 0 ? character : UNACCENTED.charAt(index));
+        }
+        return out.toString().toLowerCase(Locale.ROOT);
     }
 
     static String preview(String body, boolean hasAttachment) {

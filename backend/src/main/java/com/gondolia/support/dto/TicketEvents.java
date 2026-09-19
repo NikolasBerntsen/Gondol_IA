@@ -36,6 +36,20 @@ public final class TicketEvents {
         }
     }
 
+    /**
+     * {@code {"event":"TICKET_UPDATED","ticket":TicketSummary,"ratingComment":…,"firstResponseAt":…}} en la
+     * conversación ({@code /topic/tickets/{id}}). Además del resumen lleva los dos datos del {@code TicketDetail} que
+     * no están en él y que cambian sin un mensaje nuevo (el comentario de la calificación y la primera respuesta), así
+     * las dos partes ven el ticket completo al instante sin volver a pedirlo. Los dos van siempre, aunque sean
+     * {@code null} (una calificación corregida puede quedar sin comentario).
+     */
+    public record TicketUpdatedEvent(String event, TicketSummary ticket, String ratingComment,
+                                     Instant firstResponseAt) {
+        public TicketUpdatedEvent(TicketSummary ticket, String ratingComment, Instant firstResponseAt) {
+            this(TICKET_UPDATED, ticket, ratingComment, firstResponseAt);
+        }
+    }
+
     /** {@code {"event":"TYPING","userId":7,"name":"Ana","senderType":"AGENT","typing":true}}. */
     public record TypingEvent(String event, Long userId, String name, MessageSenderType senderType, boolean typing) {
         public TypingEvent(Long userId, String name, MessageSenderType senderType, boolean typing) {

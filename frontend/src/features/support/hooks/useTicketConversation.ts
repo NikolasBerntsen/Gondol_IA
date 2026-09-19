@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getErrorMessage } from '@/api/client';
+import { ApiError, getErrorMessage } from '@/api/client';
+import { notificationKeys } from '@/api/notifications';
 import type { MessageSenderType } from '@/api/types';
 import { useCurrentUser } from '@/auth/AuthContext';
+import { useOnScreenReference } from '@/components/notifications/onScreenReferences';
 import { useStompConnected } from '@/realtime/StompProvider';
 import { useStompSubscription } from '@/realtime/useStompSubscription';
 import { conversationApi, supportKeys, type SupportSide } from '../api';
@@ -12,7 +14,6 @@ import type {
   SupportMessage,
   TicketDetail,
   TicketEvent,
-  TicketSummary,
 } from '../types';
 
 export interface TypingPeer {
@@ -50,11 +51,31 @@ function withMessage(ticket: TicketDetail | undefined, message: SupportMessage):
   };
 }
 
-/** Los eventos del tópico son compartidos por las dos partes: el contador de no leídos propio no se pisa. */
-function withTicketFields(ticket: TicketDetail | undefined, summary: TicketSummary): TicketDetail | undefined {
+/** Mismo `referenceType` que usa el backend en las notificaciones de soporte (`SupportNotifier`). */
+const TICKET_REFERENCE = 'SUPPORT_TICKET';
+
+type TicketUpdatedEvent = Extract<TicketEvent, { event: 'TICKET_UPDATED' }>;
+
+/**
+ * Los eventos del tópico son compartidos por las dos partes: el contador de no leídos propio no se pisa. Además del
+ * resumen, `TICKET_UPDATED` trae el comentario de la calificación y la primera respuesta (no están en el resumen).
+ */
+function withTicketFields(ticket: TicketDetail | undefined, event: TicketUpdatedEvent): TicketDetail | undefined {
   if (!ticket) return ticket;
-  const { unreadCount: _ignored, ...fields } = summary;
-  return { ...ticket, ...fields };
+  const { unreadCount: _ignored, ...fields } = event.ticket;
+  const next: TicketDetail = { ...ticket, ...fields };
+  if (event.ratingComment !== undefined) next.ratingComment = event.ratingComment;
+  if (event.firstResponseAt !== undefined) next.firstResponseAt = event.firstResponseAt;
+  return next;
+}
+
+/**
+ * ¿Vale la pena reintentar el envío? Sí ante errores de red, demoras o del servidor; no si el servidor rechazó el
+ * mensaje por su contenido (imagen inválida, conversación cerrada…): el mismo pedido va a fallar igual.
+ */
+function isRetryable(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return true;
+  return error.status === 0 || error.status === 408 || error.status === 429 || error.status >= 500;
 }
 
 const TYPING_TIMEOUT_MS = 6_000;
@@ -97,11 +118,16 @@ export function useTicketConversation({ ticketId, side, autoRead = true, onIncom
     enabled: ticketId != null,
   });
 
+  // Conversación a la vista: la campana no avisa con toast lo que ya se ve acá (SPEC §9.6).
+  useOnScreenReference(TICKET_REFERENCE, ticketId);
+
   const markReadMutation = useMutation({
     mutationFn: (id: number) => api.markRead(id),
     onSuccess: () => {
       queryClient.setQueryData<TicketDetail>(queryKey, (prev) => (prev ? { ...prev, unreadCount: 0 } : prev));
       invalidateSupportLists(queryClient);
+      // Leer la conversación también deja leídas sus notificaciones (en el backend): refrescar la campana.
+      queryClient.invalidateQueries({ queryKey: notificationKeys.all });
     },
     meta: { errorToast: false },
   });
@@ -151,7 +177,7 @@ export function useTicketConversation({ ticketId, side, autoRead = true, onIncom
           break;
         }
         case 'TICKET_UPDATED':
-          queryClient.setQueryData<TicketDetail>(queryKey, (prev) => withTicketFields(prev, event.ticket));
+          queryClient.setQueryData<TicketDetail>(queryKey, (prev) => withTicketFields(prev, event));
           invalidateSupportLists(queryClient);
           break;
         case 'TYPING': {
@@ -191,12 +217,16 @@ export function useTicketConversation({ ticketId, side, autoRead = true, onIncom
     onSuccess: ({ tempId, message }) => {
       queryClient.setQueryData<TicketDetail>(queryKey, (prev) => withMessage(prev, message));
       invalidateSupportLists(queryClient);
+      // Escribir deja leídas las notificaciones propias de esta conversación.
+      queryClient.invalidateQueries({ queryKey: notificationKeys.unreadCount() });
       releasePending(tempId);
     },
     onError: (error, { tempId }) => {
       setPending((prev) =>
         prev.map((item) =>
-          item.tempId === tempId ? { ...item, failed: true, error: getErrorMessage(error) } : item,
+          item.tempId === tempId
+            ? { ...item, failed: true, error: getErrorMessage(error), retryable: isRetryable(error) }
+            : item,
         ),
       );
     },
@@ -230,7 +260,9 @@ export function useTicketConversation({ ticketId, side, autoRead = true, onIncom
       const payload = payloads.current.get(tempId);
       if (!payload) return;
       setPending((prev) =>
-        prev.map((item) => (item.tempId === tempId ? { ...item, failed: false, error: undefined } : item)),
+        prev.map((item) =>
+          item.tempId === tempId ? { ...item, failed: false, error: undefined, retryable: undefined } : item,
+        ),
       );
       sendMutation.mutate({ tempId, payload });
     },

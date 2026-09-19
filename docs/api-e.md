@@ -107,10 +107,11 @@ curl -s -X POST "$API/tenant/support/tickets/1/messages" -H "Authorization: Bear
 
 Efectos: `WAITING_CUSTOMER` o `RESOLVED` vuelven a `IN_PROGRESS`; con el ticket `CLOSED` responde
 **409 `TICKET_CLOSED`**. Notifica al agente asignado (o a todo el equipo si no hay) y publica `MESSAGE` y
-`TICKET_UPDATED`.
+`TICKET_UPDATED`. Escribir cuenta como haber leído: las notificaciones de quien escribe sobre ese ticket quedan leídas.
 
 ### `POST /api/tenant/support/tickets/{id}/read` → 204
-Marca como leídos los mensajes del agente y publica `READ`.
+Marca como leídos los mensajes del agente, deja leídas las notificaciones de ese ticket de quien lee
+(`referenceType = SUPPORT_TICKET`) y publica `READ`.
 
 ### `POST /api/tenant/support/tickets/{id}/close` → `TicketDetail`
 Pasa a `CLOSED`, fija `resolvedAt` si faltaba y deja un mensaje `SYSTEM` en la conversación. Es idempotente.
@@ -128,16 +129,18 @@ Pasa a `CLOSED`, fija `resolvedAt` si faltaba y deja un mensaje `SYSTEM` en la c
 - `status`: igual que arriba (`ALL`, `ACTIVE` o un estado).
 - `assigned`: `all` (defecto), `me`, `unassigned`. Valor inválido → 400 `VALIDATION_ERROR`
   ("El filtro de asignación tiene que ser all, me o unassigned.").
-- `q`: texto libre en asunto, nombre del comercio o nombre de quien escribió (sin distinguir mayúsculas ni acentos del
-  patrón; `%` y `_` se escapan).
+- `q`: texto libre en asunto, nombre del comercio o nombre de quien escribió, **sin distinguir mayúsculas ni tildes**
+  de ningún lado (`almacen` encuentra «Almacén Don Pepe» y `GÓMEZ` a «Laura Gómez»: el patrón y las columnas pasan por
+  la misma tabla de `translate`); `%` y `_` se escapan.
 - Orden: último mensaje primero. `size` ≤ 100.
 
 ### `GET /api/support/tickets/{id}` → `TicketDetail`
 
 ### `POST /api/support/tickets/{id}/assign` → `TicketSummary`
 Cuerpo `{"agentId": 6}` o `{}` / sin cuerpo para asignárselo a quien lo pide. El destinatario tiene que ser un
-`SUPPORT_AGENT` activo → si no, 400 `AGENT_NOT_FOUND`. Deja un mensaje `SYSTEM` y, si el agente no es quien lo asignó,
-le manda una notificación.
+`SUPPORT_AGENT` activo → si no, 400 `AGENT_NOT_FOUND`. Deja un mensaje `SYSTEM` que dice quién hizo qué («Sofía
+Martínez tomó la consulta.» si se lo asigna a sí misma, «Sofía Martínez asignó la consulta a Tomás Aguirre.» si se lo
+pasa a otro) y, si el agente no es quien lo asignó, le manda una notificación.
 
 ### `POST /api/support/tickets/{id}/status` `{"status":"RESOLVED"}` → `TicketSummary`
 `RESOLVED`/`CLOSED` fijan `resolvedAt`; volver a un estado activo lo limpia. Deja un mensaje `SYSTEM` y notifica al
@@ -154,6 +157,8 @@ Mismos campos y validaciones que del lado del comercio. Además:
 - Notifica a quien abrió el ticket (`TICKET_MESSAGE`, link `/app/support/{id}`).
 
 ### `POST /api/support/tickets/{id}/read` → 204
+Igual que del lado del comercio: marca como leídos los mensajes del cliente, deja leídas las notificaciones de ese
+ticket del agente que lee y publica `READ`. Responder también cuenta como leer.
 
 ### `GET /api/support/stats` → tablero de la bandeja
 ```json
@@ -174,7 +179,7 @@ Agentes activos; `online` sale de `PresenceTracker` (sesiones STOMP abiertas).
 
 | Destino | Quién | Carga |
 |---|---|---|
-| `/topic/tickets/{id}` | agente o usuario del comercio dueño | `{"event":"MESSAGE","message":MessageDto}` · `{"event":"TICKET_UPDATED","ticket":TicketSummary}` · `{"event":"TYPING","userId","name","senderType","typing"}` · `{"event":"READ","senderType","readAt"}` |
+| `/topic/tickets/{id}` | agente o usuario del comercio dueño | `{"event":"MESSAGE","message":MessageDto}` · `{"event":"TICKET_UPDATED","ticket":TicketSummary,"ratingComment","firstResponseAt"}` · `{"event":"TYPING","userId","name","senderType","typing"}` · `{"event":"READ","senderType","readAt"}` |
 | `/topic/support/queue` | solo `SUPPORT_AGENT` | `{"event":"TICKET_CREATED"\|"TICKET_UPDATED","ticket":TicketSummary}` (con el `unreadCount` del agente) |
 | `/topic/support/presence` | cualquier autenticado | `{"agentsOnline":2}` (lo publica el núcleo) |
 
@@ -203,6 +208,14 @@ revertido.
    mensaje y los nombres de comercio y persona salen en una sola consulta por listado.
 7. **No se agregaron migraciones**: `support_tickets`, `support_messages` y `attachments` ya vienen en `V1__schema.sql`
    con las dos marcas de lectura y `first_response_at`. El rango V350–V399 quedó libre.
+8. **`TICKET_UPDATED` de la conversación lleva `ratingComment` y `firstResponseAt`** (agregado sobre SPEC §7, los dos
+   siempre presentes aunque sean `null`): son los datos del `TicketDetail` que no están en el resumen y que cambian sin
+   un mensaje nuevo (una calificación corregida, la primera respuesta). Así el agente ve el comentario de la
+   calificación en vivo, sin recargar. En `/topic/support/queue` el evento sigue siendo solo el resumen.
+9. **Leer o escribir en una conversación deja leídas sus notificaciones** (las de quien lee, por
+   `referenceType = SUPPORT_TICKET` y el id del ticket): la campana no sigue contando mensajes que ya se vieron en el
+   chat. Del lado del cliente, además, la campana no muestra toast ni suma por una notificación del ticket que está en
+   pantalla (`useOnScreenReference`/`isReferenceOnScreen` de `components/notifications/onScreenReferences.ts`).
 
 ## 8. Frontend (`features/support`)
 
@@ -215,15 +228,25 @@ revertido.
 - **Consola (3 paneles)**: bandeja con búsqueda, filtros de asignación y estado, insignias de no leídos y franja de
   prioridad; conversación con burbujas, imágenes (`AuthImage`) e indicador de escritura; panel derecho con comercio
   (nombre, plan, rubro), persona y rol, y los controles de estado, prioridad, categoría y agente. Debajo de `xl` el
-  panel derecho pasa a una hoja lateral ("Datos") y debajo de `lg` la bandeja y la conversación se turnan.
+  panel derecho pasa a una hoja lateral ("Datos") y debajo de `lg` la bandeja y la conversación se turnan. El estado
+  se filtra con un `<select>` (seis opciones no entran como control segmentado en la columna de la bandeja) y el
+  tablero es una franja de una línea, para dejarle la altura a la conversación; en mobile, con un ticket abierto, se
+  oculta.
   **Sonido** al entrar una consulta nueva o un mensaje del comercio (Web Audio, sin archivos), con interruptor que se
   recuerda en `localStorage` (`gondolia.support.mute`).
 - **Envío instantáneo**: el mensaje aparece al toque como "Enviando" y se reconcilia con el del servidor (por id, así
-  el eco de STOMP no lo duplica). Si falla queda en rojo con "Reintentar" y "Descartar".
+  el eco de STOMP no lo duplica). Si falla queda en rojo, a la vista, con "Reintentar" y "Descartar"; si el servidor lo
+  rechazó por su contenido (un 4xx como `INVALID_FILE` o `TICKET_CLOSED`) solo ofrece "Descartar", porque reintentar
+  daría el mismo error.
 - **Adjuntos**: selector de archivos, **pegar con Ctrl+V**, arrastrar y soltar, **cámara** en dispositivos táctiles y
   **"Capturar pantalla"** (html-to-image sobre `#root`, excluyendo el propio widget por `data-support-widget`). Siempre
-  con vista previa antes de enviar y los mismos límites que el backend (PNG/JPG/WEBP/GIF, 10 MB).
+  con vista previa antes de enviar y los mismos límites que el backend (PNG/JPG/WEBP/GIF, 10 MB). La imagen se valida
+  **por su contenido** con las mismas firmas que `AttachmentStorageService` (un texto renombrado a `.png` se rechaza
+  antes de enviarlo) y se manda con su tipo real; el aviso de peso redondea hacia arriba ("pesa 10,1 MB").
 - **Widget**: burbuja con punto de presencia e insignia de no leídos; adentro, mis conversaciones abiertas, el
-  formulario de consulta nueva y el chat. Escucha los tópicos de mis tickets abiertos aunque esté cerrado, y no se
-  muestra en `/app/support` (ahí ya está la pantalla completa).
+  formulario de consulta nueva y el chat. Escucha los tópicos de mis tickets abiertos aunque esté cerrado (solo
+  vuelve a pedir la lista con `MESSAGE`, `TICKET_UPDATED` o un `READ` del comercio, agrupados; `TYPING` y el `READ`
+  del agente no la cambian), y no se muestra en `/app/support` (ahí ya está la pantalla completa). **Nunca tapa la
+  acción principal**: si hay una barra fija abajo marcada con `data-bottom-action-bar` (el "Cobrar" del POS y el
+  "Registrar ingreso" de la carga en mobile), la burbuja se ubica arriba de ella (`useBottomBarClearance`).
 - Query keys sin segmento de sucursal (`['support', …]`): las conversaciones no dependen de la sucursal elegida.

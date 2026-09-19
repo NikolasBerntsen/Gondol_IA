@@ -859,8 +859,9 @@ export default function PosTerminalPage() {
         </aside>
       </div>
 
-      {/* Móvil: total y cobro al alcance del pulgar */}
+      {/* Móvil: total y cobro al alcance del pulgar (la burbuja de soporte se corre arriba de esta barra) */}
       <div
+        data-bottom-action-bar=""
         className="sticky bottom-0 z-10 flex items-center gap-3 border-t-2 border-border bg-card px-4 pt-3 lg:hidden"
         style={{ paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}
       >

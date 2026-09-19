@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ExternalLink, Headset, MessageCircle, MessageSquarePlus, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button, EmptyState, ErrorState, Skeleton } from '@/components/ui';
 import { cn } from '@/lib/cn';
@@ -10,11 +10,19 @@ import { MessageComposer } from './MessageComposer';
 import { NewTicketForm } from './NewTicketForm';
 import { PresenceDot } from './TicketBadges';
 import { TicketListItem } from './TicketListItem';
+import { useBottomBarClearance } from '../hooks/useBottomBarClearance';
 import { useSupportPresence, useTicketTopics, useTypingNotifier } from '../hooks/useSupportRealtime';
 import { invalidateSupportLists, useTicketConversation } from '../hooks/useTicketConversation';
 import { isTicketWritable } from '../labels';
 
 type View = 'list' | 'chat' | 'new';
+
+/** Distancia normal del botón al borde inferior (`bottom-4`). */
+const BASE_BOTTOM_PX = 16;
+/** Alto del botón (56 px) + separación con el panel + margen arriba: lo que el panel no puede ocupar. */
+const PANEL_RESERVED_PX = 96;
+/** Junta en un solo pedido los eventos que llegan juntos (MESSAGE + TICKET_UPDATED de un mismo mensaje). */
+const LIST_REFRESH_DEBOUNCE_MS = 250;
 
 /**
  * Botón flotante de soporte, presente en todas las pantallas del comercio (SPEC §9.6).
@@ -23,6 +31,9 @@ type View = 'list' | 'chat' | 'new';
  * conversaciones abiertas, el formulario de consulta nueva y el chat en vivo (con imágenes por selector, pegado,
  * arrastre, cámara y "Capturar pantalla"). Se marca con `data-support-widget` para que la captura de pantalla no
  * se fotografíe a sí misma.
+ *
+ * Nunca tapa la acción principal de la pantalla: si hay una barra fija abajo (marcada con `data-bottom-action-bar`,
+ * como el "Cobrar" del POS o el "Registrar ingreso" de la carga en mobile), la burbuja se ubica arriba de ella.
  */
 export default function SupportWidget() {
   const location = useLocation();
@@ -30,6 +41,7 @@ export default function SupportWidget() {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<View>('list');
   const [ticketId, setTicketId] = useState<number | null>(null);
+  const launcherRef = useRef<HTMLButtonElement>(null);
 
   const presence = useSupportPresence();
 
@@ -42,8 +54,28 @@ export default function SupportWidget() {
   const openIds = useMemo(() => (list.data ?? []).map((ticket) => ticket.id).slice(0, 12), [list.data]);
   const unread = (list.data ?? []).reduce((total, ticket) => total + ticket.unreadCount, 0);
 
-  // La lista sigue viva aunque el panel esté cerrado: la burbuja avisa los mensajes nuevos.
-  useTicketTopics(openIds, () => invalidateSupportLists(queryClient));
+  // La lista sigue viva aunque el panel esté cerrado: la burbuja avisa los mensajes nuevos. Solo se vuelve a pedir
+  // con los eventos que la cambian (mensaje, ticket actualizado, lectura del lado del comercio); "está escribiendo…"
+  // y la lectura del agente son efímeros (SPEC §7). Un mensaje llega con su TICKET_UPDATED: se refresca una sola vez.
+  const refreshTimer = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (refreshTimer.current !== null) window.clearTimeout(refreshTimer.current);
+    },
+    [],
+  );
+  useTicketTopics(openIds, (event) => {
+    const changesList =
+      event.event === 'MESSAGE' ||
+      event.event === 'TICKET_UPDATED' ||
+      (event.event === 'READ' && event.senderType === 'CUSTOMER');
+    if (!changesList) return;
+    if (refreshTimer.current !== null) window.clearTimeout(refreshTimer.current);
+    refreshTimer.current = window.setTimeout(() => {
+      refreshTimer.current = null;
+      invalidateSupportLists(queryClient);
+    }, LIST_REFRESH_DEBOUNCE_MS);
+  });
 
   const conversation = useTicketConversation({
     ticketId: view === 'chat' && open ? ticketId : null,
@@ -59,21 +91,25 @@ export default function SupportWidget() {
 
   // En la pantalla de soporte el widget sobra: ahí ya está la conversación completa.
   const onSupportScreen = location.pathname.startsWith('/app/support');
+  const clearance = useBottomBarClearance(launcherRef, !onSupportScreen);
+  const bottom = Math.max(BASE_BOTTOM_PX, clearance);
   useEffect(() => {
     if (onSupportScreen) setOpen(false);
   }, [onSupportScreen]);
   if (onSupportScreen) return null;
 
   return (
-    <div data-support-widget="true" className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2 print:hidden">
+    <div
+      data-support-widget="true"
+      className="fixed right-4 z-50 flex flex-col items-end gap-2 print:hidden"
+      style={{ bottom }}
+    >
       {open && (
         <section
           role="dialog"
           aria-label="Chat con soporte"
-          className={cn(
-            'flex w-[min(24rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-panel border border-border bg-card shadow-pop',
-            'h-[min(34rem,calc(100dvh-7rem))]',
-          )}
+          className="flex w-[min(24rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-panel border border-border bg-card shadow-pop"
+          style={{ height: `min(34rem, calc(100dvh - ${bottom + PANEL_RESERVED_PX}px))` }}
         >
           <header className="flex items-center gap-2 border-b border-border bg-rail px-3 py-2.5 text-rail-foreground">
             {view !== 'list' && (
@@ -212,6 +248,7 @@ export default function SupportWidget() {
       )}
 
       <button
+        ref={launcherRef}
         type="button"
         onClick={() => setOpen((previous) => !previous)}
         aria-expanded={open}

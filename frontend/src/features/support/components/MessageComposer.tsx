@@ -3,12 +3,42 @@ import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type Dra
 import { toast } from 'sonner';
 import { Button, Kbd, Spinner, Textarea } from '@/components/ui';
 import { cn } from '@/lib/cn';
-import { formatBytes } from '@/lib/format';
+import { formatBytes, formatNumber } from '@/lib/format';
 import type { SendMessagePayload } from '../types';
 
 /** Igual que `AttachmentStorageService`: PNG, JPG, WEBP o GIF de hasta 10 MB. */
 const MAX_BYTES = 10 * 1024 * 1024;
-const ACCEPTED = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+const INVALID_TYPE_MESSAGE = 'Solo se aceptan imágenes PNG, JPG, WEBP o GIF.';
+
+function startsWith(bytes: Uint8Array, offset: number, signature: ReadonlyArray<number>): boolean {
+  return bytes.length >= offset + signature.length && signature.every((byte, index) => bytes[offset + index] === byte);
+}
+
+const ascii = (text: string) => Array.from(text, (char) => char.charCodeAt(0));
+
+/**
+ * Tipo real de la imagen según sus primeros bytes, con las mismas firmas que valida el backend
+ * (`AttachmentStorageService`): así un texto renombrado a `.png` se rechaza antes de enviarlo. `null` si no es una
+ * imagen aceptada o no se pudo leer.
+ */
+async function detectImageType(blob: Blob): Promise<string | null> {
+  let bytes: Uint8Array;
+  try {
+    bytes = new Uint8Array(await blob.slice(0, 12).arrayBuffer());
+  } catch {
+    return null;
+  }
+  if (startsWith(bytes, 0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return 'image/png';
+  if (startsWith(bytes, 0, [0xff, 0xd8, 0xff])) return 'image/jpeg';
+  if (startsWith(bytes, 0, ascii('GIF87a')) || startsWith(bytes, 0, ascii('GIF89a'))) return 'image/gif';
+  if (startsWith(bytes, 0, ascii('RIFF')) && startsWith(bytes, 8, ascii('WEBP'))) return 'image/webp';
+  return null;
+}
+
+/** Peso en MB redondeado **hacia arriba** con un decimal: 10 MB + 1 byte es "10,1 MB", nunca "10 MB". */
+function megabytesRoundedUp(bytes: number): string {
+  return `${formatNumber(Math.ceil((bytes / (1024 * 1024)) * 10) / 10, { decimals: 1 })} MB`;
+}
 
 export interface MessageComposerProps {
   onSend: (payload: SendMessagePayload) => void;
@@ -57,6 +87,11 @@ export function MessageComposer({
 
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
+  const resetInputs = useCallback(() => {
+    if (inputRef.current) inputRef.current.value = '';
+    if (cameraRef.current) cameraRef.current.value = '';
+  }, []);
+
   const clearFile = useCallback(() => {
     setPreviewUrl((url) => {
       if (url) URL.revokeObjectURL(url);
@@ -64,29 +99,41 @@ export function MessageComposer({
     });
     setFile(null);
     setFileName(null);
-    if (inputRef.current) inputRef.current.value = '';
-    if (cameraRef.current) cameraRef.current.value = '';
-  }, []);
+    resetInputs();
+  }, [resetInputs]);
 
+  /**
+   * Valida la imagen **por su contenido** (no por la extensión ni por lo que declara el navegador) y el peso, igual
+   * que el backend, y la deja en la vista previa. Si no sirve, avisa y no la adjunta: así nunca queda un envío que
+   * el servidor va a rechazar siempre. Devuelve `true` si la imagen quedó adjunta.
+   */
   const pickFile = useCallback(
-    (candidate: Blob | null | undefined, name?: string) => {
-      if (!candidate) return;
-      if (!ACCEPTED.includes(candidate.type)) {
-        toast.error('Solo se aceptan imágenes PNG, JPG, WEBP o GIF.');
-        return;
-      }
+    async (candidate: Blob | null | undefined, name?: string): Promise<boolean> => {
+      if (!candidate) return false;
       if (candidate.size > MAX_BYTES) {
-        toast.error(`La imagen pesa ${formatBytes(candidate.size)} y el máximo es 10 MB.`);
-        return;
+        toast.error(`La imagen supera el máximo de 10 MB (pesa ${megabytesRoundedUp(candidate.size)}).`);
+        resetInputs();
+        return false;
       }
+      const type = await detectImageType(candidate);
+      if (!type) {
+        toast.error(INVALID_TYPE_MESSAGE, {
+          description: 'El archivo no es una imagen válida o está dañado.',
+        });
+        resetInputs();
+        return false;
+      }
+      // Se envía con el tipo real: el backend rechaza un tipo declarado distinto de una imagen.
+      const image = candidate.type === type ? candidate : new Blob([candidate], { type });
       setPreviewUrl((url) => {
         if (url) URL.revokeObjectURL(url);
-        return URL.createObjectURL(candidate);
+        return URL.createObjectURL(image);
       });
-      setFile(candidate);
+      setFile(image);
       setFileName(name ?? (candidate instanceof File ? candidate.name : 'imagen.png'));
+      return true;
     },
-    [],
+    [resetInputs],
   );
 
   const submit = () => {
@@ -105,8 +152,9 @@ export function MessageComposer({
     const pasted = item.getAsFile();
     if (pasted) {
       event.preventDefault();
-      pickFile(pasted, pasted.name || 'captura-pegada.png');
-      toast.success('Pegaste una imagen.');
+      void pickFile(pasted, pasted.name || 'captura-pegada.png').then((attached) => {
+        if (attached) toast.success('Pegaste una imagen.');
+      });
     }
   };
 
@@ -115,7 +163,7 @@ export function MessageComposer({
     setDragging(false);
     if (disabled) return;
     const dropped = event.dataTransfer?.files?.[0];
-    if (dropped) pickFile(dropped, dropped.name);
+    if (dropped) void pickFile(dropped, dropped.name);
   };
 
   /** Captura la app (sin el widget) con html-to-image y la deja lista para enviar. */
@@ -132,8 +180,9 @@ export function MessageComposer({
         filter: (node) => !(node instanceof HTMLElement && node.dataset.supportWidget === 'true'),
       });
       if (!blob) throw new Error('sin imagen');
-      pickFile(blob, 'captura-de-pantalla.png');
-      toast.success('Listo: revisá la captura antes de enviarla.');
+      if (await pickFile(blob, 'captura-de-pantalla.png')) {
+        toast.success('Listo: revisá la captura antes de enviarla.');
+      }
     } catch {
       toast.error('No se pudo capturar la pantalla. Probá con una captura del sistema y adjuntala.');
     } finally {
@@ -244,7 +293,7 @@ export function MessageComposer({
         type="file"
         accept="image/png,image/jpeg,image/webp,image/gif"
         className="sr-only"
-        onChange={(event) => pickFile(event.target.files?.[0])}
+        onChange={(event) => void pickFile(event.target.files?.[0])}
       />
       <input
         ref={cameraRef}
@@ -252,7 +301,7 @@ export function MessageComposer({
         accept="image/*"
         capture="environment"
         className="sr-only"
-        onChange={(event) => pickFile(event.target.files?.[0], 'foto.jpg')}
+        onChange={(event) => void pickFile(event.target.files?.[0], 'foto.jpg')}
       />
     </div>
   );

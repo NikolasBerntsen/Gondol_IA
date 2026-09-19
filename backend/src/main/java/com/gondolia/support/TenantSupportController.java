@@ -77,7 +77,7 @@ public class TenantSupportController {
     @PostMapping("/{id}/read")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void markRead(@PathVariable Long id) {
-        supportService.tenantRead(CurrentUser.tenantId(), id);
+        supportService.tenantRead(CurrentUser.get(), id);
     }
 
     @Operation(summary = "Cerrar la conversación")

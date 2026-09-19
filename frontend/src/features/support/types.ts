@@ -123,7 +123,16 @@ export interface AgentQueueParams {
 
 export type TicketEvent =
   | { event: 'MESSAGE'; message: SupportMessage }
-  | { event: 'TICKET_UPDATED'; ticket: TicketSummary }
+  | {
+      event: 'TICKET_UPDATED';
+      ticket: TicketSummary;
+      /**
+       * Datos del detalle que no están en el resumen y cambian sin mensaje nuevo (calificación corregida, primera
+       * respuesta). Solo vienen en `/topic/tickets/{id}`; en la bandeja no.
+       */
+      ratingComment?: string | null;
+      firstResponseAt?: string | null;
+    }
   | { event: 'TYPING'; userId: number; name: string; senderType: MessageSenderType; typing: boolean }
   | { event: 'READ'; senderType: MessageSenderType; readAt: string };
 
@@ -138,4 +147,6 @@ export interface PendingMessage {
   createdAt: string;
   failed: boolean;
   error?: string;
+  /** `false` si el servidor lo rechazó por el contenido (p. ej. archivo inválido): reintentar no sirve. */
+  retryable?: boolean;
 }

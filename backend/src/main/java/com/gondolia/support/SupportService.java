@@ -118,28 +118,30 @@ public class SupportService {
 
         Attachment attachment = storeAttachment(file, ticket.getTenantId(), user.id());
         MessageDto message = persistMessage(ticket, user.id(), MessageSenderType.CUSTOMER, body, attachment);
-        // Escribir implica haber leído lo anterior.
+        // Escribir implica haber leído lo anterior (también sus notificaciones de este ticket).
         ticket.setCustomerLastReadAt(message.createdAt());
         if (ticket.getStatus() == TicketStatus.WAITING_CUSTOMER || ticket.getStatus() == TicketStatus.RESOLVED) {
             ticket.setStatus(TicketStatus.IN_PROGRESS);
             ticket.setResolvedAt(null);
         }
         ticketRepository.flush();
+        notifier.markTicketNotificationsRead(user.id(), ticketId);
 
         notifier.notifySupportOfCustomerMessage(ticket, tenantName(ticket.getTenantId()), user.fullName(),
                 preview(message));
         notifier.broadcastMessage(ticketId, message);
-        publishUpdates(ticket.getId());
+        publishUpdates(ticket);
         return message;
     }
 
-    /** Marca como leídos los mensajes del agente. */
+    /** Marca como leídos los mensajes del agente (y las notificaciones de este ticket de quien lee). */
     @Transactional
-    public void tenantRead(Long tenantId, Long ticketId) {
-        SupportTicket ticket = requireTenantTicket(tenantId, ticketId);
+    public void tenantRead(AuthUser user, Long ticketId) {
+        SupportTicket ticket = requireTenantTicket(user.tenantId(), ticketId);
         Instant readAt = Timestamps.now();
         ticket.setCustomerLastReadAt(readAt);
         ticketRepository.flush();
+        notifier.markTicketNotificationsRead(user.id(), ticketId);
         notifier.broadcastRead(ticketId, MessageSenderType.CUSTOMER, readAt);
         notifier.queueUpdated(summary(ticketId, Viewer.AGENT));
     }
@@ -161,7 +163,7 @@ public class SupportService {
         ticketRepository.flush();
 
         notifier.broadcastMessage(ticketId, system);
-        publishUpdates(ticketId);
+        publishUpdates(ticket);
         return detail(ticket, Viewer.CUSTOMER);
     }
 
@@ -185,7 +187,7 @@ public class SupportService {
         } else {
             ticketRepository.flush();
         }
-        publishUpdates(ticketId);
+        publishUpdates(ticket);
         return detail(ticket, Viewer.CUSTOMER);
     }
 
@@ -228,17 +230,18 @@ public class SupportService {
         if (Objects.equals(ticket.getAssignedTo(), target.getId())) {
             return summary(ticketId, Viewer.AGENT);
         }
+        boolean selfAssigned = Objects.equals(target.getId(), actor.id());
         ticket.setAssignedTo(target.getId());
         MessageDto system = persistMessage(ticket, actor.id(), MessageSenderType.SYSTEM,
-                SupportTexts.assigned(target.getFullName()), null);
+                SupportTexts.assigned(actor.fullName(), target.getFullName(), selfAssigned), null);
         ticket.setAgentLastReadAt(system.createdAt());
         ticketRepository.flush();
 
-        if (!Objects.equals(target.getId(), actor.id())) {
+        if (!selfAssigned) {
             notifier.notifyAgentAssigned(target.getId(), ticket, tenantName(ticket.getTenantId()), actor.fullName());
         }
         notifier.broadcastMessage(ticketId, system);
-        return publishUpdates(ticketId);
+        return publishUpdates(ticket);
     }
 
     /** Cambia el estado del ticket y se lo avisa al comercio. */
@@ -263,7 +266,7 @@ public class SupportService {
 
         notifier.notifyCustomerOfStatus(ticket, status, actor.fullName());
         notifier.broadcastMessage(ticketId, system);
-        return publishUpdates(ticketId);
+        return publishUpdates(ticket);
     }
 
     /** Reclasifica prioridad y/o categoría. */
@@ -280,7 +283,7 @@ public class SupportService {
             ticket.setCategory(request.category());
         }
         ticketRepository.flush();
-        return publishUpdates(ticketId);
+        return publishUpdates(ticket);
     }
 
     /** Respuesta del agente. La primera fija {@code first_response_at} y pasa el ticket a "En curso" (SPEC §6.8). */
@@ -304,20 +307,22 @@ public class SupportService {
             ticket.setResolvedAt(null);
         }
         ticketRepository.flush();
+        notifier.markTicketNotificationsRead(agent.id(), ticketId);
 
         notifier.notifyCustomerOfAgentMessage(ticket, agent.fullName(), preview(message));
         notifier.broadcastMessage(ticketId, message);
-        publishUpdates(ticketId);
+        publishUpdates(ticket);
         return message;
     }
 
-    /** El agente marca como leídos los mensajes del comercio. */
+    /** El agente marca como leídos los mensajes del comercio (y sus notificaciones de este ticket). */
     @Transactional
-    public void agentRead(Long ticketId) {
+    public void agentRead(AuthUser agent, Long ticketId) {
         SupportTicket ticket = requireTicket(ticketId);
         Instant readAt = Timestamps.now();
         ticket.setAgentLastReadAt(readAt);
         ticketRepository.flush();
+        notifier.markTicketNotificationsRead(agent.id(), ticketId);
         notifier.broadcastRead(ticketId, MessageSenderType.AGENT, readAt);
         notifier.queueUpdated(summary(ticketId, Viewer.AGENT));
     }
@@ -397,9 +402,9 @@ public class SupportService {
     }
 
     /** Publica el ticket actualizado en la conversación y en la bandeja; devuelve la vista del agente. */
-    private TicketSummary publishUpdates(Long ticketId) {
-        TicketSummary agentView = summary(ticketId, Viewer.AGENT);
-        notifier.broadcastTicket(agentView);
+    private TicketSummary publishUpdates(SupportTicket ticket) {
+        TicketSummary agentView = summary(ticket.getId(), Viewer.AGENT);
+        notifier.broadcastTicket(agentView, ticket.getRatingComment(), ticket.getFirstResponseAt());
         notifier.queueUpdated(agentView);
         return agentView;
     }

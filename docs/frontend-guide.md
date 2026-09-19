@@ -573,7 +573,9 @@ Diseñá **mobile first**: los empleados cargan mercadería con el celular y el 
 - Acciones de formulario: `flex flex-col-reverse gap-2 sm:flex-row sm:justify-end`. En la carga con cámara y en el POS
   la acción principal va abajo, `size="xl"` y `fullWidth` (56 px, al alcance del pulgar, con `env(safe-area-inset-bottom)`).
 - Filtros apilados en mobile (`flex flex-col gap-3 md:flex-row`).
-- El `SupportWidget` flota abajo a la derecha: el shell ya agrega `pb-24` en mobile.
+- El `SupportWidget` flota abajo a la derecha: el shell ya agrega `pb-24` en mobile. Si la pantalla tiene una barra de
+  acción pegada abajo (`sticky bottom-0`), marcala con `data-bottom-action-bar=""`: la burbuja se corre arriba de
+  ella y no tapa la acción principal (así lo hacen el POS y la carga de mercadería).
 - Botones solo-ícono con `aria-label`; `Field` para etiquetas; foco visible (ya incluido); `role="alert"` en lo que
   bloquea; `aria-live` en el vuelto y en las lecturas de OCR.
 - Nunca dependas solo del color: estado = **palabra + forma + color** (píldora, chip o franja).

@@ -56,10 +56,19 @@ export function ChatThread({
     stickToBottom.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80;
   };
 
+  // Lo propio que se manda (y su error, si falla) siempre queda a la vista, aunque se estuviera leyendo más arriba.
+  const failedCount = pending.filter((item) => item.failed).length;
+  const previousPending = useRef({ count: pending.length, failed: failedCount });
+  useLayoutEffect(() => {
+    const before = previousPending.current;
+    if (pending.length > before.count || failedCount > before.failed) stickToBottom.current = true;
+    previousPending.current = { count: pending.length, failed: failedCount };
+  }, [pending.length, failedCount]);
+
   useLayoutEffect(() => {
     const node = scroller.current;
     if (node && stickToBottom.current) node.scrollTop = node.scrollHeight;
-  }, [messages.length, pending.length, typingPeer]);
+  }, [messages.length, pending.length, failedCount, typingPeer]);
 
   // Al abrir una conversación siempre se arranca abajo.
   useEffect(() => {
@@ -275,19 +284,38 @@ function PendingBubble({
           </span>
         </div>
         {item.failed && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2" role="alert">
             <p className="text-xs text-crit-ink">{item.error}</p>
-            <Button size="sm" variant="outline" leftIcon={<RotateCcw className="h-3.5 w-3.5" />} onClick={() => onRetry(item.tempId)}>
-              Reintentar
-            </Button>
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              aria-label="Descartar el mensaje"
-              onClick={() => onDiscard(item.tempId)}
-            >
-              <X className="h-4 w-4" />
-            </Button>
+            {item.retryable === false ? (
+              // El servidor lo rechazó por su contenido: reintentar daría el mismo error.
+              <Button
+                size="sm"
+                variant="outline"
+                leftIcon={<X className="h-3.5 w-3.5" />}
+                onClick={() => onDiscard(item.tempId)}
+              >
+                Descartar
+              </Button>
+            ) : (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  leftIcon={<RotateCcw className="h-3.5 w-3.5" />}
+                  onClick={() => onRetry(item.tempId)}
+                >
+                  Reintentar
+                </Button>
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label="Descartar el mensaje"
+                  onClick={() => onDiscard(item.tempId)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </>
+            )}
           </div>
         )}
       </div>
