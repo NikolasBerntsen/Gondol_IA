@@ -109,6 +109,14 @@ Errores: 400 `VALIDATION_ERROR` (`newPassword` entre 8 y 72 caracteres), 400 `IN
 | resto de `/api/**` (`/api/auth/me`, `/api/notifications/**`, `/api/presence/**`, `/api/attachments/**`) | cualquier usuario autenticado |
 
 El detalle fino se declara en cada controlador con `@PreAuthorize(Roles.X)` (`Roles.OWNER`, `SUPPORT`, `TENANT_ANY`
+—incluye al cajero—, `TENANT_POS` = ADMIN + EMPLOYEE + CASHIER, `TENANT_ADMIN`, `TENANT_DASHBOARD` = BOSS + ADMIN,
+`TENANT_INVENTORY` = ADMIN + EMPLOYEE, `TENANT_INVENTORY_READ` = BOSS + ADMIN + EMPLOYEE para las lecturas de
+inventario). Una denegación por método responde 403 `FORBIDDEN` con el formato estándar. Regla de SPEC §3.3: todo
+botón o enlace que el frontend le muestra a un rol tiene que responder 2xx para ese rol.
+`PreAuthorizeBeforeBindingInterceptor` (lo registra `SecurityConfig`) evalúa ese `@PreAuthorize` **antes** de leer y
+validar el cuerpo, así un rol sin permiso recibe 403 sea cual sea el payload (nunca el 400 con `fieldErrors`); la
+seguridad por método sigue como segunda barrera. Solo las expresiones que miran argumentos (`#param`) quedan para la
+seguridad por método.
 
 **Rol `TENANT_CASHIER` (Cajero, SPEC §3.1)**: usuario de comercio que solo usa el POS GondolIA, los avisos, la seguridad
 alimentaria y el soporte. A efectos del núcleo se comporta **igual que `TENANT_EMPLOYEE`**: trabaja en las sucursales
