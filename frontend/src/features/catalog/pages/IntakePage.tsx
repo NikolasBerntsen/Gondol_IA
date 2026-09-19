@@ -103,8 +103,10 @@ export default function IntakePage() {
   const [supplierId, setSupplierId] = useState('');
   const [source, setSource] = useState<IntakeSource>('MANUAL');
   const [confirmExpired, setConfirmExpired] = useState(false);
-  // Ráfaga de teclas en el campo del código: un lector USB con el foco en el campo escribe muy rápido.
-  const manualTypingRef = useRef<{ lastKeyAt: number; burst: boolean }>({ lastKeyAt: 0, burst: true });
+  // Teclas del campo del código: un lector USB con el foco en el campo escribe todo el código de un tirón. Solo se
+  // toma como SCAN si se vio esa ráfaga completa; cualquier otra cosa (tipeo, pegado, teclado del celular, que no
+  // informa las teclas) es MANUAL.
+  const manualTypingRef = useRef({ lastKeyAt: 0, fastKeys: 0, slow: false });
   const [branchError, setBranchError] = useState<string>();
   const [result, setResult] = useState<ReceiveLotResponse | null>(null);
   const [today, setToday] = useState<TodayIntake[]>([]);
@@ -185,7 +187,7 @@ export default function IntakePage() {
       const barcode = normalizeBarcode(raw);
       if (!barcode) return;
       setManualCode('');
-      manualTypingRef.current = { lastKeyAt: 0, burst: true };
+      manualTypingRef.current = { lastKeyAt: 0, fastKeys: 0, slow: false };
       findByBarcode.mutate({ barcode, source: codeSource });
     },
     [findByBarcode],
@@ -406,7 +408,8 @@ export default function IntakePage() {
                 event.preventDefault();
                 // Tipeado a mano → MANUAL; si el código entró de un tirón (lector USB con el foco en el campo) → SCAN.
                 const typing = manualTypingRef.current;
-                handleCode(manualCode, typing.burst && manualCode.length >= 6 ? 'SCAN' : 'MANUAL');
+                const scanned = !typing.slow && typing.fastKeys >= 6 && typing.fastKeys >= manualCode.length;
+                handleCode(manualCode, scanned ? 'SCAN' : 'MANUAL');
               }}
             >
               <Field label="Código de barras" className="flex-1" htmlFor="intake-manual-code">
@@ -423,12 +426,18 @@ export default function IntakePage() {
                     if (event.key.length !== 1) return;
                     const now = Date.now();
                     const typing = manualTypingRef.current;
-                    if (!manualCode) typing.burst = true;
-                    else if (now - typing.lastKeyAt > SCANNER_KEY_INTERVAL_MS) typing.burst = false;
+                    if (!manualCode) {
+                      typing.fastKeys = 1;
+                      typing.slow = false;
+                    } else if (now - typing.lastKeyAt > SCANNER_KEY_INTERVAL_MS) {
+                      typing.slow = true;
+                    } else {
+                      typing.fastKeys += 1;
+                    }
                     typing.lastKeyAt = now;
                   }}
                   onPaste={() => {
-                    manualTypingRef.current.burst = false;
+                    manualTypingRef.current.slow = true;
                   }}
                 />
               </Field>
