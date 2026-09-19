@@ -88,6 +88,38 @@ class ImportControllerWebTest {
         verifyNoInteractions(importService, fileService);
     }
 
+    /** SPEC §3.3: el 403 no depende del cuerpo; antes {@code {}} daba 400 con el detalle de los campos. */
+    @ParameterizedTest
+    @EnumSource(value = Role.class, names = {"TENANT_BOSS", "TENANT_EMPLOYEE", "TENANT_CASHIER"})
+    void otherRolesGet403BeforeTheBodyIsValidated(Role role) throws Exception {
+        AuthUser user = new AuthUser(20L, "otro@prueba.com", "Otro", role, 5L);
+
+        mvc.perform(post("/api/tenant/imports/999999/rows/bulk").header(HttpHeaders.AUTHORIZATION, bearer(user))
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"))
+                .andExpect(jsonPath("$.fieldErrors").isEmpty());
+        mvc.perform(post("/api/tenant/imports/999999/rows/bulk").header(HttpHeaders.AUTHORIZATION, bearer(user))
+                        .contentType(MediaType.APPLICATION_JSON).content("{not json"))
+                .andExpect(status().isForbidden());
+        mvc.perform(put("/api/tenant/imports/x/mapping").header(HttpHeaders.AUTHORIZATION, bearer(user))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"options\":{\"dateFormat\":\"?\"}}"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(importService, fileService);
+    }
+
+    @Test
+    void theAdminStillGetsTheValidationErrors() throws Exception {
+        mvc.perform(post("/api/tenant/imports/999999/rows/bulk").header(HttpHeaders.AUTHORIZATION, bearer(ADMIN))
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.fieldErrors[0].field").value("action"));
+
+        verifyNoInteractions(importService);
+    }
+
     @ParameterizedTest
     @EnumSource(value = Role.class, names = {"PLATFORM_OWNER", "SUPPORT_AGENT"})
     void platformUsersNeverReachTheTenantImports(Role role) throws Exception {

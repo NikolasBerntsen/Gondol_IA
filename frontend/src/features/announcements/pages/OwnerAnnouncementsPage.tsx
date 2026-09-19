@@ -63,8 +63,9 @@ export default function OwnerAnnouncementsPage() {
     },
   });
 
-  // Comercios distintos, no la suma por recall: un comercio alcanzado por dos recalls cuenta una vez (igual que en
-  // Métricas, SPEC §6.6). La consola no sabe qué comercios son, así que el total lo calcula el backend.
+  // Comercios distintos, no la suma por recall: un comercio alcanzado por dos recalls cuenta una vez. Es el mismo
+  // número que "Comercios alcanzados" en Métricas (SPEC §6.6, recalls en curso). La consola no sabe qué comercios
+  // son, así que el total lo calcula el backend.
   const reach = useQuery({
     queryKey: announcementKeys.recallReach,
     queryFn: ownerAnnouncementsApi.recallReach,
@@ -117,7 +118,7 @@ export default function OwnerAnnouncementsPage() {
           hint={
             activeRecalls === null
               ? 'No pudimos calcularlo'
-              : `Sin repetir · ${formatNumber(activeRecalls)} ${activeRecalls === 1 ? 'recall activo' : 'recalls activos'}`
+              : `Sin repetir · ${formatNumber(activeRecalls)} ${activeRecalls === 1 ? 'recall en curso' : 'recalls en curso'}`
           }
         />
         <StatCard label="Destinatarios notificados" value={formatNumber(recipients)} icon={Users} tone="info" />

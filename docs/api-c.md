@@ -34,14 +34,14 @@ Solo agregados. Las ventanas de 7 y 30 días se cuentan contra el reloj de negoc
 
 ```json
 {
-  "tenants": {"total":6,"active":4,"disabled":1,"cancelled":1,"newLast30d":6,"cancelledLast30d":4},
-  "branches": {"total":7,"active":7,"avgPerActiveTenant":1.3,"multiBranchTenants":1},
+  "tenants": {"total":6,"active":4,"disabled":1,"cancelled":1,"newLast30d":6,"cancelledLast30d":1},
+  "branches": {"total":7,"active":5,"avgPerActiveTenant":1.3,"multiBranchTenants":1},
   "tenantsByPlan": {"FREEMIUM":2,"BASICO":3,"PROFESIONAL":1},
   "tenantsByBusinessType": {"KIOSCO":2,"ALMACEN":2,"DIETETICA":1,"MINIMERCADO":1,"FARMACIA":0,"OTRO":0},
   "engagement": {"activeTenants7d":2,"activeTenants30d":2,"activeUsers7d":3},
   "users": {"total":17,"byRole":{"TENANT_BOSS":5,"TENANT_ADMIN":6,"TENANT_EMPLOYEE":5,"TENANT_CASHIER":1}},
   "revenue": {"estimatedMrr":210000.00,"currency":"ARS","freemiumToPaidConversionPct":75.0},
-  "growth": [{"month":"2026-09","newTenants":6,"cancelled":4,"activeAtEndOfMonth":4}],
+  "growth": [{"month":"2026-09","newTenants":6,"cancelled":1,"activeAtEndOfMonth":4}],
   "support": {"openTickets":0,"unassignedTickets":0,"avgFirstResponseMinutes":null,"resolvedLast30d":0,"avgRating":null},
   "recalls": {"activeRecalls":0,"affectedTenantsTotal":0},
   "modules": {"POS_GONDOLIA":{"tenants":3,"pct":75.0},"POS_INTEGRATION":{"tenants":3,"pct":75.0},
@@ -56,9 +56,24 @@ Decisiones de cálculo:
   Con el fixture: `75.000 + 90.000 + 37.000 + 8.000 = 210.000`.
 - `freemiumToPaidConversionPct` = comercios `ACTIVE` con plan pago sobre el total de `ACTIVE`.
 - `engagement`: "activo" = **algún** usuario del comercio inició sesión dentro de la ventana (`users.last_login_at`).
-- `growth`: 12 meses terminando en el actual. La serie se reconstruye desde `tenant_events`
-  (`CREATED`, `CANCELLED`, `REACTIVATED`…), así que `activeAtEndOfMonth` es el estado real al cierre de cada mes.
+- `branches`: `total` = todas las sucursales registradas. `active`, `avgPerActiveTenant` y `multiBranchTenants` miran
+  la misma población que el MRR: las **sucursales activas de comercios `ACTIVE`** (las que facturan). Las de un
+  comercio deshabilitado o dado de baja no cuentan como activas.
+- `tenantsByPlan` y `tenantsByBusinessType` cuentan **todos** los comercios, en cualquier estado (suman `total`).
+- **Altas y bajas** (`growth`, `newLast30d`, `cancelledLast30d`) salen de una historia por comercio armada con
+  `tenant_events` (`CREATED`, `DISABLED`, `ENABLED`, `CANCELLED`, `REACTIVATED`), así las series cuadran entre sí:
+  - alta = comercio creado en el período (`tenants.created_at`; si se eliminó, su evento `CREATED`);
+  - baja = comercio cuya **última baja o reactivación del período fue una baja**: cada comercio cuenta una sola vez
+    (baja → reactivación → baja es una baja) y una baja que se revierte dentro del período no cuenta;
+  - `activeAtEndOfMonth` = estado reconstruido al cierre de cada mes (el mes en curso, a hoy).
+  - Los comercios **eliminados** siguen contando su alta, su baja y los meses en que estuvieron activos: al
+    eliminarlos, su historial guarda el id en `tenant_events.deleted_tenant_id` (V250). Los eventos de comercios
+    eliminados antes de V250 no se pueden atribuir y no cuentan (ni el alta ni la baja).
+- `growth`: 12 meses terminando en el actual.
 - `modules`: adopción entre los comercios `ACTIVE` (mismo denominador que `GET /api/platform/modules`).
+- `recalls`: `activeRecalls` = recalls **en curso** (publicados y con al menos una coincidencia `OPEN` o
+  `ACKNOWLEDGED`; uno con todas sus coincidencias resueltas ya no cuenta). `affectedTenantsTotal` = comercios
+  distintos alcanzados por esos recalls. Solo cantidades.
 - `support` y `recalls` son cantidades agregadas de los módulos D y E; si todavía no hay datos, los promedios vienen
   `null` y el frontend muestra `—` / "Sin puntajes".
 
@@ -68,7 +83,9 @@ Decisiones de cálculo:
 
 ### 2.1 `GET /api/platform/tenants`
 
-Query: `q` (nombre, razón social, contacto, ciudad o CUIT), `status`, `plan`, `businessType`, `module`,
+Query: `q` (nombre, razón social, contacto, email de contacto, ciudad o CUIT; sin distinguir mayúsculas ni tildes
+—`almacen` encuentra "Almacén", `cordoba` encuentra "Córdoba"— y con `%` y `_` como texto, no comodines),
+`status`, `plan`, `businessType`, `module`,
 `sort` (`name` por defecto · `createdAt` · `lastActivityAt` · `status` · `plan` · `city` · `activeBranchCount` ·
 `userCount`), `page` (≥ 0), `size` (1..100, 20 por defecto). → `PageResponse<TenantSummary>`.
 
@@ -108,7 +125,8 @@ tiene `MULTI_BRANCH`, si no 1), `stockRotation`, `usersByRole`, `branches[]`, `u
 
 Crea, en una transacción: el comercio, su `tenant_settings`, la primera sucursal, los **tres usuarios**
 (jefe, administrador y empleado —este último asignado a esa sucursal—) y los módulos indicados, o el **preset del plan**
-si no se manda `modules` (FREEMIUM → `POS_GONDOLIA`; BASICO y PROFESIONAL → los tres).
+si no se manda `modules` (FREEMIUM → `POS_GONDOLIA`; BASICO y PROFESIONAL → los tres). En el historial el alta
+(`CREATED`) va primero y los `MODULE_ENABLED` iniciales quedan a nombre del dueño que creó el comercio.
 
 ```json
 {"name":"Almacén Don Pepe","legalName":"Pepe Fernández SRL","taxId":"30-71234567-4",
@@ -166,7 +184,8 @@ Borrado definitivo: usuarios, sucursales y datos del comercio. Solo comercios `C
 
 - No está dado de baja → `409 INVALID_STATUS_CHANGE` ("Solo se puede eliminar un comercio dado de baja…").
 - Nombre distinto → `400 CONFIRM_NAME_MISMATCH` ("Escribí el nombre exacto del comercio («…») para confirmar").
-- El historial de `tenant_events` queda sin comercio asociado (para que el churn siga contando en las métricas).
+- El historial de `tenant_events` queda sin comercio asociado (`tenant_id` NULL) pero con su id en
+  `deleted_tenant_id`, para que su alta y su baja sigan contando una vez cada una en las métricas.
 
 ### 2.7 `POST /api/platform/tenants/{id}/reset-admin-password`
 

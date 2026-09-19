@@ -9,10 +9,6 @@ import com.gondolia.domain.pos.PaymentMethod;
 import com.gondolia.domain.pos.PosSaleStatus;
 import com.gondolia.domain.pos.PosSessionStatus;
 import com.gondolia.domain.tenant.StockRotation;
-import com.gondolia.domain.user.Role;
-import com.gondolia.seed.DemoWorld.BranchSpec;
-import com.gondolia.seed.DemoWorld.TenantSpec;
-import com.gondolia.seed.DemoWorld.UserSpec;
 import com.gondolia.seed.SimModel.Lot;
 import com.gondolia.seed.SimModel.Movement;
 import java.math.BigDecimal;
@@ -25,7 +21,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -41,70 +36,20 @@ import org.junit.jupiter.api.TestInstance;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class StoreSimulatorTest {
 
-    private static final ZoneId ZONE = ZoneId.of("America/Argentina/Buenos_Aires");
+    private static final ZoneId ZONE = SimulationFixture.ZONE;
     private static final LocalDate TODAY = LocalDate.of(2026, 9, 19);
     private static final Instant NOW = LocalDateTime.of(2026, 9, 19, 15, 30).atZone(ZONE).toInstant();
 
-    private final SimOutput out = new SimOutput();
+    private SimOutput out;
     private final Map<Long, StockRotation> rotationByTenant = new HashMap<>();
-    private final Map<String, StoreSimulator.TenantRun> runs = new LinkedHashMap<>();
-    private long sequence = 1000;
+    private Map<String, StoreSimulator.TenantRun> runs;
 
     @BeforeAll
     void simulate() {
-        StoreSimulator simulator = new StoreSimulator(ZONE, TODAY, NOW, out);
-        long tenantId = 1;
-        for (TenantSpec spec : DemoWorld.tenants()) {
-            if (spec.historyDays() <= 0) {
-                continue;
-            }
-            StoreSimulator.TenantRun run = run(spec, tenantId++);
-            runs.put(spec.key(), run);
-            rotationByTenant.put(run.tenantId, spec.rotation());
-            simulator.simulate(run, StoreSimulator.seedOf(spec.key(), TODAY));
-        }
-    }
-
-    private StoreSimulator.TenantRun run(TenantSpec spec, long tenantId) {
-        Map<String, Long> users = new LinkedHashMap<>();
-        for (UserSpec user : spec.users()) {
-            users.put(user.email(), ++sequence);
-        }
-        long admin = spec.users().stream().filter(u -> u.role() == Role.TENANT_ADMIN)
-                .map(u -> users.get(u.email())).findFirst().orElseThrow();
-        List<StoreSimulator.BranchRun> branches = new ArrayList<>();
-        for (BranchSpec branch : spec.branches()) {
-            long branchId = ++sequence;
-            SimModel.Register register1 = null;
-            SimModel.Register register2 = null;
-            if (branch.channel() == DemoWorld.Channel.POS_GONDOLIA) {
-                register1 = register(tenantId, branchId, "Caja 1");
-                if (branch.staff().secondRegister() != null) {
-                    register2 = register(tenantId, branchId, "Caja 2");
-                }
-            }
-            long receiver = spec.users().stream()
-                    .filter(u -> u.role() == Role.TENANT_EMPLOYEE && u.branchKeys().contains(branch.key()))
-                    .map(u -> users.get(u.email())).findFirst().orElse(admin);
-            branches.add(new StoreSimulator.BranchRun(branch, branchId, register1, register2, receiver,
-                    List.copyOf(users.values()), spec.key().equals(DemoWorld.EL_SOL) && branch.key().equals("CEN")));
-        }
-        List<SimModel.Product> products = new ArrayList<>();
-        for (DemoCatalog.Template template : DemoWorldBuilder.templatesFor(spec)) {
-            products.add(new SimModel.Product(++sequence, tenantId, template, 1,
-                    DemoCatalog.supplier(template.supplierKey()).leadTimeDays()));
-        }
-        boolean elSol = spec.key().equals(DemoWorld.EL_SOL);
-        Instant imported = elSol ? TODAY.minusDays(182).atTime(10, 31).atZone(ZONE).toInstant() : null;
-        return new StoreSimulator.TenantRun(spec, tenantId, branches, products, admin, users, imported,
-                elSol ? 77L : null, 99L, DemoScenarios.forTenant(spec.key()));
-    }
-
-    private SimModel.Register register(long tenantId, long branchId, String name) {
-        long id = ++sequence;
-        SimModel.Register register = new SimModel.Register((int) id, tenantId, branchId, name, NOW);
-        register.id = id;
-        return register;
+        SimulationFixture.Simulation simulation = SimulationFixture.simulate(TODAY, NOW, spec -> true);
+        out = simulation.out();
+        runs = simulation.runs();
+        runs.values().forEach(run -> rotationByTenant.put(run.tenantId, run.spec.rotation()));
     }
 
     // ------------------------------------------------------------------ reglas de stock
@@ -194,6 +139,13 @@ class StoreSimulatorTest {
         Set<MovementSource> sources = new HashSet<>();
         out.movements.stream().filter(m -> m.type == MovementType.SALE).forEach(m -> sources.add(m.source));
         assertThat(sources).contains(MovementSource.POS_GONDOLIA, MovementSource.POS, MovementSource.CSV,
+                MovementSource.MANUAL);
+        // El Sol vende por las cuatro fuentes (datos-demo §4): también los pedidos que la administradora carga a mano.
+        long elSol = runs.get(DemoWorld.EL_SOL).tenantId;
+        Set<MovementSource> elSolSources = new HashSet<>();
+        out.movements.stream().filter(m -> m.tenantId == elSol && m.type == MovementType.SALE)
+                .forEach(m -> elSolSources.add(m.source));
+        assertThat(elSolSources).contains(MovementSource.POS_GONDOLIA, MovementSource.POS, MovementSource.CSV,
                 MovementSource.MANUAL);
         assertThat(out.sales).anyMatch(sale -> sale.status == PosSaleStatus.VOIDED);
         assertThat(out.sales).anyMatch(sale -> sale.payments.size() > 1);

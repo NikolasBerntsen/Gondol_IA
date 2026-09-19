@@ -35,12 +35,11 @@ import org.springframework.web.multipart.MultipartFile;
 
 /**
  * Ventas manuales, historial de ventas de todas las fuentes e importación CSV de ventas del POS propio
- * (SPEC §6.4). Rol: administrador del comercio.
+ * (SPEC §6.4). Escribir e importar: administrador. Historial y detalle: jefe y administrador.
  */
 @Tag(name = "Ventas")
 @RestController
 @RequestMapping("/api/tenant/sales")
-@PreAuthorize(Roles.TENANT_ADMIN)
 @RequiredArgsConstructor
 public class SalesController {
 
@@ -51,6 +50,7 @@ public class SalesController {
             description = "Descuenta stock con la rotación del comercio (FIFO/FEFO, liquidaciones primero) y "
                     + "devuelve de qué lotes salió cada unidad.")
     @PostMapping
+    @PreAuthorize(Roles.TENANT_ADMIN)
     public SaleDto register(@Valid @RequestBody SaleRequest request) {
         return salesService.register(request);
     }
@@ -59,6 +59,7 @@ public class SalesController {
             description = "Agrupado por venta y neteando las anulaciones (SALE_VOID). Incluye el origen y, en el "
                     + "POS GondolIA, el código de ticket.")
     @GetMapping
+    @PreAuthorize(Roles.TENANT_DASHBOARD)
     public PageResponse<SaleSummaryDto> list(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
@@ -74,6 +75,7 @@ public class SalesController {
     @Operation(summary = "Plantilla CSV de ventas")
     @RequiresModule(TenantModule.POS_INTEGRATION)
     @GetMapping("/import/template")
+    @PreAuthorize(Roles.TENANT_ADMIN)
     public ResponseEntity<byte[]> template() {
         byte[] body = SalesCsvService.TEMPLATE.getBytes(StandardCharsets.UTF_8);
         return ResponseEntity.ok()
@@ -87,6 +89,7 @@ public class SalesController {
                     + "Integración con POS propio.")
     @RequiresModule(TenantModule.POS_INTEGRATION)
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize(Roles.TENANT_ADMIN)
     public SalesImportResultDto importSales(@RequestPart("file") MultipartFile file,
                                             @RequestParam(required = false) Long branchId) {
         return salesCsvService.importSales(file, branchId);
@@ -94,6 +97,7 @@ public class SalesController {
 
     @Operation(summary = "Detalle de una venta", description = "Líneas con los lotes de los que salió cada unidad.")
     @GetMapping("/{batchRef}")
+    @PreAuthorize(Roles.TENANT_DASHBOARD)
     public SaleDetailDto detail(@PathVariable String batchRef) {
         return salesService.detail(batchRef);
     }

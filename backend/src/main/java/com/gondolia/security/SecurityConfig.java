@@ -1,6 +1,7 @@
 package com.gondolia.security;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -12,6 +13,8 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
  * Seguridad HTTP stateless con JWT y reglas por prefijo (SPEC §5.2). El detalle fino se define con
@@ -40,6 +43,9 @@ public class SecurityConfig {
             "/ws/**",
             "/error"
     };
+
+    /** Orden de {@link PreAuthorizeBeforeBindingInterceptor} entre los interceptores de Spring MVC. */
+    public static final int PRE_AUTHORIZE_INTERCEPTOR_ORDER = 10;
 
     private final JwtService jwtService;
     private final UserAccessValidator userAccessValidator;
@@ -74,5 +80,22 @@ public class SecurityConfig {
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    /**
+     * Aplica los {@code @PreAuthorize} de los controladores antes de leer y validar el cuerpo (ver
+     * {@link PreAuthorizeBeforeBindingInterceptor}): un rol sin permiso recibe 403 sea cual sea el payload. Se
+     * registra acá, junto a {@code @EnableMethodSecurity}, para que existan siempre juntos. Va después de
+     * {@code RequiresModuleInterceptor} (orden 0), que conserva su precedencia.
+     */
+    @Bean
+    public WebMvcConfigurer preAuthorizeBeforeBindingConfigurer(ApplicationContext context) {
+        PreAuthorizeBeforeBindingInterceptor interceptor = PreAuthorizeBeforeBindingInterceptor.create(context);
+        return new WebMvcConfigurer() {
+            @Override
+            public void addInterceptors(InterceptorRegistry registry) {
+                registry.addInterceptor(interceptor).order(PRE_AUTHORIZE_INTERCEPTOR_ORDER);
+            }
+        };
     }
 }

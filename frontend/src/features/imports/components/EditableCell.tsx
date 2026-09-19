@@ -116,7 +116,7 @@ export function EditableCell({
   return (
     <Tooltip delayDuration={80}>
       <TooltipTrigger asChild>{trigger}</TooltipTrigger>
-      <TooltipContent side="bottom" align="start" className={cn(level === 'ERROR' && 'bg-crit text-white')}>
+      <TooltipContent side="bottom" align="start" className={cn(level === 'ERROR' && 'bg-crit text-crit-foreground')}>
         {messages.map((message, index) => (
           <p key={index} className="font-medium">
             {message.level === 'ERROR' ? 'Error: ' : 'Advertencia: '}

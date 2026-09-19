@@ -25,12 +25,18 @@ public record PlatformMetrics(
         RecallSummary recalls,
         Map<TenantModule, ModuleAdoption> modules) {
 
-    /** Altas y bajas de comercios; "últimos 30 días" se cuenta contra el reloj de negocio. */
+    /**
+     * Comercios por estado, con las altas y las bajas de los últimos 30 días (reloj de negocio). Altas y bajas cuentan
+     * también a los comercios eliminados después, y cada comercio da de baja una sola vez por período.
+     */
     public record TenantCounts(long total, long active, long disabled, long cancelled, long newLast30d,
                                long cancelledLast30d) {
     }
 
-    /** Sucursales de todos los comercios; {@code multiBranchTenants} = comercios ACTIVE con más de una activa. */
+    /**
+     * {@code total} = todas las sucursales registradas. {@code active}, {@code avgPerActiveTenant} y
+     * {@code multiBranchTenants} miran lo mismo que el MRR: las sucursales activas de los comercios ACTIVE.
+     */
     public record BranchCounts(long total, long active, double avgPerActiveTenant, long multiBranchTenants) {
     }
 
@@ -49,7 +55,10 @@ public record PlatformMetrics(
     public record Revenue(BigDecimal estimatedMrr, String currency, double freemiumToPaidConversionPct) {
     }
 
-    /** Un mes del crecimiento (12 meses, el último es el actual). {@code month} = {@code "2026-09"}. */
+    /**
+     * Un mes del crecimiento (12 meses, el último es el actual). {@code month} = {@code "2026-09"}. {@code cancelled}
+     * = comercios cuya última baja o reactivación del mes fue una baja.
+     */
     public record GrowthPoint(String month, long newTenants, long cancelled, long activeAtEndOfMonth) {
     }
 
@@ -58,7 +67,10 @@ public record PlatformMetrics(
                                  long resolvedLast30d, Double avgRating) {
     }
 
-    /** Recalls publicados y cuántos comercios distintos alcanzaron (solo cantidades, nunca cuáles). */
+    /**
+     * Recalls en curso (publicados y con coincidencias sin resolver) y cuántos comercios distintos alcanzaron (solo
+     * cantidades, nunca cuáles).
+     */
     public record RecallSummary(long activeRecalls, long affectedTenantsTotal) {
     }
 

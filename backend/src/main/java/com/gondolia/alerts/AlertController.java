@@ -29,7 +29,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Alertas del comercio (SPEC §6.5). Ver: jefe y administrador. Gestionar: solo administrador.
+ * Alertas del comercio (SPEC §6.5). Ver y gestionar (vista, resuelta, descartada): jefe y administrador.
  */
 @Tag(name = "Alertas")
 @RestController
@@ -72,21 +72,21 @@ public class AlertController {
 
     @Operation(summary = "Marcar la alerta como vista")
     @PostMapping("/{id}/acknowledge")
-    @PreAuthorize(Roles.TENANT_ADMIN)
+    @PreAuthorize(Roles.TENANT_DASHBOARD)
     public AlertDto acknowledge(@PathVariable Long id) {
         return alertService.acknowledge(CurrentUser.tenantId(), id, CurrentUser.id(), scope());
     }
 
     @Operation(summary = "Marcar la alerta como resuelta")
     @PostMapping("/{id}/resolve")
-    @PreAuthorize(Roles.TENANT_ADMIN)
+    @PreAuthorize(Roles.TENANT_DASHBOARD)
     public AlertDto resolve(@PathVariable Long id) {
         return alertService.resolve(CurrentUser.tenantId(), id, CurrentUser.id(), scope());
     }
 
     @Operation(summary = "Descartar la alerta")
     @PostMapping("/{id}/dismiss")
-    @PreAuthorize(Roles.TENANT_ADMIN)
+    @PreAuthorize(Roles.TENANT_DASHBOARD)
     public AlertDto dismiss(@PathVariable Long id) {
         return alertService.dismiss(CurrentUser.tenantId(), id, CurrentUser.id(), scope());
     }

@@ -158,7 +158,7 @@ export function RecommendationCard({
             ) : null}
           </>
         ) : readOnly ? (
-          <span className="text-sm text-muted-foreground">Solo el administrador puede aceptarla o descartarla.</span>
+          <span className="text-sm text-muted-foreground">Solo el jefe o el administrador pueden aceptarla o descartarla.</span>
         ) : (
           <>
             <Button size="sm" leftIcon={<Check aria-hidden="true" />} loading={busy} onClick={openAccept}>

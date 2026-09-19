@@ -250,7 +250,7 @@ export default function TenantDetailPage() {
 
         <div className="grid gap-5 lg:grid-cols-3">
           <Card padding="none" className="lg:col-span-2">
-            <CardHeader title="Datos administrativos" />
+            <CardHeader className="px-4 pt-4 sm:px-5 sm:pt-5" title="Datos administrativos" />
             <dl className="grid gap-x-6 gap-y-4 p-4 sm:grid-cols-2 sm:p-5">
               <Detail label="Razón social" value={tenant.legalName} />
               <Detail label="CUIT" value={tenant.taxId} mono />
@@ -275,7 +275,7 @@ export default function TenantDetailPage() {
           </Card>
 
           <Card padding="none">
-            <CardHeader title="Plan y facturación" />
+            <CardHeader className="px-4 pt-4 sm:px-5 sm:pt-5" title="Plan y facturación" />
             <div className="space-y-4 p-4 sm:p-5">
               <div>
                 <div className="text-sm text-muted-foreground">Cuota mensual estimada</div>
@@ -307,10 +307,11 @@ export default function TenantDetailPage() {
 
         <Card padding="none">
           <CardHeader
+            className="p-4 sm:p-5"
             title="Módulos"
             description="El cambio aplica al instante: sus usuarios ven el menú actualizado sin volver a entrar."
           />
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-border border-t border-border">
             {modules.isPending ? (
               <div className="space-y-3 p-4 sm:p-5">
                 <Skeleton className="h-6 w-full" />
@@ -364,6 +365,7 @@ export default function TenantDetailPage() {
 
         <Card padding="none">
           <CardHeader
+            className="p-4 sm:p-5"
             title="Sucursales"
             icon={Building2}
             description="Solo datos administrativos: nunca vemos su stock ni sus ventas."
@@ -381,6 +383,7 @@ export default function TenantDetailPage() {
 
         <Card padding="none">
           <CardHeader
+            className="p-4 sm:p-5"
             title="Usuarios"
             icon={Users}
             description={ROLE_ORDER.filter((role) => tenant.usersByRole[role])
@@ -404,9 +407,14 @@ export default function TenantDetailPage() {
         </Card>
 
         <Card padding="none">
-          <CardHeader title="Historial" icon={History} description="Altas, cambios de plan, bloqueos y módulos." />
+          <CardHeader
+            className="p-4 sm:p-5"
+            title="Historial"
+            icon={History}
+            description="Altas, cambios de plan, bloqueos y módulos."
+          />
           {tenant.events.length === 0 ? (
-            <p className="border-t border-border p-5 text-base text-muted-foreground">
+            <p className="border-t border-border p-4 text-base text-muted-foreground sm:p-5">
               Todavía no hay movimientos registrados.
             </p>
           ) : (
@@ -477,9 +485,14 @@ function eventTitle(event: TenantEventDto): string {
     return module ? `${label}: ${TENANT_MODULE_LABELS[module] ?? module}` : label;
   }
   if (event.type === 'PLAN_CHANGED' && event.fromValue && event.toValue) {
-    return `${label}: ${event.fromValue} → ${event.toValue}`;
+    return `${label}: ${planLabel(event.fromValue)} → ${planLabel(event.toValue)}`;
   }
   return label;
+}
+
+/** Etiqueta del plan ("BASICO" → "Básico"); si llega un valor desconocido se muestra tal cual. */
+function planLabel(value: string): string {
+  return (PLAN_LABELS as Partial<Record<string, string>>)[value] ?? value;
 }
 
 function Detail({ label, value, mono }: { label: string; value: string | null | undefined; mono?: boolean }) {

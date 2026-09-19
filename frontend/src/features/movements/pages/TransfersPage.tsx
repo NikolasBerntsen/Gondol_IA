@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
+import { useAccess } from '@/auth/useAccess';
 import { useBranch } from '@/branches/BranchContext';
 import { BarcodeDigits, ExpiryChip } from '@/components/gondola';
 import {
@@ -364,8 +365,8 @@ function HistoryTab() {
         caption="Historial de transferencias entre sucursales"
         empty={{
           icon: Truck,
-          title: 'Todavía no hiciste transferencias',
-          description: 'Movés mercadería de una sucursal a otra y el lote conserva su antigüedad.',
+          title: 'Todavía no hay transferencias',
+          description: 'Cuando se mueva mercadería de una sucursal a otra la vas a ver acá; el lote conserva su antigüedad.',
         }}
         footer={
           (transfers.data?.totalPages ?? 0) > 1 ? (
@@ -380,27 +381,36 @@ function HistoryTab() {
 // ---------------------------------------------------------------------------
 
 export default function TransfersPage() {
-  const [tab, setTab] = useState<TabValue>('new');
+  const { can } = useAccess();
+  // El jefe ve el historial pero no transfiere (SPEC §3.3): sin la pestaña "Nueva transferencia".
+  const canTransfer = can('transfers.write');
+  const [tab, setTab] = useState<TabValue>(canTransfer ? 'new' : 'history');
 
   return (
     <>
       <PageHeader
         title="Transferencias"
         icon={Truck}
-        description="Mové mercadería entre tus sucursales sin perder la antigüedad de los lotes."
+        description={
+          canTransfer
+            ? 'Mové mercadería entre tus sucursales sin perder la antigüedad de los lotes.'
+            : 'Historial de la mercadería que se movió entre tus sucursales.'
+        }
       >
-        <Tabs<TabValue>
-          value={tab}
-          onChange={setTab}
-          ariaLabel="Secciones de transferencias"
-          tabs={[
-            { value: 'new', label: 'Nueva transferencia', icon: Send },
-            { value: 'history', label: 'Historial', icon: Truck },
-          ]}
-        />
+        {canTransfer ? (
+          <Tabs<TabValue>
+            value={tab}
+            onChange={setTab}
+            ariaLabel="Secciones de transferencias"
+            tabs={[
+              { value: 'new', label: 'Nueva transferencia', icon: Send },
+              { value: 'history', label: 'Historial', icon: Truck },
+            ]}
+          />
+        ) : null}
       </PageHeader>
 
-      {tab === 'new' ? <NewTransferTab /> : <HistoryTab />}
+      {canTransfer && tab === 'new' ? <NewTransferTab /> : <HistoryTab />}
     </>
   );
 }

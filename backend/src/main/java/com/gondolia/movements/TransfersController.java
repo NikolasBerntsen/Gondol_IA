@@ -27,12 +27,12 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Transferencias de stock entre sucursales (SPEC §6.4). Rol administrador y módulo {@code MULTI_BRANCH}.
+ * Transferencias de stock entre sucursales (SPEC §6.4), con el módulo {@code MULTI_BRANCH}. Transferir:
+ * administrador. Historial y detalle: jefe y administrador.
  */
 @Tag(name = "Transferencias")
 @RestController
 @RequestMapping("/api/tenant/transfers")
-@PreAuthorize(Roles.TENANT_ADMIN)
 @RequiresModule(TenantModule.MULTI_BRANCH)
 @RequiredArgsConstructor
 public class TransfersController {
@@ -43,12 +43,14 @@ public class TransfersController {
             description = "Descuenta los lotes de la sucursal de origen y crea lotes equivalentes en la de destino, "
                     + "conservando número, vencimiento, costo y antigüedad (FIFO).")
     @PostMapping
+    @PreAuthorize(Roles.TENANT_ADMIN)
     public TransferDto transfer(@Valid @RequestBody TransferRequest request) {
         return transfersService.transfer(request);
     }
 
     @Operation(summary = "Historial de transferencias")
     @GetMapping
+    @PreAuthorize(Roles.TENANT_DASHBOARD)
     public PageResponse<TransferSummaryDto> list(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
@@ -62,6 +64,7 @@ public class TransfersController {
     @Operation(summary = "Lotes disponibles para transferir",
             description = "Lotes vendibles de la sucursal de origen en el orden en que se venderían.")
     @GetMapping("/available-lots")
+    @PreAuthorize(Roles.TENANT_ADMIN)
     public PageResponse<TransferableLotDto> availableLots(
             @RequestParam @NotNull(message = "elegí la sucursal de origen") Long branchId,
             @RequestParam(required = false) String q,
@@ -73,6 +76,7 @@ public class TransfersController {
 
     @Operation(summary = "Detalle de una transferencia")
     @GetMapping("/{batchRef}")
+    @PreAuthorize(Roles.TENANT_DASHBOARD)
     public TransferDto detail(@PathVariable String batchRef) {
         return transfersService.detail(batchRef);
     }

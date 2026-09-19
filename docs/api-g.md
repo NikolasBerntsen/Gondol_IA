@@ -22,7 +22,8 @@ en [`datos-demo.md`](datos-demo.md); este documento cuenta cómo funciona el see
 
 ## 2. Qué hace (en orden)
 
-1. **Plataforma**: completa el dueño inicial (nombre "Federico Almada", sin tocar su contraseña) y crea
+1. **Plataforma**: completa el dueño inicial que creó `BootstrapRunner` al arrancar (nombre "Federico Almada" y alta
+   hace 400 días como el resto del equipo, anterior a todos los comercios; sin tocar su contraseña) y crea
    `socia@gondolia.app`, `soporte@gondolia.app` y `soporte2@gondolia.app` si no existen.
 2. **Avisos**: 4 avisos generales publicados (uno segmentado por rubro, uno de mantenimiento con la fecha del próximo
    domingo), uno archivado, un borrador y el **recall histórico** (Dulce de leche Dulce Valle 400 g, lote `DV2603B`).
@@ -65,7 +66,8 @@ Por comercio, día por día y sucursal por sucursal, con eventos ordenados por h
 - **Canales**: POS GondolIA (turnos mañana/tarde en Caja 1, Caja 2 algunos días, tickets de 1 a 7 productos, pagos
   efectivo/débito/crédito/transferencia/QR, pagos mixtos, vuelto, anulaciones con `SALE_VOID`, retiros e ingresos de
   efectivo, arqueo con diferencias y nota), **POS externo** por API (`source = POS`, `S-EXT-...`, con faltantes si el
-  POS vende sin stock registrado), **CSV** diario (los primeros 60 días de Echesortu) y **venta manual**.
+  POS vende sin stock registrado), **CSV** diario (los primeros 60 días de Echesortu) y **venta manual** (los livianos,
+  el mayorista quincenal de Vida Sana y el pedido quincenal del club en El Sol Centro: `ManualOrders` del escenario).
 - **Consumo de lotes** con las mismas reglas que `StockService` (§4.2): FIFO `received_at, id` o FEFO
   `expiry_date NULLS LAST, received_at, id`, lotes en liquidación primero, vencidos nunca (vencimiento evaluado en la
   fecha de la venta), lotes en cuarentena nunca; el faltante es un `SALE` sin lote con la razón "Venta sin stock
@@ -83,6 +85,11 @@ Por comercio, día por día y sucursal por sucursal, con eventos ordenados por h
   vence antes que uno viejo" en cada sucursal FIFO (y el equivalente con FEFO en Vida Sana), sobrestock por vencer con
   descuento aceptado, una liquidación en curso, productos sin stock/bajo mínimo (proveedor que deja de entregar),
   vencidos pendientes y decisiones sobre recomendaciones.
+- **Proveedor que deja de entregar** (`SupplyStop`): avisa 45 días antes; desde ahí no hay compras de oportunidad y
+  solo manda cajas completas hasta cubrir lo que falta vender hasta el corte. Desde el corte no se piden más, el pedido
+  pendiente no llega y la sucursal no recibe transferencias de ese producto: el faltante documentado se ve siempre,
+  sea cual sea el día de la siembra (`DemoScenariosSimulationTest` lo prueba con 12 fechas de un año). Los lotes de
+  los recalls armados (`L2409A`, `DV2603B`) tampoco se transfieren.
 
 La simulación es **determinística por día** (semilla = comercio + fecha): el mismo día siembra los mismos datos.
 

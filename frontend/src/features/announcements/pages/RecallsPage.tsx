@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Check, PackageX, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { RECALL_MATCH_STATUS_LABELS, RECALL_RESOLUTION_LABELS, type RecallResolution } from '@/api/types';
-import { useAuth } from '@/auth/AuthContext';
+import { useAccess } from '@/auth/useAccess';
 import { useBranch, useBranchQueryKey } from '@/branches/BranchContext';
 import { BarcodeDigits, ExpiryChip, StatusPill } from '@/components/gondola';
 import {
@@ -50,14 +50,14 @@ const RESOLUTION_OPTIONS: ReadonlyArray<{ value: RecallResolution; label: string
  * avisa si quedan alertas sin resolver en las otras (el link de la campana no dice de qué sucursal es).
  */
 export default function RecallsPage() {
-  const { hasRole } = useAuth();
+  const { can } = useAccess();
   const { isAll, scopeLabel, selectedBranchId, setBranch, canSelectAll } = useBranch();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [filter, setFilter] = useState<RecallMatchFilter>('ACTIVE');
   const [resolving, setResolving] = useState<RecallMatch | null>(null);
 
-  const canResolve = hasRole('TENANT_ADMIN', 'TENANT_EMPLOYEE');
+  const canResolve = can('recalls.resolve');
   const highlightedId = Number(searchParams.get('match')) || null;
 
   const queryKey = useBranchQueryKey('recall-matches', 'list', filter);
@@ -86,12 +86,16 @@ export default function RecallsPage() {
       return;
     }
     located.current = highlightedId;
-    if (target.status === 'RESOLVED') setFilter('ALL');
+    if (target.status === 'RESOLVED') {
+      if (filter === 'ACTIVE') setFilter('ALL');
+    } else if (filter === 'RESOLVED') {
+      setFilter('ACTIVE');
+    }
     if (!isAll && selectedBranchId !== target.branchId) {
       setBranch(target.branchId);
       toast.info(`Te mostramos ${target.branchName}, la sucursal de esta alerta.`);
     }
-  }, [acrossBranches.data, acrossBranches.isFetching, highlightedId, isAll, selectedBranchId, setBranch]);
+  }, [acrossBranches.data, acrossBranches.isFetching, filter, highlightedId, isAll, selectedBranchId, setBranch]);
 
   // Alertas sin resolver de las otras sucursales accesibles (solo con una sucursal elegida).
   const pendingElsewhere = useMemo(() => {

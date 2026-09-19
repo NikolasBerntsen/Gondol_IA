@@ -208,7 +208,8 @@ public class PosIntegrationService {
 
     /**
      * Procesa una venta del POS del cliente. La sucursal y el comercio ya vienen resueltos por la API key;
-     * el módulo {@code POS_INTEGRATION} lo chequea el controlador (el interceptor no llega al webhook).
+     * el módulo {@code POS_INTEGRATION} lo chequea {@link PosApiKeyInterceptor} (el de {@code @RequiresModule} no llega
+     * al webhook).
      */
     @Transactional
     public PosWebhookResponse receive(Long tenantId, Long branchId, PosWebhookRequest request) {

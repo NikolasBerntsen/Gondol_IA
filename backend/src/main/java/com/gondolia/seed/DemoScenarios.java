@@ -1,6 +1,7 @@
 package com.gondolia.seed;
 
 import com.gondolia.domain.announcement.RecallResolution;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
@@ -9,7 +10,7 @@ import java.util.List;
  * Escenarios armados a mano sobre la simulación de cada comercio rico (SPEC §11): el lote del recall en vivo, el
  * recall histórico resuelto, el caso "lote nuevo que vence antes que uno viejo", sobrestock por vencer con descuento
  * aceptado (con resultado medido para el feedback de la IA), productos bajo mínimo, picos anómalos, vencidos
- * pendientes y decisiones sobre recomendaciones de reposición.
+ * pendientes, decisiones sobre recomendaciones de reposición y ventas manuales periódicas.
  */
 final class DemoScenarios {
 
@@ -55,6 +56,14 @@ final class DemoScenarios {
     record Spike(String branch, String product, int daysAgo, double factor) {
     }
 
+    /**
+     * Venta manual que el administrador carga cada dos semanas (Ventas → Registrar venta): de 3 a 5 productos de las
+     * categorías dadas, de {@code minUnits} a {@code maxUnits} unidades cada uno, sin pasar del stock vendible.
+     */
+    record ManualOrders(String branch, DayOfWeek weekday, LocalTime time, List<String> categories, int minUnits,
+                        int maxUnits) {
+    }
+
     /** Coincidencia histórica con el recall, reconocida y resuelta. */
     record RecallCase(String branch, String lotTag, int daysAgo, LocalTime matchedAt, LocalTime acknowledgedAt,
                       String acknowledgedBy, int resolvedDaysAgo, LocalTime resolvedAt, String resolvedBy,
@@ -63,10 +72,11 @@ final class DemoScenarios {
 
     record Scenario(List<ScriptedLot> lots, List<DiscountDecision> discounts, List<DiscardedDiscount> discarded,
                     List<ReorderDecision> reorders, List<SupplyStop> supplyStops, List<Spike> spikes,
-                    List<RecallCase> recalls) {
+                    List<RecallCase> recalls, List<ManualOrders> manualOrders) {
 
         static Scenario empty() {
-            return new Scenario(List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
+            return new Scenario(List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                    List.of());
         }
     }
 
@@ -114,7 +124,8 @@ final class DemoScenarios {
                 List.of(new RecallCase("PRI", "recall-old", OLD_RECALL_DAYS_AGO, LocalTime.of(10, 5),
                         LocalTime.of(10, 40), "empleado@donpepe.com", OLD_RECALL_DAYS_AGO, LocalTime.of(11, 20),
                         "admin@donpepe.com", RecallResolution.RETURNED_TO_SUPPLIER,
-                        "Separamos las unidades y el distribuidor las retiró el mismo día.")));
+                        "Separamos las unidades y el distribuidor las retiró el mismo día.")),
+                List.of());
     }
 
     private static Scenario elSol() {
@@ -168,7 +179,11 @@ final class DemoScenarios {
                 List.of(new RecallCase("CEN", "recall-old", OLD_RECALL_DAYS_AGO, LocalTime.of(10, 7),
                         LocalTime.of(10, 30), "empleado@elsol.com", OLD_RECALL_DAYS_AGO - 1, LocalTime.of(9, 15),
                         "empleado@elsol.com", RecallResolution.REMOVED_FROM_STOCK,
-                        "Retiramos las unidades de la góndola y quedaron separadas en el depósito para devolver.")));
+                        "Retiramos las unidades de la góndola y quedaron separadas en el depósito para devolver.")),
+                // Pedido del club del barrio para el fin de semana: lo cobran por transferencia y la administradora
+                // lo carga a mano (datos-demo §4: ventas de las cuatro fuentes).
+                List.of(new ManualOrders("CEN", DayOfWeek.FRIDAY, LocalTime.of(18, 40),
+                        List.of("Bebidas", "Bebidas alcohólicas", "Galletitas y snacks"), 6, 18)));
     }
 
     private static Scenario vidaSana() {
@@ -194,6 +209,9 @@ final class DemoScenarios {
                         new SupplyStop("NCB", "granola", 15), new SupplyStop("CDR", "leche-almendras", 10),
                         new SupplyStop("NCB", "kombucha", 12)),
                 List.of(new Spike("NCB", "mix-frutos", 5, 5.0), new Spike("CDR", "granola", 33, 4.0)),
-                List.of());
+                List.of(),
+                // Venta mayorista a otras dietéticas: el administrador la registra a mano.
+                List.of(new ManualOrders("NCB", DayOfWeek.THURSDAY, LocalTime.of(11, 15),
+                        List.of("Frutos secos", "Legumbres", "Cereales y harinas"), 4, 10)));
     }
 }

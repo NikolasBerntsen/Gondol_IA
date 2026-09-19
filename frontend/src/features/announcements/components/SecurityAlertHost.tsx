@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Ban, ShieldAlert } from 'lucide-react';
 import type { RecallAlertMessage } from '@/api/types';
 import { useAuth } from '@/auth/AuthContext';
+import { useAccess } from '@/auth/useAccess';
 import { BarcodeDigits, ExpiryChip } from '@/components/gondola';
 import { Button, Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui';
 import { beep, vibrate } from '@/components/scanner';
@@ -23,7 +24,8 @@ import type { RecallMatch } from '../types';
  * último paso les pide avisarle al administrador o a un empleado.
  */
 export default function SecurityAlertHost() {
-  const { me, isTenantUser, hasRole } = useAuth();
+  const { me, isTenantUser } = useAuth();
+  const { can } = useAccess();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [queue, setQueue] = useState<RecallAlertMessage[]>([]);
@@ -31,7 +33,7 @@ export default function SecurityAlertHost() {
   const seen = useRef(new Set<number>());
   const alerted = useRef(false);
   const userId = isTenantUser ? (me?.id ?? null) : null;
-  const canResolve = hasRole('TENANT_ADMIN', 'TENANT_EMPLOYEE');
+  const canResolve = can('recalls.resolve');
 
   const enqueue = useCallback((alerts: RecallAlertMessage[]) => {
     const fresh = alerts.filter((alert) => !seen.current.has(alert.matchId));
