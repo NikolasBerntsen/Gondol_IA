@@ -62,3 +62,12 @@ export function rowSeverity(status: ImportRowStatus): 'crit' | 'warn' | 'none' {
   if (status === 'WARNING') return 'warn';
   return 'none';
 }
+
+/**
+ * Lista corta de nombres para un resumen: "A, B, C y 2 más". Si queda afuera uno solo se muestran todos (no tiene
+ * sentido ocupar el lugar de un nombre con «y 1 más»).
+ */
+export function summarizeNames(names: readonly string[], max = 3): string {
+  if (names.length <= max + 1) return names.join(', ');
+  return `${names.slice(0, max).join(', ')} y ${names.length - max} más`;
+}
