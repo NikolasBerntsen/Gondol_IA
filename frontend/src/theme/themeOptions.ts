@@ -41,3 +41,21 @@ export const RESOLVED_THEME_LABELS: Record<ResolvedTheme, string> = { light: 'cl
 export function themeOption(preference: ThemePreference): ThemeOption {
   return THEME_OPTIONS.find((option) => option.value === preference) ?? THEME_OPTIONS[0];
 }
+
+/**
+ * Bajada corta de una opción en los menús. La de "Sistema" cuenta cómo está el **dispositivo**
+ * (`systemTheme` de `useTheme()`), porque es lo que va a pasar si el usuario la elige.
+ *
+ * Nunca uses `resolved` acá: es el tema que se ve ahora, así que con "Claro" elegido y el dispositivo en oscuro
+ * diría "Como tu dispositivo: claro" y al tocar "Sistema" la app se pondría oscura.
+ */
+export function themeHint(option: ThemeOption, systemTheme: ResolvedTheme): string {
+  return option.value === 'system' ? `${option.hint}: ${RESOLVED_THEME_LABELS[systemTheme]}` : option.hint;
+}
+
+/** Igual que `themeHint`, pero para las tarjetas de "Apariencia" del perfil (texto largo). */
+export function themeDescription(option: ThemeOption, systemTheme: ResolvedTheme): string {
+  return option.value === 'system'
+    ? `${option.description} Tu dispositivo está en ${RESOLVED_THEME_LABELS[systemTheme]}.`
+    : option.description;
+}

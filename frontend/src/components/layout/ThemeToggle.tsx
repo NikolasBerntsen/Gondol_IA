@@ -1,7 +1,7 @@
 import { Check } from 'lucide-react';
 import { DropdownItem, DropdownLabel, DropdownPanel, useDropdown } from '@/components/ui/Dropdown';
 import { cn } from '@/lib/cn';
-import { RESOLVED_THEME_LABELS, THEME_OPTIONS, themeOption, useTheme } from '@/theme';
+import { THEME_OPTIONS, themeHint, themeOption, useTheme } from '@/theme';
 
 export interface ThemeToggleProps {
   /** Clases del contenedor (posición). */
@@ -16,7 +16,7 @@ export interface ThemeToggleProps {
  * (Monitor · Sol · Luna) y abre un menú con Sistema / Claro / Oscuro. Flechas, Enter y Esc incluidos.
  */
 export function ThemeToggle({ className, triggerClassName, align = 'end' }: ThemeToggleProps) {
-  const { preference, resolved, setPreference } = useTheme();
+  const { preference, systemTheme, setPreference } = useTheme();
   const dropdown = useDropdown();
   const current = themeOption(preference);
   const CurrentIcon = current.icon;
@@ -46,9 +46,7 @@ export function ThemeToggle({ className, triggerClassName, align = 'end' }: Them
                 key={option.value}
                 checked={checked}
                 icon={<Icon />}
-                description={
-                  option.value === 'system' ? `${option.hint}: ${RESOLVED_THEME_LABELS[resolved]}` : option.hint
-                }
+                description={themeHint(option, systemTheme)}
                 trailing={checked ? <Check className="h-4 w-4 shrink-0" aria-hidden="true" /> : null}
                 onClick={() => {
                   setPreference(option.value);

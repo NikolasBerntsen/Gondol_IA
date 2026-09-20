@@ -23,7 +23,7 @@ import { Input } from '@/components/ui/Input';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { cn } from '@/lib/cn';
 import { useModules } from '@/modules/useModules';
-import { RESOLVED_THEME_LABELS, THEME_OPTIONS, useTheme } from '@/theme';
+import { THEME_OPTIONS, themeDescription, useTheme } from '@/theme';
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -185,7 +185,7 @@ function ModulesRow() {
  * barra superior; se guarda en este navegador.
  */
 function AppearanceCard() {
-  const { preference, resolved, setPreference } = useTheme();
+  const { preference, systemTheme, setPreference } = useTheme();
 
   return (
     <Card>
@@ -236,8 +236,7 @@ function AppearanceCard() {
               <span className="min-w-0">
                 <span className="block text-md font-semibold text-foreground">{option.label}</span>
                 <span className="mt-0.5 block text-sm text-muted-foreground">
-                  {option.description}
-                  {option.value === 'system' && ` Ahora se ve ${RESOLVED_THEME_LABELS[resolved]}.`}
+                  {themeDescription(option, systemTheme)}
                 </span>
               </span>
             </label>
