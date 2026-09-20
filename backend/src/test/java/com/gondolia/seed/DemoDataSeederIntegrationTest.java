@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gondolia.domain.support.Attachment;
 import com.gondolia.domain.support.AttachmentRepository;
+import com.gondolia.domain.tenant.TenantModule;
 import com.gondolia.domain.tenant.TenantStatus;
 import com.gondolia.insights.InsightsScheduler;
 import com.gondolia.it.PostgresIntegrationTest;
@@ -21,8 +22,11 @@ import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
+import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -147,6 +151,31 @@ class DemoDataSeederIntegrationTest {
                 select count(*) from tenant_events e join users u on u.id = e.actor_user_id
                 where e.created_at < u.created_at
                 """)).isZero();
+    }
+
+    /**
+     * Los módulos que quedan en la base son los documentados (SPEC §11, {@code docs/datos-demo.md} §2) y en el orden
+     * de alta, que es el ID con el que se restauran desde la consola de dueños. Las filas de {@code tenant_modules}
+     * las escribe el seeder a partir de los eventos {@code MODULE_ENABLED}, así que esto también verifica que los
+     * eventos y el conjunto {@code modules} de cada comercio no se hayan separado.
+     */
+    @Test
+    void enabledModulesMatchTheDocumentedMatrix() {
+        Map<String, Set<TenantModule>> seeded = new LinkedHashMap<>();
+        for (Map<String, Object> row : jdbc.queryForList("""
+                select t.name as name,
+                       coalesce(string_agg(m.module, ',' order by m.module) filter (where m.enabled), '') as modules
+                from tenants t left join tenant_modules m on m.tenant_id = t.id
+                group by t.id, t.name order by t.id
+                """)) {
+            String modules = (String) row.get("modules");
+            Set<TenantModule> enabled = EnumSet.noneOf(TenantModule.class);
+            for (String module : modules.isEmpty() ? new String[0] : modules.split(",")) {
+                enabled.add(TenantModule.valueOf(module));
+            }
+            seeded.put((String) row.get("name"), enabled);
+        }
+        assertThat(seeded).containsExactlyEntriesOf(DemoModuleMatrix.DOCUMENTED);
     }
 
     @Test
