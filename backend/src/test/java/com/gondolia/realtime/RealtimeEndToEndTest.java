@@ -196,13 +196,18 @@ class RealtimeEndToEndTest {
 
         Map<String, Object> notification = adminNotifications.poll();
         assertThat(notification).containsEntry("type", "RECALL_ALERT").containsEntry("severity", "CRITICAL")
-                .containsEntry("link", "/app/recalls").containsEntry("read", false);
+                .containsEntry("referenceType", "RECALL_MATCH").containsEntry("read", false);
         assertThat(notification.get("createdAt")).asString().endsWith("Z");
         Map<String, Object> alert = adminAlerts.poll();
         assertThat(alert).containsEntry("branchName", "Centro").containsEntry("lotNumber", "L2409A")
                 .containsEntry("barcode", barcode).containsEntry("quantity", 6)
                 .containsEntry("expiryDate", today.plusDays(60).toString());
         assertThat(((Number) alert.get("branchId")).longValue()).isEqualTo(centro);
+        // El link de la campana lleva a la coincidencia, igual que el del diálogo: sin `?match=` caería en la
+        // sucursal elegida en el topbar, que puede no ser la del lote alcanzado.
+        long pushedMatchId = ((Number) alert.get("matchId")).longValue();
+        assertThat(((Number) notification.get("referenceId")).longValue()).isEqualTo(pushedMatchId);
+        assertThat(notification).containsEntry("link", "/app/recalls?match=" + pushedMatchId);
 
         assertThat(norteNotifications.messages.poll(1, TimeUnit.SECONDS)).isNull();
         assertThat(norteAlerts.messages.poll(100, TimeUnit.MILLISECONDS)).isNull();

@@ -224,6 +224,12 @@ class DemoDataSeederIntegrationTest {
         assertThat(count("select count(*) from recall_matches where status = 'RESOLVED'")).isEqualTo(2);
         assertThat(count("select count(*) from lots where lot_number = 'DV2603B' and status = 'RECALLED' "
                 + "and quantity = 0")).isEqualTo(2);
+        // El link de la campana lleva a la coincidencia, no solo a la pantalla (que sigue la sucursal del topbar).
+        assertThat(count("select count(*) from notifications where type = 'RECALL_ALERT'")).isPositive();
+        assertThat(count("""
+                select count(*) from notifications where type = 'RECALL_ALERT'
+                  and link is distinct from '/app/recalls?match=' || reference_id
+                """)).isZero();
         assertThat(count("select count(*) from announcements where kind = 'GENERAL' and status = 'PUBLISHED'"))
                 .isGreaterThanOrEqualTo(3);
         assertThat(count("select count(*) from import_jobs where status = 'APPLIED'")).isEqualTo(1);

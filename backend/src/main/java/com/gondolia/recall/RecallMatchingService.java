@@ -69,8 +69,9 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>
  * Por cada coincidencia <b>nueva</b>: crea {@code recall_matches} (idempotente por {@code (announcement_id, lot_id)}),
  * pone el lote en {@code RECALLED}, abre la alerta {@code RECALL_MATCH} CRITICAL de la sucursal, notifica
- * ({@code RECALL_ALERT}) y hace push de {@link RecallAlertMessage} a los usuarios con acceso a esa sucursal,
- * actualiza {@code announcements.affected_tenants_count} y publica {@link RecallMatchedEvent} por tenant.
+ * ({@code RECALL_ALERT}, con el deep link {@code /app/recalls?match=<id>}) y hace push de {@link RecallAlertMessage}
+ * a los usuarios con acceso a esa sucursal, actualiza {@code announcements.affected_tenants_count} y publica
+ * {@link RecallMatchedEvent} por tenant.
  */
 @Slf4j
 @Service
@@ -84,6 +85,15 @@ public class RecallMatchingService {
     public static final String ALERT_DEDUPE_PREFIX = "RECALL:";
     public static final String RECALLS_LINK = "/app/recalls";
     public static final String REFERENCE_TYPE = "RECALL_MATCH";
+
+    /**
+     * Link de la notificación {@code RECALL_ALERT}: el deep link de la coincidencia, igual que el del diálogo de
+     * seguridad. Sin {@code ?match=…} la campana cae en la sucursal elegida en el topbar, que puede no ser la del
+     * lote alcanzado (SPEC §3.4.6, api-d §5).
+     */
+    public static String recallMatchLink(Long matchId) {
+        return matchId == null ? RECALLS_LINK : RECALLS_LINK + "?match=" + matchId;
+    }
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final Set<LotStatus> CANDIDATE_STATUSES = EnumSet.of(LotStatus.ACTIVE, LotStatus.RECALLED);
@@ -303,8 +313,8 @@ public class RecallMatchingService {
         List<Long> recipients = run.recipients.computeIfAbsent(lot.getBranchId(),
                 branchId -> notificationService.branchRecipients(lot.getTenantId(), branchId, null));
         notificationService.notifyUsers(recipients, new NotificationDraft(NotificationType.RECALL_ALERT,
-                Severity.CRITICAL, "Alerta de recall: " + productName, message, RECALLS_LINK, REFERENCE_TYPE,
-                match.getId()));
+                Severity.CRITICAL, "Alerta de recall: " + productName, message, recallMatchLink(match.getId()),
+                REFERENCE_TYPE, match.getId()));
         realtimePublisher.toUsers(recipients, Destinations.QUEUE_SECURITY_ALERTS, new RecallAlertMessage(
                 match.getId(), announcement.getId(), lot.getBranchId(), branchName, announcement.getTitle(),
                 announcement.getSeverity(), announcement.getRecallReason(), announcement.getRecallInstructions(),
