@@ -73,6 +73,37 @@ por falta de pago ya regularizada (Maxikiosco Estación), una deshabilitación v
 Tienen catálogos chicos y algunas semanas de ventas manuales. Alimentan las métricas de crecimiento, churn, MRR,
 adopción de módulos y actividad de la consola de dueños.
 
+### Módulos por comercio
+
+Con qué módulos arranca cada comercio (SPEC §11 y §14). Es la matriz que muestra **Módulos por cliente**
+(`/owner/modules`) y la que alimenta la adopción por módulo y el MRR estimado de las métricas del dueño: ningún módulo
+llega al 100 % ni se queda sin clientes. El ID es el del comercio en una base recién sembrada.
+
+| ID | Comercio | Estado | POS GondolIA | Integración POS | Multi-sucursal |
+|---|---|---|---|---|---|
+| 1 | Almacén Don Pepe | Activo | sí | — | — |
+| 2 | Dietética Vida Sana | Activo | — | sí | sí |
+| 3 | Minimercado El Sol | Activo | sí | sí | sí |
+| 4 | Kiosco La Esquina | Deshabilitado | sí | — | — |
+| 5 | Farmacia San Martín | Activo | sí | sí | sí |
+| 6 | Almacén La Abuela | Activo | sí | sí | sí |
+| 7 | Kiosco 24 Horas Centro | Dado de baja | sí | — | — |
+| 8 | Dietética Natural Sur | Activo | — | sí | — |
+| 9 | Minimercado Los Andes | Activo | sí | sí | sí |
+| 10 | Almacén Doña Rosa | Activo | sí | sí | — |
+| 11 | Farmacia del Pueblo | Activo | sí | sí | sí |
+| 12 | Despensa El Trébol | Dado de baja | sí | — | — |
+| 13 | Maxikiosco Estación | Activo | sí | sí | — |
+| 14 | Dietética Grano de Oro | Deshabilitado | sí | sí | sí |
+| 15 | Almacén Los Hermanos | Activo | sí | — | — |
+| 16 | Kiosco El Paso | Activo | sí | — | — |
+| 17 | Minimercado Punto Fresco | Activo | sí | sí | sí |
+
+> Si durante una demo (o una prueba automatizada que hace clic en todo) quedaron switches tocados, **no hace falta
+> resembrar**: volvé a esta tabla desde `/owner/modules` —habilitar es directo, deshabilitar pide confirmación— o con
+> `PUT /api/platform/tenants/{id}/modules/{MODULO}` `{"enabled": false}` como dueño. `./start.sh reset` también deja
+> esta matriz, pero borra todo el resto del mundo demo.
+
 ## 3. Qué hay en los datos (180 días por sucursal)
 
 - **Patrones de venta**: finde fuerte (gaseosas, cerveza, snacks, fiambres), estable (leche, pan, fideos),
