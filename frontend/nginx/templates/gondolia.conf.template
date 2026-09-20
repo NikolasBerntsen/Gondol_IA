@@ -40,9 +40,17 @@ map $uri $gondolia_http_allowed {
     /nginx-health     1;
 }
 
-map "$gondolia_is_local_host$gondolia_http_allowed" $gondolia_redirect_to_https {
+map "$gondolia_is_local_host$gondolia_http_allowed" $gondolia_wants_https {
     default 0;
     00      1;
+}
+
+# Detrás de un proxy que ya termina TLS (Caddy en la VM de Oracle) NO se redirige: el navegador
+# habla HTTPS con el proxy y el proxy habla HTTP con este nginx. Redirigir acá sería un bucle.
+# BEHIND_PROXY lo fija el compose de producción (deploy/docker-compose.prod.yml) en "1".
+map "${BEHIND_PROXY}$gondolia_wants_https" $gondolia_redirect_to_https {
+    default 0;
+    01      1;
 }
 
 # Puerto visto por el navegador (el publicado en el host, no el 80/443 interno del contenedor).

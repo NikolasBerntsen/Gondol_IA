@@ -1,0 +1,107 @@
+name: Deploy a Oracle Cloud
+
+# Despliegue continuo a la VM de Oracle Cloud (144.22.138.149), igual que los otros dos
+# proyectos que comparten esa máquina (BioTrust Asistencias y el Comando Central de la tesis).
+# En cada push a main copia el código por rsync y reconstruye los contenedores allá.
+#
+# Único secreto necesario:  VM_SSH_KEY  (clave privada SSH de acceso a la VM).
+#   repo → Settings → Secrets and variables → Actions → New repository secret
+#
+# Variables opcionales del repo (Settings → Variables):
+#   DEV_WIPE_DB=true     (solo desarrollo) BORRA la base de datos en cada deploy y vuelve a sembrar.
+#                        'false' o sin definir → despliegue incremental que conserva los datos.
+#   SEED_DEMO_DATA=true  siembra el mundo demo en una base vacía (lo que se muestra en la demo).
+#                        'false' → no siembra nada (lo que iría en una instalación real).
+#
+# La app queda en: https://gondolia.144-22-138-149.sslip.io
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'design/**'
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-oracle-gondolia
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      VM_HOST: 144.22.138.149   # IP pública de la VM de Oracle (no es secreto; editá si cambia).
+      VM_USER: ubuntu
+      DEST: /home/ubuntu/Gondol_IA
+      PUBLIC_URL: https://gondolia.144-22-138-149.sslip.io
+      # ⚠⚠ SOLO DESARROLLO ⚠⚠  'true' hace que CADA deploy BORRE la base de datos.
+      # >>> ANTES DE USARLO CON DATOS REALES: poné DEV_WIPE_DB en 'false' o borrá la variable. <<<
+      DEV_WIPE_DB: ${{ vars.DEV_WIPE_DB }}
+      # Datos de demostración (comercios, 180 días de historia, cuentas de prueba).
+      SEED_DEMO_DATA: ${{ vars.SEED_DEMO_DATA }}
+    steps:
+      - name: Traer el código (runner)
+        uses: actions/checkout@v4
+
+      - name: Verificar que el secret VM_SSH_KEY exista
+        env:
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          if [ -z "$VM_SSH_KEY" ]; then
+            echo "::error::Falta el secret VM_SSH_KEY. Cargalo en: repo → Settings → Secrets and variables → Actions → New repository secret (clave privada SSH de la VM)."
+            exit 1
+          fi
+
+      - name: Preparar la clave SSH
+        env:
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Copiar el código a la VM (rsync)
+        run: |
+          # El .env de la VM tiene los secretos (JWT, base de datos): NO se transfiere ni se borra.
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new "$VM_USER@$VM_HOST" "mkdir -p '$DEST'"
+          rsync -az --delete \
+            --exclude='.git/' --exclude='.env' --exclude='certs/' \
+            --exclude='node_modules/' --exclude='target/' --exclude='dist/' \
+            --exclude='.worktrees/' --exclude='design/' \
+            -e "ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new" \
+            ./ "$VM_USER@$VM_HOST:$DEST/"
+
+      - name: Desplegar en Docker (build + up)
+        run: |
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new "$VM_USER@$VM_HOST" \
+              "DEV_WIPE_DB='${DEV_WIPE_DB:-false}' SEED_DEMO_DATA='${SEED_DEMO_DATA:-}' DEST='$DEST' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "$DEST"
+          export SEED_DEMO_DATA   # deploy.sh lo guarda en el .env que lee docker compose
+          if [ "${DEV_WIPE_DB:-false}" = "true" ]; then
+            echo "⚠ DEV_WIPE_DB=true → despliegue LIMPIO (se BORRA la base de datos)."
+            bash deploy/deploy.sh reset
+          else
+            echo "→ Despliegue incremental (conserva la base de datos)."
+            bash deploy/deploy.sh update
+          fi
+          REMOTE
+
+      - name: Comprobar que el sitio responde
+        run: |
+          for i in $(seq 1 20); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$PUBLIC_URL/" || true)"
+            if [ "$code" = "200" ]; then
+              echo "✓ $PUBLIC_URL responde 200"
+              api="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$PUBLIC_URL/api/auth/me" || true)"
+              echo "  /api/auth/me sin token → $api (401 es lo correcto)"
+              echo "### ✅ Desplegado en [$PUBLIC_URL]($PUBLIC_URL)" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "  intento $i: HTTP $code, reintento en 15 s…"
+            sleep 15
+          done
+          echo "::error::El sitio no respondió 200 tras el despliegue. Revisá 'bash deploy/deploy.sh logs' en la VM."
+          exit 1

@@ -40,11 +40,14 @@ COPY --from=build /app/dist /usr/share/nginx/html
 # HTTPS_PORT: puerto HTTPS publicado en el host (para las redirecciones a HTTPS).
 # LAN_IPS / CERT_HOSTNAMES: nombres extra del certificado (los completa start.sh vía docker compose).
 # NGINX_ENTRYPOINT_LOCAL_RESOLVERS: exporta NGINX_LOCAL_RESOLVERS con el DNS interno de Docker.
+# BEHIND_PROXY=1 (producción detrás de Caddy): nginx sirve HTTP sin redirigir a HTTPS,
+# porque el TLS lo termina el proxy. En local queda en 0 y sigue redirigiendo como siempre.
 ENV HTTPS_PORT=8443 \
     LAN_IPS="" \
     CERT_HOSTNAMES="" \
+    BEHIND_PROXY=0 \
     NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1 \
-    NGINX_ENVSUBST_FILTER="^(HTTPS_PORT|NGINX_LOCAL_RESOLVERS)$"
+    NGINX_ENVSUBST_FILTER="^(HTTPS_PORT|BEHIND_PROXY|NGINX_LOCAL_RESOLVERS)$"
 
 EXPOSE 80 443
 

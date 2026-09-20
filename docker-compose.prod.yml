@@ -1,0 +1,155 @@
+# =============================================================================
+# GondolIA · Despliegue de producción en la VM de Oracle Cloud (144.22.138.149)
+#
+#   Internet ──HTTPS──> Caddy (del proyecto BioTrust, único dueño de 80/443)
+#                         └── gondolia.144-22-138-149.sslip.io ──> web (nginx) ──> backend ──> db
+#                                                                                        └──> ai
+#
+# Igual que el "comando central" de la tesis: este stack NO publica ningún puerto.
+# La única puerta de entrada es ese Caddy, que llega hasta acá por la red compartida
+# 'proxy' y resuelve 'gondolia-web' por el DNS interno de Docker.
+#
+# Se usa así (lo hace deploy/deploy.sh):
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# El .env vive SOLO en la VM (deploy.sh lo crea): tiene JWT_SECRET, la contraseña de la
+# base y APP_SEED_DEMO. Nunca se sube al repositorio ni viaja por rsync.
+# =============================================================================
+name: gondolia
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: gondolia-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-gondolia}
+      POSTGRES_USER: ${POSTGRES_USER:-gondolia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en el .env de la VM}
+      TZ: ${APP_TIMEZONE:-America/Argentina/Buenos_Aires}
+      PGTZ: ${APP_TIMEZONE:-America/Argentina/Buenos_Aires}
+    # Sin 'ports': la base no se expone ni siquiera al host.
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    stop_grace_period: 30s
+    networks: [gondolia]
+    logging: *default-logging
+
+  ai:
+    build:
+      context: ./ai-service
+    image: gondolia-ai:local
+    container_name: gondolia-ai
+    restart: unless-stopped
+    environment:
+      TZ: ${APP_TIMEZONE:-America/Argentina/Buenos_Aires}
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status == 200 else 1)"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 120s
+    networks: [gondolia]
+    logging: *default-logging
+
+  backend:
+    build:
+      context: ./backend
+    image: gondolia-backend:local
+    container_name: gondolia-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
+    environment:
+      TZ: ${APP_TIMEZONE:-America/Argentina/Buenos_Aires}
+      SERVER_PORT: "8080"
+      # Caddy → nginx → backend: se confía en X-Forwarded-* para armar las URLs públicas.
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      DB_HOST: db
+      DB_PORT_INTERNAL: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-gondolia}
+      POSTGRES_USER: ${POSTGRES_USER:-gondolia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en el .env de la VM}
+      JWT_SECRET: ${JWT_SECRET:?Falta JWT_SECRET en el .env de la VM (lo genera deploy/deploy.sh)}
+      JWT_EXPIRATION_HOURS: ${JWT_EXPIRATION_HOURS:-12}
+      AI_SERVICE_URL: http://ai:8000
+      APP_STORAGE_DIR: /data/uploads
+      # Datos de demostración: 'true' siembra el mundo demo en una base vacía.
+      # En una instalación real de un cliente iría en 'false'.
+      APP_SEED_DEMO: ${APP_SEED_DEMO:-true}
+      APP_DEV_FIXTURE: "false"
+      APP_BOOTSTRAP_OWNER_EMAIL: ${APP_BOOTSTRAP_OWNER_EMAIL:-dueno@gondolia.app}
+      APP_BOOTSTRAP_OWNER_PASSWORD: ${APP_BOOTSTRAP_OWNER_PASSWORD:?Falta APP_BOOTSTRAP_OWNER_PASSWORD en el .env de la VM}
+      APP_OPENFOODFACTS_ENABLED: ${APP_OPENFOODFACTS_ENABLED:-true}
+      APP_TIMEZONE: ${APP_TIMEZONE:-America/Argentina/Buenos_Aires}
+      JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=40.0 -XX:+ExitOnOutOfMemoryError}
+    expose:
+      - "8080"
+    volumes:
+      - uploads:/data/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 4 -O /dev/null http://127.0.0.1:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 300s
+    stop_grace_period: 30s
+    networks: [gondolia]
+    logging: *default-logging
+
+  web:
+    build:
+      context: ./frontend
+    image: gondolia-web:local
+    container_name: gondolia-web
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      TZ: ${APP_TIMEZONE:-America/Argentina/Buenos_Aires}
+      # El TLS lo termina Caddy: acá nginx sirve HTTP y NO redirige (si no, hace un bucle).
+      BEHIND_PROXY: "1"
+    # Sin 'ports': entra solo por Caddy. 'gondolia' primero para hablar con el backend;
+    # 'proxy' es la red compartida de la VM por donde lo alcanza el Caddy de BioTrust.
+    networks: [gondolia, proxy]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 4 -O /dev/null http://127.0.0.1/nginx-health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    logging: *default-logging
+
+networks:
+  gondolia:
+    driver: bridge
+  # Red compartida de la VM (la crea deploy.sh con `docker network create proxy` si falta).
+  # Por acá el Caddy de BioTrust alcanza a 'gondolia-web'.
+  proxy:
+    external: true
+
+volumes:
+  pgdata:
+  uploads:
