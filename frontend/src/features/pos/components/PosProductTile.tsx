@@ -1,6 +1,5 @@
 import { Ban } from 'lucide-react';
 import { StatusPill } from '@/components/gondola';
-import { Truncate } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { formatMoney } from '@/lib/format';
 import { recallLotsLabel } from '../recall';
@@ -50,15 +49,22 @@ export function PosProductTile({ product, inCart, onAdd }: PosProductTileProps) 
       aria-label={`${product.name}, ${formatMoney(unitPrice, { decimals: 2 })}${stateLabel}`}
     >
       <div className="flex items-start justify-between gap-2">
-        <Truncate
-          lines={2}
+        {/*
+         * El nombre del mostrador termina en el formato ("lata 473 ml", "25 g"): es justo lo que distingue dos SKUs
+         * del mismo producto, así que es lo último que se puede cortar. Con el ancho del mosaico (168–174 px) los
+         * nombres completos del catálogo entran en tres renglones, no en dos. `text-wrap: balance` no hace nada
+         * acá (la caja es `-webkit-box` por el clamp) y solo acortaría los renglones, así que se va. Si aun así
+         * no entra, el `title` muestra el nombre completo (docs/design-system.md §3).
+         */}
+        <span
+          title={product.name}
           className={cn(
-            'text-base font-semibold leading-5 [text-wrap:balance]',
+            'line-clamp-3 min-w-0 text-base font-semibold leading-5',
             blocked || out ? 'text-muted-foreground' : 'text-foreground',
           )}
         >
           {product.name}
-        </Truncate>
+        </span>
         {inCart > 0 ? (
           <span
             className="grid h-6 min-w-6 place-items-center rounded-full bg-primary px-1.5 text-xs font-bold tabular-nums text-primary-foreground"
@@ -68,7 +74,9 @@ export function PosProductTile({ product, inCart, onAdd }: PosProductTileProps) 
           </span>
         ) : null}
       </div>
-      <Truncate className="mt-0.5 text-xs text-muted-foreground">{product.brand ?? ' '}</Truncate>
+      <span className="mt-0.5 truncate text-xs text-muted-foreground" title={product.brand ?? undefined}>
+        {product.brand ?? ' '}
+      </span>
 
       <div className="mt-auto flex flex-wrap items-end justify-between gap-x-2 gap-y-1 pt-2">
         {blocked ? (
