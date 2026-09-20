@@ -443,7 +443,7 @@ papel claro con tinta oscura (§9.1). No hace falta nada en la página.
 | `Pagination` | `page` (0-based), `totalPages`, `totalElements`, `size`, `onPageChange`, `disabled`. `pageInfo(data)` arma las props desde un `PageResponse`. |
 | `Tabs<V>` | `tabs: {value,label,icon,count,disabled}[]`, `value`, `onChange`, `variant: underline \| pills`, `ariaLabel`, `idPrefix`. |
 | `PageHeader` | `title`, `description`, `eyebrow`, `icon`, `actions`, `back: {to,label}`, `children` (filtros/tabs debajo), `documentTitle` (título de la pestaña "… · GondolIA"; por defecto `title` si es texto, `null` deja el de la ruta). Cada ruta ya tiene un título (`config/routeTitles.ts`); las pantallas sin `PageHeader` lo precisan con `useDocumentTitle` (`lib/documentTitle.ts`). |
-| `StatCard` | `label`, `value`, `icon`, `tone: primary \| ok \| warn \| crit \| info \| neutral`, `hint`, `trend: {value,label,invert}`, `sparkline`, `loading`, `to`. El número va en una línea y, si no entra (montos largos en la grilla de 4 columnas), se achica hasta que entre. |
+| `StatCard` | `label`, `value`, **`money`**, `icon`, `tone: primary \| ok \| warn \| crit \| info \| neutral`, `hint`, `trend: {value,label,invert}`, `sparkline`, `loading`, `to`. El número va en una línea. Para montos pasá **`money={importe}`** (en vez de `value={formatMoney(importe)}`): si no entra en la tarjeta, la tarjeta sola muestra el compacto (`$ 11,97 M`) con el importe exacto en el `title` y para lectores de pantalla. Sin `money` (conteos, fechas), si no entra se achica la letra hasta que entre. |
 | `EmptyState` | `icon`, `title` (qué falta), `description` (próxima acción), `action`, `size`, `bordered`. |
 | `ErrorState` | `error` (se traduce), `message`, `title`, `onRetry`, `retrying`, `size`. |
 | `Spinner`, `PageSpinner`, `Skeleton` | Cargas en línea, de sección y esqueletos (`<Skeleton className="h-4 w-32" />`). |
@@ -573,9 +573,13 @@ Diseñá **mobile first**: los empleados cargan mercadería con el celular y el 
 - Acciones de formulario: `flex flex-col-reverse gap-2 sm:flex-row sm:justify-end`. En la carga con cámara y en el POS
   la acción principal va abajo, `size="xl"` y `fullWidth` (56 px, al alcance del pulgar, con `env(safe-area-inset-bottom)`).
 - Filtros apilados en mobile (`flex flex-col gap-3 md:flex-row`).
-- El `SupportWidget` flota abajo a la derecha: el shell ya agrega `pb-24` en mobile. Si la pantalla tiene una barra de
-  acción pegada abajo (`sticky bottom-0`), marcala con `data-bottom-action-bar=""`: la burbuja se corre arriba de
-  ella y no tapa la acción principal (así lo hacen el POS y la carga de mercadería).
+- El `SupportWidget` flota abajo a la derecha y **no tapa nada**: mientras está montado publica
+  `--support-bubble-space` (88 px) y el `<main>` del shell lo suma como `padding-bottom`, así el final de cualquier
+  pantalla se puede desplazar por encima de la burbuja (escritorio y mobile). Si tu pantalla tiene una barra de
+  acción pegada abajo (`sticky bottom-0`), marcala con `data-bottom-action-bar=""` (la burbuja se corre arriba de
+  ella) **y** poné el aire en el contenedor de la barra con `pb-[var(--support-bubble-space,0px)]`, no en el scroll:
+  así la barra sigue pegada al borde (lo hacen el POS, la carga de mercadería y el asistente de importación).
+  Con un diálogo o una hoja abierta la burbuja se esconde sola.
 - Botones solo-ícono con `aria-label`; `Field` para etiquetas; foco visible (ya incluido); `role="alert"` en lo que
   bloquea; `aria-live` en el vuelto y en las lecturas de OCR.
 - Nunca dependas solo del color: estado = **palabra + forma + color** (píldora, chip o franja).
@@ -606,6 +610,7 @@ Siempre es-AR y zona `America/Argentina/Buenos_Aires`. Valores nulos → `—`.
 | Función | Ejemplo |
 |---|---|
 | `formatMoney(8450000)` | `$ 8.450.000` (sin decimales si es entero; `$ 1.234,50` si no; `{ decimals: 2 }` fuerza centavos) |
+| `formatMoneyCompact(11974748.39)` | `$ 11,97 M` (`850000` → `$ 850 mil`). **Solo** donde no entra el número completo y siempre con el valor exacto en el `title`/tooltip; nunca en montos que se cobran (POS, `PriceTag`, tickets). |
 | `splitMoney(16270.5)` | `{ int: '16.270', cents: '50' }` (lo usa `PriceTag`) |
 | `formatNumber(1234.5)` · `formatNumber(x, { decimals: 1 })` | `1.234,5` |
 | `formatPercent(37.5)` (0..100) · `formatRatio(0.78)` (0..1) | `37,5%` · `78%` |
