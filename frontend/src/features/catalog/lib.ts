@@ -66,7 +66,11 @@ export const STOCK_FILTERS: ReadonlyArray<{ value: ProductStockFilter; label: st
 
 /**
  * Link de WhatsApp del proveedor. Toma los dígitos del teléfono y antepone el código de país argentino
- * cuando el número está escrito en formato local (0341 15 555-1234 → 543415551234).
+ * cuando el número está escrito en formato local (0341 555-1234 → 543415551234). Misma regla que el
+ * backend (`RecommendationService.whatsappPhone`), que arma el link del pedido al proveedor.
+ *
+ * Ojo con los celulares escritos a la argentina ("0341 15 555-1234"): el "15" queda en el número y
+ * wa.me espera el formato internacional ("+54 9 341 555-1234"). Cargalos con el "+54 9" adelante.
  */
 export function whatsappLink(phone: string | null | undefined): string | null {
   if (!phone) return null;

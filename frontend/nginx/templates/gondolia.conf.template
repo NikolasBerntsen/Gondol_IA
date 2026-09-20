@@ -53,8 +53,18 @@ map "${BEHIND_PROXY}$gondolia_wants_https" $gondolia_redirect_to_https {
     01      1;
 }
 
+# Esquema con el que el navegador habla con la app. Detrás de Caddy (BEHIND_PROXY=1) el TLS lo termina el
+# proxy y hasta acá llega HTTP, así que $scheme diría "http" aunque el navegador esté en https://: el valor
+# real es el que manda el proxy en X-Forwarded-Proto. Cuando nginx es el borde (BEHIND_PROXY=0) vale $scheme
+# y NO se mira ese header, que cualquier cliente puede inventar.
+map "${BEHIND_PROXY}|$http_x_forwarded_proto" $gondolia_public_scheme {
+    default    $scheme;
+    "1|https"  https;
+    "1|http"   http;
+}
+
 # Puerto visto por el navegador (el publicado en el host, no el 80/443 interno del contenedor).
-map $scheme $gondolia_default_port {
+map $gondolia_public_scheme $gondolia_default_port {
     https   443;
     default 80;
 }
@@ -72,7 +82,11 @@ map $http_host $gondolia_proxy_host {
 # Los requests del propio frontend (mismo origen) no son CORS. Detrás del proxy TLS el backend podría
 # confundirlos con cross-origin (ve http://backend:8080), así que se quita el Origin cuando coincide con
 # el host pedido. Los orígenes externos se envían tal cual y el backend aplica su política CORS.
-map "$http_origin|$scheme://$http_host" $gondolia_upstream_origin {
+#
+# Se compara con $gondolia_public_scheme y no con $scheme: detrás de Caddy el navegador manda
+# "Origin: https://<host>" pero acá llega por HTTP, así que con $scheme nunca coincidían y el Origin del
+# propio frontend viajaba al backend, que lo rechazaba con 403 "Invalid CORS request" (el login no pasaba).
+map "$http_origin|$gondolia_public_scheme://$http_host" $gondolia_upstream_origin {
     default             $http_origin;
     "~*^([^|]+)\|\1$"   "";
 }
