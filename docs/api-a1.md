@@ -109,12 +109,18 @@ Respuesta `PageResponse<ProductListItem>`:
   recibió no aparece (la tabla del inventario muestra "—" en su columna).
 - `stockStatus` consolidado = el **peor** entre esas sucursales (`OUT` > `LOW` > `OK`), con `OUT` si el vendible es 0 y
   `LOW` si no supera `minStock` (SPEC §4.2). Es la misma regla del Inicio (`DashboardService.reorderRowsSql`, CTE
-  `handled`): un producto que solo se trabaja en Echesortu con 42 u. está `OK` en "Todas las sucursales", no `OUT` por
-  Centro y Fisherton. Si ninguna sucursal del alcance lo manejó nunca (producto recién creado, o una sucursal elegida
-  que no lo trabaja) el estado sale del total: 0 → `OUT` y `stockByBranch` vacío.
+  `handled`) y rige igual con "Todas las sucursales" que con una elegida: un producto que solo se trabaja en Echesortu
+  con 42 u. está `OK` en "Todas las sucursales" y también con Centro o Fisherton elegida, no `OUT` por sucursales que
+  nunca lo recibieron.
+- Si **ninguna** sucursal del alcance lo maneja, `stockByBranch` va vacío y el estado depende del comercio, no del
+  alcance elegido: `OK` con `sellableStock` 0 cuando otra sucursal sí lo trabaja (la sucursal elegida simplemente no lo
+  vende: no es un faltante suyo, y el inventario muestra "—" en la columna de stock), y `OUT` cuando el comercio no lo
+  tiene en ninguna sucursal (producto recién creado, nunca recibido). Así el estado no cambia al pasar de "todas" a una
+  sucursal.
 - Diferencias que quedan con el contador "sin stock" del Inicio, a propósito: el Inicio cuenta **pares producto +
-  sucursal** de productos activos con `minStock > 0`; el inventario cuenta **productos** y marca `OUT` cualquier vendible
-  en 0 (también sin mínimo o sin lotes todavía).
+  sucursal** (un producto sin stock en dos sucursales suma 2 en "todas") de productos activos con `minStock > 0`; el
+  inventario cuenta **productos** y marca `OUT` cualquier vendible en 0 de un producto que el comercio maneja, también
+  sin mínimo. Con una sucursal elegida los dos números coinciden.
 - `sellableStock` excluye vencidos y lotes en cuarentena; esos van en `expiredStock` y `quarantinedStock`.
 
 ### `GET /api/tenant/products/{id}` y `GET /api/tenant/products/by-barcode/{barcode}`
@@ -251,7 +257,7 @@ La pantalla lo muestra como aviso y deja seguir a mano: **la cámara nunca es un
 | Ruta | Página | Qué hace |
 |---|---|---|
 | `/app/inventory` | `InventoryPage` | Búsqueda (lee `?q=` del buscador de la barra superior), filtro por categoría y segmentado de estado de stock. Con "Todas las sucursales" agrega **una columna por sucursal**. Acciones rápidas por fila (cargar mercadería, editar), link "Importar Excel/CSV" (solo admin) y estado vacío de comercio nuevo. |
-| `/app/products/:id` | `ProductDetailPage` | KPI (vendible, próximo vencimiento, vencido pendiente, precio), **lotes en orden de salida** con `LotRankChip` + `ExpiryChip` (los no vendibles muestran su estado en vez del orden; sin lotes a la vista pero con movimientos dice "Sin lotes con stock", no "no tiene lotes cargados"), datos, stock por sucursal (solo las que manejan el producto), movimientos recientes y "Lo que ve la IA" (jefe y admin): una fila por sucursal del alcance leída de `GET /tenant/insights/products` (patrón, clase ABC, venta diaria, fecha estimada de quiebre). Avisos de cuarentena y de producto dado de baja. |
+| `/app/products/:id` | `ProductDetailPage` | KPI (vendible, próximo vencimiento, vencido pendiente, precio), **lotes en orden de salida** con `LotRankChip` + `ExpiryChip` (los no vendibles muestran su estado en vez del orden; sin lotes a la vista pero con movimientos dice "Sin lotes con stock", no "no tiene lotes cargados"; si el alcance no trabaja el producto dice "Esta sucursal no trabaja este producto" y el KPI de stock muestra "—"), datos, stock por sucursal (solo las que manejan el producto), movimientos recientes y "Lo que ve la IA" (jefe y admin): una fila por sucursal del alcance leída de `GET /tenant/insights/products` (patrón, clase ABC, venta diaria, fecha estimada de quiebre). Avisos de cuarentena y de producto dado de baja. |
 | `/app/products/new` · `/:id/edit` | `ProductFormPage` | Alta y edición con campo de código de barras + botón de escáner, autocompletado con la base pública, **creación de categoría inline**, precios, stock mínimo y "tiene vencimiento". |
 | `/app/intake` | `IntakePage` | La pantalla móvil de carga: `BarcodeScanner`, código a mano y lector USB (`useBarcodeWedge`); producto encontrado → tarjeta, desconocido → datos de Open Food Facts y "Crear el producto"; "Leer vencimiento y lote con la cámara" → `CameraCapture` → chips de OCR con su confianza; stepper de cantidad, costo, proveedor, `BranchPicker` cuando el alcance es "todas"; lotes existentes en orden de salida con el lote nuevo resaltado; **panel rojo que bloquea si hay recall** y aviso de FIFO que no bloquea; **vencimiento ya pasado**: aviso rojo, el lote figura "Vencido" (sin orden de salida) y "Registrar ingreso" pide confirmación; toast de éxito y lista "Cargaste hoy". El origen del lote sigue a cómo llegó el código (cámara o lector → `SCAN`, tipeado → `MANUAL`, lectura de etiqueta → `OCR`). Después de registrar, la tarjeta suma el lote nuevo (con `existingLots` de la respuesta) y relee el producto, así el aviso de FIFO de la próxima caja sale antes de guardar. |
 | `/app/categories` | `CategoriesPage` | ABM con diálogo; el borrado avisa cuando la categoría tiene productos. |

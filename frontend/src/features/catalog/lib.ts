@@ -1,6 +1,6 @@
 // Helpers del módulo A1 — Catálogo y carga de mercadería.
 import { MOVEMENT_TYPE_LABELS, type ProductUnit } from '@/api/types';
-import type { ProductMovement, ProductStockFilter } from './types';
+import type { ProductListItem, ProductMovement, ProductStockFilter } from './types';
 
 /** Etiquetas de los tipos que el núcleo todavía no lista (A2 los agrega al historial completo). */
 const EXTRA_TYPE_LABELS: Record<string, string> = {
@@ -43,6 +43,16 @@ export function unitShort(unit: ProductUnit | null | undefined): string {
 /** Cantidad con su unidad: `24 u.`. */
 export function formatQuantity(quantity: number, unit?: ProductUnit | null): string {
   return `${new Intl.NumberFormat('es-AR').format(quantity)} ${unitShort(unit)}`;
+}
+
+/**
+ * `true` cuando ninguna sucursal del alcance trabaja el producto: nunca tuvo lotes ahí, así que no hay stock que
+ * mostrar ni faltante que avisar (es la misma regla del Inicio, SPEC §4.2). El backend lo informa con
+ * `stockByBranch` vacío y un estado distinto de `Sin stock`; si el comercio no lo tiene en ninguna sucursal, el
+ * estado sí es `OUT` y la fila va en rojo como cualquier faltante.
+ */
+export function notHandledInScope(product: Pick<ProductListItem, 'stockByBranch' | 'stockStatus'>): boolean {
+  return product.stockByBranch.length === 0 && product.stockStatus !== 'OUT';
 }
 
 /** Opciones del filtro de estado de stock del inventario (SPEC §6.3). */

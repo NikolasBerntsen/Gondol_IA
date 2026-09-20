@@ -50,10 +50,16 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Catálogo de productos (SPEC §6.3). El catálogo es <b>del comercio</b> (lo ven todos sus usuarios de inventario),
  * pero el stock que se informa en cada fila es el del <b>alcance de sucursales</b> del request (SPEC §3.5): se suma
- * sobre las sucursales accesibles y el estado consolidado es el peor entre las sucursales del alcance que
- * <b>manejan</b> el producto (tienen o tuvieron lotes de él), la misma regla que el Inicio usa para contar productos
- * sin stock y a reponer. Una sucursal que nunca recibió el producto no aparece en {@code stockByBranch} ni lo vuelve
- * "Sin stock"; si ninguna del alcance lo manejó, el estado sale del total (0 → {@code OUT}).
+ * sobre las sucursales del alcance y el estado es el peor entre las que <b>manejan</b> el producto (tienen o
+ * tuvieron lotes de él), la misma regla que el Inicio usa para contar productos sin stock y a reponer
+ * ({@code DashboardService.reorderRowsSql}, CTE {@code handled}). Rige igual con "todas las sucursales" que con una
+ * elegida: una sucursal que nunca recibió el producto no aparece en {@code stockByBranch} ni lo vuelve "Sin stock",
+ * así el contador del filtro "Sin stock" coincide con el del Inicio en cualquier alcance.
+ * <p>
+ * Si ninguna sucursal del alcance lo maneja, el estado depende del comercio, no del alcance: {@code OK} (0 u., sin
+ * detalle por sucursal) cuando alguna otra sucursal lo trabaja —acá no es un faltante— y {@code OUT} cuando el
+ * comercio no lo tiene en ningún lado, que es el producto recién dado de alta y nunca recibido. Así el estado no
+ * cambia al pasar de "todas" a una sucursal.
  * <p>
  * El filtro por estado de stock y el orden por columnas calculadas se resuelven en memoria: el catálogo de un
  * comercio chico entra holgadamente y así el estado consolidado coincide siempre con el que se muestra.
@@ -96,8 +102,7 @@ public class ProductService {
         CatalogScope scope = scope();
         List<Product> products = productRepository.findAll(filter(tenantId, query));
         Map<Long, String> categories = categoryNames(tenantId);
-        Map<Long, ProductStock> stocks = stockReader.statsByProduct(tenantId, scope.branchIds(),
-                products.stream().map(Product::getId).toList());
+        StockView stocks = stockView(tenantId, scope, products.stream().map(Product::getId).toList());
         TenantSettings settings = settings(tenantId);
         LocalDate today = LocalDate.now(clock);
 
@@ -198,15 +203,15 @@ public class ProductService {
     private ProductListItem listItem(Product product) {
         Long tenantId = product.getTenantId();
         CatalogScope scope = scope();
-        return toListItem(product, categoryNames(tenantId),
-                stockReader.statsByProduct(tenantId, scope.branchIds(), List.of(product.getId())), scope);
+        return toListItem(product, categoryNames(tenantId), stockView(tenantId, scope, List.of(product.getId())),
+                scope);
     }
 
     private ProductDetail detail(Product product) {
         Long tenantId = product.getTenantId();
         CatalogScope scope = scope();
         ProductListItem item = toListItem(product, categoryNames(tenantId),
-                stockReader.statsByProduct(tenantId, scope.branchIds(), List.of(product.getId())), scope);
+                stockView(tenantId, scope, List.of(product.getId())), scope);
         String supplierName = product.getSupplierId() == null ? null
                 : supplierRepository.findByIdAndTenantId(product.getSupplierId(), tenantId)
                         .map(Supplier::getName).orElse(null);
@@ -243,9 +248,30 @@ public class ProductService {
         return lotMapper.sortForDisplay(lotMapper.toDtos(lots, context));
     }
 
-    private ProductListItem toListItem(Product product, Map<Long, String> categories,
-                                       Map<Long, ProductStock> stocks, CatalogScope scope) {
-        ProductStock stock = stocks.getOrDefault(product.getId(), ProductStock.EMPTY);
+    /**
+     * Stock del alcance más la regla de "manejado" a nivel comercio, que es lo que hace falta para armar filas cuyo
+     * estado no dependa del alcance elegido.
+     */
+    private record StockView(Map<Long, ProductStock> byProduct, Set<Long> handledAnywhere) {
+
+        ProductStock stockOf(Long productId) {
+            return byProduct.getOrDefault(productId, ProductStock.EMPTY);
+        }
+
+        /** {@code true} si alguna sucursal del comercio (del alcance o no) tiene o tuvo lotes del producto. */
+        boolean isHandledAnywhere(Long productId) {
+            return handledAnywhere.contains(productId);
+        }
+    }
+
+    private StockView stockView(Long tenantId, CatalogScope scope, List<Long> productIds) {
+        return new StockView(stockReader.statsByProduct(tenantId, scope.branchIds(), productIds),
+                stockReader.handledAnywhere(tenantId, productIds));
+    }
+
+    private ProductListItem toListItem(Product product, Map<Long, String> categories, StockView stocks,
+                                       CatalogScope scope) {
+        ProductStock stock = stocks.stockOf(product.getId());
         // Solo las sucursales que manejan el producto: las que nunca lo recibieron no lo tienen "sin stock".
         List<BranchStockDto> byBranch = new ArrayList<>();
         List<String> statuses = new ArrayList<>();
@@ -258,8 +284,10 @@ public class ProductService {
             statuses.add(status);
             byBranch.add(new BranchStockDto(branch.id(), branch.name(), sellable, status));
         }
+        // Sin sucursales que lo manejen en el alcance no hay faltante que reportar acá, salvo que el comercio no lo
+        // tenga en ningún lado (producto nuevo, nunca recibido): ahí sí es "sin stock", en cualquier alcance.
         String consolidated = statuses.isEmpty()
-                ? StockStatuses.of(stock.sellableStock(), product.getMinStock())
+                ? (stocks.isHandledAnywhere(product.getId()) ? StockStatuses.OK : StockStatuses.OUT)
                 : StockStatuses.worst(statuses);
         return new ProductListItem(product.getId(), product.getBarcode(), product.getName(), product.getBrand(),
                 product.getCategoryId(),
