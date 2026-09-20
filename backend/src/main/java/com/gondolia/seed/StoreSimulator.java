@@ -892,8 +892,14 @@ final class StoreSimulator {
             if (openedAt.isAfter(now.minusSeconds(900))) {
                 openedAt = now.minusSeconds(900);
             }
-            addSession(sessions, branch, branch.register1, staff.morning(), openedAt, at(day, STORE_CLOSE)
-                    .plus(Duration.ofMinutes(10)), BigDecimal.valueOf(20_000), day, isToday, true);
+            // El turno de hoy tiene que quedar ABIERTO aunque se siembre fuera del horario del comercio
+            // (una demo a la noche también necesita una caja abierta): el cierre programado va siempre al futuro.
+            Instant scheduledClose = at(day, STORE_CLOSE).plus(Duration.ofMinutes(10));
+            if (!scheduledClose.isAfter(now)) {
+                scheduledClose = now.plus(Duration.ofHours(2));
+            }
+            addSession(sessions, branch, branch.register1, staff.morning(), openedAt, scheduledClose,
+                    BigDecimal.valueOf(20_000), day, isToday, true);
         } else {
             addSession(sessions, branch, branch.register1, staff.morning(),
                     at(day, STORE_OPEN.minusMinutes(rnd.between(2, 12))),
