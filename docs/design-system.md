@@ -161,6 +161,25 @@ mono:    ['"JetBrains Mono"', "ui-monospace", '"Cascadia Mono"', "Consolas", '"S
 Reglas: `tabular-nums` en **toda** columna o cifra que se compara; `text-wrap: balance` en títulos; ancho de lectura
 ≤ 68ch; mayúsculas solo en rótulos de 12 px con tracking; como máximo dos tamaños display por pantalla.
 
+### Números grandes que no entran
+
+Un monto largo (`$ 11.974.748,39`) **nunca** se sale de su tarjeta ni queda cortado. El orden es siempre el mismo:
+
+1. **Formato compacto** con el valor exacto al lado: `formatMoneyCompact` de `lib/format.ts`
+   (`$ 11,97 M`, `$ 850 mil`, `$ 8.450`) y el importe completo en el `title` y para lectores de pantalla.
+   `StatCard` lo hace **solo** cuando recibe el monto en `money` (en vez de `value={formatMoney(x)}`);
+   en los demás lugares apretados (mosaicos, ejes de gráficos, celdas angostas) llamalo a mano.
+2. Si no hay compacto posible, se achica la letra lo justo para que entre (`fittedFontSize`, mínimo 16 px).
+3. Nunca dos líneas: el número de KPI va en una sola (`whitespace-nowrap` + `tabular-nums`).
+
+**Dónde no usar el compacto:** lo que se cobra o se firma va con el importe completo y los centavos —
+total del POS, `PriceTag`, líneas del carrito, hoja de cobro, ticket y cualquier monto de una operación.
+
+El resto del encuadre sale de las mismas reglas de siempre: `min-w-0` en los hijos de un flex o grid que
+pueden encogerse, `truncate` con `title` para nombres largos, `break-words` en textos libres, contenedor
+con `overflow-x` para las tablas anchas y grillas que **pasan a menos columnas** en vez de apretar
+(`sm:grid-cols-2 xl:grid-cols-4`).
+
 ---
 
 ## 4. Forma, espacio y elevación
@@ -189,6 +208,19 @@ Reglas: `tabular-nums` en **toda** columna o cifra que se compara; `text-wrap: b
 Base de 4 px. Gutter de página 16 (móvil) / 24 (sm) / 32 (lg). Separación entre bloques 20–24; dentro de panel
 16–20 de padding; filas de tabla 8 px vertical (densas). Alturas: control 36 (base), 32 (chico), 44 (grande,
 táctil mínimo), 56 (acción principal del POS y la carga móvil).
+
+### Aire de la burbuja de soporte
+
+El botón flotante de soporte no tiene que tapar nada. Mientras está montado publica
+`--support-bubble-space` en `<html>` (88 px = botón 56 + margen 16 + aire 16) y el contenedor de scroll del
+shell lo suma como `padding-bottom`: **el final de cualquier pantalla se puede desplazar por encima de la
+burbuja**, en escritorio y en móvil.
+
+- Si la pantalla tiene una **barra de acción pegada abajo** (carga de mercadería, asistente de importación,
+  cobro del POS), marcala con `data-bottom-action-bar`: la burbuja se corre arriba de la barra y el aire va
+  en el contenedor de la barra (`pb-[var(--support-bubble-space,0px)]`), no en el scroll de la página, para
+  que la barra siga pegada al borde inferior.
+- Con un **diálogo o una hoja abierta** la burbuja se esconde: no se ve a través del velo ni tapa el pie.
 
 ---
 

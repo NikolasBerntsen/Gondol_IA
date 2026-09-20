@@ -18,6 +18,7 @@ import { StatusPill } from '@/components/gondola';
 import { getErrorMessage, isApiError } from '@/api/client';
 import { cn } from '@/lib/cn';
 import { formatNumber } from '@/lib/format';
+import { BubbleSpacer } from '@/components/layout/BubbleSpacer';
 import { importKeys, importsApi } from '../api';
 import { ConfirmStep } from '../components/ConfirmStep';
 import { FileStep } from '../components/FileStep';
@@ -327,10 +328,14 @@ export default function ImportWizardPage() {
         />
       ) : null}
 
+      {/* Aire para que la burbuja de soporte no tape el final de la revisión (queda arriba de la barra). */}
+      <BubbleSpacer className="mt-auto" />
+
       {/* Barra de acciones fija */}
       <div
+        data-bottom-action-bar=""
         className={cn(
-          'sticky bottom-0 z-10 -mx-4 mt-auto flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-border bg-card px-4 py-3 pr-20 sm:-mx-6 sm:px-6 sm:pr-6 lg:-mx-8 lg:px-8',
+          'sticky bottom-0 z-10 -mx-4 mt-auto flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-border bg-card px-4 py-3 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8',
           step === RESULT && 'hidden',
         )}
         style={{ paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}

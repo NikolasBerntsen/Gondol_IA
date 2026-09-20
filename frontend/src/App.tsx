@@ -246,7 +246,9 @@ function ThemedToaster() {
       toastOptions={{
         classNames: {
           toast:
-            'font-sans rounded-panel border border-border bg-card text-foreground shadow-pop text-base items-start',
+            // El ícono de sonner viene de 20 px dentro de una caja de 16 y se salía de su recuadro:
+            // lo bajamos a 16 (docs/design-system.md §3, "números grandes que no entran" · encuadre).
+            'font-sans rounded-panel border border-border bg-card text-foreground shadow-pop text-base items-start [&_[data-icon]>svg]:h-4 [&_[data-icon]>svg]:w-4',
           title: 'font-semibold',
           description: 'text-muted-foreground text-sm',
           actionButton: 'rounded-control bg-primary text-primary-foreground font-semibold',

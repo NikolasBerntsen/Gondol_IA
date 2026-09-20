@@ -353,7 +353,7 @@ export default function ProductDetailPage() {
           />
           <StatCard
             label="Precio de venta"
-            value={formatMoney(product.salePrice)}
+            money={product.salePrice}
             icon={Store}
             tone="primary"
             hint={`Costo de lista: ${formatMoney(product.costPrice)}`}

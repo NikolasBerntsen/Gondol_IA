@@ -1000,7 +1000,7 @@ export default function InsightsPage() {
             />
             <StatCard
               label="Valor en riesgo"
-              value={formatMoney(summary?.atRiskValue ?? 0)}
+              money={summary?.atRiskValue ?? 0}
               icon={AlertTriangle}
               tone="warn"
               hint="stock que vencería sin venderse"

@@ -30,6 +30,8 @@ import {
 import { cn } from '@/lib/cn';
 import { formatMoney, formatTime } from '@/lib/format';
 import { useDebounce } from '@/lib/useDebounce';
+import { useMediaQuery } from '@/lib/useMediaQuery';
+import { BubbleSpacer } from '@/components/layout/BubbleSpacer';
 import { posApi, posKeys } from '../api';
 import { CashMovementDialog } from '../components/CashMovementDialog';
 import { CloseSessionDialog } from '../components/CloseSessionDialog';
@@ -86,6 +88,8 @@ export default function PosTerminalPage() {
   const [allowShortage, setAllowShortage] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  /** Desde `lg` la terminal son dos paneles a pantalla completa (sin barra fija abajo). */
+  const twoPanelLayout = useMediaQuery('(min-width: 1024px)');
 
   const debouncedQuery = useDebounce(query, 250);
 
@@ -828,7 +832,13 @@ export default function PosTerminalPage() {
             )}
           </div>
 
-          <div id="pos-totales" className="border-t border-border bg-card px-4 pb-4 pt-3 sm:px-5">
+          {/* En escritorio esta zona queda pegada abajo a la derecha: la burbuja de soporte se corre arriba
+              del "Cobrar" (en mobile lo hace la barra fija de abajo, así que acá no se marca). */}
+          <div
+            id="pos-totales"
+            {...(twoPanelLayout ? { 'data-bottom-action-bar': '' } : null)}
+            className="border-t border-border bg-card px-4 pb-4 pt-3 sm:px-5"
+          >
             <dl className="grid grid-cols-2 gap-y-0.5 text-base">
               <dt className="text-muted-foreground">Subtotal · {units} u.</dt>
               <dd className="text-right tabular-nums">{formatMoney(subtotal, { decimals: 2 })}</dd>
@@ -859,7 +869,9 @@ export default function PosTerminalPage() {
         </aside>
       </div>
 
-      {/* Móvil: total y cobro al alcance del pulgar (la burbuja de soporte se corre arriba de esta barra) */}
+      {/* Móvil: total y cobro al alcance del pulgar (la burbuja de soporte se corre arriba de esta barra, y el
+          espaciador deja el aire para que no tape el final del ticket). En escritorio no hay barra ni aire. */}
+      <BubbleSpacer className="lg:hidden" />
       <div
         data-bottom-action-bar=""
         className="sticky bottom-0 z-10 flex items-center gap-3 border-t-2 border-border bg-card px-4 pt-3 lg:hidden"

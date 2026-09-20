@@ -122,12 +122,14 @@ export default function SecurityAlertHost() {
       <DialogContent
         hideClose
         overlayClassName="bg-scrim/75"
-        className="max-w-[560px] gap-0 overflow-hidden border-crit/40 p-0 sm:p-0"
+        // Columna: cabecera y pie fijos, el cuerpo scrollea. Con `max-h` + altos fijos, a 390 px el pie
+        // (dos botones apilados) no entraba y el último paso quedaba cortado.
+        className="flex max-h-[calc(100dvh-24px)] max-w-[560px] flex-col gap-0 overflow-hidden border-crit/40 p-0 sm:p-0"
         onInteractOutside={(event) => event.preventDefault()}
         onEscapeKeyDown={(event) => event.preventDefault()}
         role="alertdialog"
       >
-        <div className="flex items-start gap-3 bg-crit px-5 py-4 text-crit-foreground sm:px-6">
+        <div className="flex shrink-0 items-start gap-3 bg-crit px-5 py-4 text-crit-foreground sm:px-6">
           <ShieldAlert className="mt-0.5 h-6 w-6 shrink-0" aria-hidden="true" />
           <div className="min-w-0">
             <DialogTitle className="text-lg leading-7 text-crit-foreground">
@@ -142,7 +144,7 @@ export default function SecurityAlertHost() {
           </div>
         </div>
 
-        <div className="gd-scroll flex max-h-[calc(100dvh-240px)] flex-col gap-4 overflow-y-auto px-5 py-5 sm:px-6">
+        <div className="gd-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-5 sm:px-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0 flex-1 basis-[220px]">
               <div className="gd-eyebrow">Producto retirado</div>
@@ -200,7 +202,7 @@ export default function SecurityAlertHost() {
           </div>
         </div>
 
-        <div className="flex flex-col-reverse gap-2 border-t bg-muted/40 px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+        <div className="flex shrink-0 flex-col-reverse gap-2 border-t bg-muted/40 px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
           <Button variant="outline" onClick={() => void acknowledge()} loading={busy}>
             Entendido
           </Button>

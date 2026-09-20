@@ -35,6 +35,7 @@ import {
 } from '@/components/ui';
 import { isCameraSupported } from '@/lib/secureContext';
 import { formatDate, formatMoney, formatNumber, todayLocalDate } from '@/lib/format';
+import { BubbleSpacer } from '@/components/layout/BubbleSpacer';
 import { catalogLookupApi, lotsApi, ocrApi, productsApi, suppliersApi } from '../api';
 import { LotRotationList } from '../components/LotRotationList';
 import { OcrChoice } from '../components/OcrChoice';
@@ -765,11 +766,14 @@ export default function IntakePage() {
         )}
 
         {product && (
-          <div
-            data-bottom-action-bar=""
-            className="sticky bottom-0 -mx-4 mt-auto border-t bg-card px-4 pt-3 sm:mx-0 sm:rounded-b-panel"
-            style={{ paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}
-          >
+          <>
+            {/* Aire para que la burbuja de soporte no tape la última tarjeta (queda arriba de esta barra). */}
+            <BubbleSpacer className="mt-auto" />
+            <div
+              data-bottom-action-bar=""
+              className="sticky bottom-0 -mx-4 border-t bg-card px-4 pt-3 sm:mx-0 sm:rounded-b-panel"
+              style={{ paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}
+            >
             <Button
               size="xl"
               fullWidth
@@ -802,7 +806,8 @@ export default function IntakePage() {
             {!blockedByRecall && !needsExpiry && !writeBranch.isReady && (
               <p className="mt-2 text-center text-sm text-muted-foreground">Elegí la sucursal para continuar.</p>
             )}
-          </div>
+            </div>
+          </>
         )}
       </div>
 

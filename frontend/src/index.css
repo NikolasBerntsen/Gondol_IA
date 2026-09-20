@@ -165,6 +165,28 @@
   --camera-foreground: 0 0% 100%;
 }
 
+/* ---------------------------------------------------------------------------------------------
+   Aire de la burbuja de soporte (docs/design-system.md §4 "Espaciado").
+   `--support-bubble-space` lo publica `SupportWidget` mientras está montada: alto del botón
+   flotante + su margen inferior + aire. Todo contenedor de scroll de página le suma ese aire abajo
+   para que la última fila, tarjeta o botón se pueda desplazar por encima de la burbuja.
+   `--gd-scroll-space` es el que usan los contenedores de scroll: vale 0 en las pantallas que tienen
+   una barra de acción pegada abajo, porque ahí el aire lo pone la página ARRIBA de la barra (si el
+   aire fuera del contenedor de scroll, la barra se despegaría del borde inferior).
+   --------------------------------------------------------------------------------------------- */
+:root {
+  --support-bubble-space: 0px;
+  --gd-scroll-space: var(--support-bubble-space);
+}
+
+/* Pantallas con barra de acción pegada abajo: el aire lo pone la página (`BubbleSpacer`, arriba de la
+   barra) y el contenedor de scroll no lleva ninguno — ni el de la burbuja ni el de siempre — porque el
+   `position: sticky` se frena en la caja de contenido y la barra se despegaría del borde inferior. */
+main:has([data-bottom-action-bar]) {
+  --gd-scroll-space: 0px;
+  --gd-scroll-pad: 0px;
+}
+
 /* ===================================================================== */
 
 @layer base {

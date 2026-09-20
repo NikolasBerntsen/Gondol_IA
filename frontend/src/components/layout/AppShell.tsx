@@ -80,7 +80,11 @@ export function AppShell() {
           tabIndex={-1}
           className={cn(
             'gd-scroll min-w-0 flex-1 outline-none',
-            compact ? 'min-h-0 overflow-y-auto' : 'px-4 pb-24 pt-5 sm:px-6 lg:px-8 lg:pb-10 lg:pt-7',
+            // `--gd-scroll-space` es el aire de la burbuja de soporte (index.css): la última tarjeta,
+            // fila o botón de cualquier pantalla se puede desplazar por encima de la burbuja.
+            compact
+              ? 'min-h-0 overflow-y-auto'
+              : 'px-4 pb-[calc(var(--gd-scroll-pad,1.5rem)+var(--gd-scroll-space,0px))] pt-5 sm:px-6 lg:px-8 lg:pb-[calc(var(--gd-scroll-pad,2.5rem)+var(--gd-scroll-space,0px))] lg:pt-7',
           )}
         >
           <div className={cn(compact ? 'flex min-h-full flex-col' : 'mx-auto w-full max-w-7xl')}>
