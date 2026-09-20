@@ -38,7 +38,7 @@ import {
 } from '@/components/ui';
 import { formatDate, formatDateTime, formatMoney, formatNumber, formatRelative } from '@/lib/format';
 import { productInsightApi, productsApi } from '../api';
-import { movementSign, movementSourceLabel, movementTypeLabel, unitShort } from '../lib';
+import { movementSign, movementSourceLabel, movementTypeLabel, notHandledInScope, unitShort } from '../lib';
 import type { LotDto, ProductMovement } from '../types';
 
 /** Lote alcanzado por un recall que ya se retiró del stock (queda `RECALLED` con 0 u.). */
@@ -119,6 +119,12 @@ export default function ProductDetailPage() {
   // Sin movimientos en el alcance: nunca entró mercadería. Si los hay, el producto tuvo stock y sus lotes se
   // vendieron, vencieron o se retiraron (la ficha solo muestra los lotes vacíos recientes, docs/api-a1.md §4).
   const neverHadStock = movementsQuery.isSuccess && movementsQuery.data.length === 0;
+  // El alcance no trabaja el producto (nunca tuvo lotes acá, pero otra sucursal sí lo tiene): no es un faltante.
+  const notWorkedHere = notHandledInScope(product);
+  const scopeDoesNotWorkIt = isAll
+    ? 'Ninguna de tus sucursales trabaja este producto'
+    : 'Esta sucursal no trabaja este producto';
+  const scopeHasNoLots = isAll ? 'Sin lotes en tus sucursales' : 'Sin lotes en esta sucursal';
 
   const lotColumns: Array<TableColumn<LotDto> | null> = [
     {
@@ -326,10 +332,25 @@ export default function ProductDetailPage() {
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard
             label="Stock vendible"
-            value={`${formatNumber(product.sellableStock)} ${unitShort(product.unit)}`}
+            // El alcance que no trabaja el producto (nunca tuvo lotes acá) no tiene stock que informar.
+            value={notWorkedHere ? '—' : `${formatNumber(product.sellableStock)} ${unitShort(product.unit)}`}
             icon={Package}
-            tone={product.stockStatus === 'OUT' ? 'crit' : product.stockStatus === 'LOW' ? 'warn' : 'ok'}
-            hint={product.minStock > 0 ? `Mínimo por sucursal: ${formatNumber(product.minStock)}` : 'Sin mínimo definido'}
+            tone={
+              notWorkedHere
+                ? 'neutral'
+                : product.stockStatus === 'OUT'
+                  ? 'crit'
+                  : product.stockStatus === 'LOW'
+                    ? 'warn'
+                    : 'ok'
+            }
+            hint={
+              notWorkedHere
+                ? scopeHasNoLots
+                : product.minStock > 0
+                  ? `Mínimo por sucursal: ${formatNumber(product.minStock)}`
+                  : 'Sin mínimo definido'
+            }
           />
           <StatCard
             label="Próximo vencimiento"
@@ -386,14 +407,20 @@ export default function ProductDetailPage() {
             }
             empty={{
               icon: Layers,
-              title: neverHadStock ? 'Este producto no tiene lotes cargados' : 'Sin lotes con stock',
-              description: neverHadStock
-                ? canIntake
-                  ? 'Registrá el primer ingreso para empezar a controlar vencimientos.'
-                  : 'Cuando se registre el primer ingreso vas a ver acá sus lotes y vencimientos.'
-                : `No quedan lotes con stock${isAll ? '' : ' en esta sucursal'}. Lo que pasó con sus lotes (ventas, descartes, retiros) está en Movimientos recientes.${
-                    canIntake ? ' Registrá un ingreso para volver a tener stock.' : ''
-                  }`,
+              title: notWorkedHere
+                ? scopeDoesNotWorkIt
+                : neverHadStock
+                  ? 'Este producto no tiene lotes cargados'
+                  : 'Sin lotes con stock',
+              description: notWorkedHere
+                ? `Nunca tuvo lotes acá.${canIntake ? ' Registrá un ingreso si querés empezar a venderlo.' : ''}`
+                : neverHadStock
+                  ? canIntake
+                    ? 'Registrá el primer ingreso para empezar a controlar vencimientos.'
+                    : 'Cuando se registre el primer ingreso vas a ver acá sus lotes y vencimientos.'
+                  : `No quedan lotes con stock${isAll ? '' : ' en esta sucursal'}. Lo que pasó con sus lotes (ventas, descartes, retiros) está en Movimientos recientes.${
+                      canIntake ? ' Registrá un ingreso para volver a tener stock.' : ''
+                    }`,
               action: canIntake ? (
                 <ButtonLink to={`/app/intake?productId=${product.id}`} leftIcon={<ScanBarcode className="h-4 w-4" />}>
                   Cargar mercadería
@@ -453,7 +480,9 @@ export default function ProductDetailPage() {
             <Card padding="lg">
               <CardHeader title="Stock por sucursal" icon={Store} />
               {product.stockByBranch.length === 0 ? (
-                <p className="text-base text-muted-foreground">Todavía no hay stock de este producto.</p>
+                <p className="text-base text-muted-foreground">
+                  {notWorkedHere ? `${scopeHasNoLots}.` : 'Todavía no hay stock de este producto.'}
+                </p>
               ) : (
                 <ul className="divide-y">
                   {product.stockByBranch.map((branch) => (

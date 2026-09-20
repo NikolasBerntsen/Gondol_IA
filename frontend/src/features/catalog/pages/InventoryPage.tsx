@@ -23,7 +23,7 @@ import {
 import { useDebounce } from '@/lib/useDebounce';
 import { formatMoney, formatNumber } from '@/lib/format';
 import { productsApi, categoriesApi } from '../api';
-import { STOCK_FILTERS, unitShort } from '../lib';
+import { STOCK_FILTERS, notHandledInScope, unitShort } from '../lib';
 import type { ProductListItem, ProductStockFilter } from '../types';
 
 const PAGE_SIZE = 20;
@@ -142,15 +142,24 @@ export default function InventoryPage() {
       align: 'right',
       mobile: 'field',
       mobileLabel: 'Stock vendible',
-      cell: (row) => (
-        <div className="whitespace-nowrap">
-          <span className="font-semibold tabular-nums">{formatNumber(row.sellableStock)}</span>{' '}
-          <span className="text-sm text-muted-foreground">{unitShort(row.unit)}</span>
-          {row.minStock > 0 && (
-            <div className="text-xs text-muted-foreground">mín. {formatNumber(row.minStock)}</div>
-          )}
-        </div>
-      ),
+      cell: (row) =>
+        // Producto que el alcance no trabaja (nunca tuvo lotes acá): no es un faltante, no hay número que mostrar.
+        notHandledInScope(row) ? (
+          <span
+            className="text-muted-foreground"
+            title={isAll ? 'Ninguna de tus sucursales lo trabaja' : 'Esta sucursal no lo trabaja'}
+          >
+            —
+          </span>
+        ) : (
+          <div className="whitespace-nowrap">
+            <span className="font-semibold tabular-nums">{formatNumber(row.sellableStock)}</span>{' '}
+            <span className="text-sm text-muted-foreground">{unitShort(row.unit)}</span>
+            {row.minStock > 0 && (
+              <div className="text-xs text-muted-foreground">mín. {formatNumber(row.minStock)}</div>
+            )}
+          </div>
+        ),
     },
     ...branchColumns,
     {

@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 
+import com.gondolia.analytics.BranchScopeService.Scope;
+import com.gondolia.analytics.DashboardService;
 import com.gondolia.catalog.dto.BranchStockDto;
 import com.gondolia.catalog.dto.LotDto;
 import com.gondolia.catalog.dto.LotRequest;
@@ -29,6 +31,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -61,6 +64,8 @@ class CatalogIntegrationTest extends PostgresIntegrationTest {
     private SupplierService supplierService;
     @Autowired
     private StockService stockService;
+    @Autowired
+    private DashboardService dashboardService;
     @Autowired
     private JdbcTemplate jdbc;
     @Autowired
@@ -165,20 +170,60 @@ class CatalogIntegrationTest extends PostgresIntegrationTest {
     }
 
     @Test
-    void un_producto_sin_lotes_en_el_alcance_queda_sin_stock() {
+    void un_producto_que_el_comercio_no_tiene_en_ningun_lado_queda_sin_stock() {
         long nuevo = data.product(tenant, data.barcode(), "Manteca 200 g", "900", "1500");
 
+        // Nunca se recibió en ninguna sucursal: es "sin stock" del comercio, y lo mismo en cualquier alcance.
         authenticate(admin, null);
         ProductListItem manteca = row(productService.list(query(null, null)), nuevo);
         assertThat(manteca.stockStatus()).isEqualTo(StockStatuses.OUT);
         assertThat(manteca.stockByBranch()).isEmpty();
 
-        // En Norte la leche no se trabaja: no hay stock ahí, pero tampoco una fila de sucursal inventada.
         authenticate(admin, String.valueOf(norte));
+        assertThat(row(productService.list(query(null, null)), nuevo).stockStatus()).isEqualTo(StockStatuses.OUT);
+    }
+
+    @Test
+    void con_una_sucursal_elegida_un_producto_que_esa_sucursal_nunca_trabajo_no_queda_sin_stock() {
+        // En Norte la leche no se trabaja: no hay stock ahí, pero tampoco es un faltante de Norte (ni una fila de
+        // sucursal inventada). Es la misma regla que ya rige en "todas las sucursales" y en el Inicio.
+        authenticate(admin, String.valueOf(norte));
+
         ProductListItem lecheNorte = row(productService.list(query(null, null)), lecheId);
+
         assertThat(lecheNorte.sellableStock()).isZero();
-        assertThat(lecheNorte.stockStatus()).isEqualTo(StockStatuses.OUT);
+        assertThat(lecheNorte.stockStatus()).isEqualTo(StockStatuses.OK);
         assertThat(lecheNorte.stockByBranch()).isEmpty();
+        assertThat(productService.list(query(null, StockStatuses.OUT)).content())
+                .extracting(ProductListItem::id).doesNotContain(lecheId);
+    }
+
+    @Test
+    void el_filtro_sin_stock_cuenta_lo_mismo_que_el_inicio_en_cada_alcance() {
+        // El caso del alta en una sola sucursal: producto nuevo con su primer lote en Norte.
+        long galletas = data.product(tenant, data.barcode(), "Galletas de agua 200 g", "800", "1200");
+        jdbc.update("update products set min_stock = 5 where id = ?", galletas);
+        data.lot(tenant, norte, galletas, "GN01", "GN01", today.plusDays(60), 40, "ACTIVE", 1);
+        // Y un faltante real en Centro, para que el contador no sea cero por casualidad: se agota la leche.
+        jdbc.update("update lots set quantity = 0, status = 'DEPLETED' where product_id = ? and branch_id = ?",
+                lecheId, centro);
+
+        Map<Long, String> names = Map.of(centro, "Sucursal Centro", norte, "Sucursal Norte");
+        assertSinStockCoincideConElInicio(null, new Scope(List.of(centro, norte), names, true));
+        assertSinStockCoincideConElInicio(String.valueOf(centro), new Scope(List.of(centro), names, false));
+        assertSinStockCoincideConElInicio(String.valueOf(norte), new Scope(List.of(norte), names, false));
+
+        // Y en Centro las galletas, que solo se trabajan en Norte, no aparecen en rojo.
+        authenticate(admin, String.valueOf(centro));
+        assertThat(row(productService.list(query(null, null)), galletas).stockStatus()).isEqualTo(StockStatuses.OK);
+    }
+
+    /** El listado filtrado por "Sin stock" y el contador del Inicio miran el mismo alcance y deben coincidir. */
+    private void assertSinStockCoincideConElInicio(String branchHeader, Scope scope) {
+        authenticate(admin, branchHeader);
+        assertThat(productService.list(query(null, StockStatuses.OUT)).totalElements())
+                .as("Sin stock en %s", branchHeader == null ? "todas las sucursales" : branchHeader)
+                .isEqualTo(dashboardService.summary(tenant, scope).outOfStockCount());
     }
 
     @Test

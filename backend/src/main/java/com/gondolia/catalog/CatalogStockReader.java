@@ -27,7 +27,9 @@ import org.springframework.stereotype.Component;
  *   <li><b>Sucursales que manejan el producto</b>: las que tienen o tuvieron algún lote de él (cualquier estado o
  *       remanente). Es la misma regla que usa el Inicio para "Artículos a reponer" y el contador "sin stock"
  *       ({@code DashboardService.reorderRowsSql}, CTE {@code handled}): una sucursal que nunca recibió el producto no
- *       lo tiene "sin stock", simplemente no lo trabaja.</li>
+ *       lo tiene "sin stock", simplemente no lo trabaja. Vale igual con una sucursal elegida que con "todas".</li>
+ *   <li><b>Manejado por el comercio</b> ({@link #handledAnywhere}): si alguna sucursal —esté o no en el alcance—
+ *       tiene o tuvo lotes del producto. Distingue "acá no se trabaja" de "el comercio no lo tiene en ningún lado".</li>
  * </ul>
  * Se usa {@code JdbcTemplate} (SPEC §5.2) porque hace falta un agregado condicional por producto y sucursal que no
  * expone el núcleo.
@@ -80,6 +82,17 @@ public class CatalogStockReader {
               from lots l
              where l.tenant_id = :tenantId
                and l.branch_id in (:branchIds)
+            """;
+
+    /**
+     * Productos que el comercio maneja en <b>alguna</b> sucursal (tiene o tuvo lotes, sin importar el alcance del
+     * request). Sirve para distinguir "esta sucursal no lo trabaja" de "el comercio no lo tiene en ningún lado".
+     */
+    private static final String HANDLED_ANYWHERE_SQL = """
+            select distinct l.product_id
+              from lots l
+             where l.tenant_id = :tenantId
+               and l.product_id in (:productIds)
             """;
 
     /**
@@ -158,6 +171,21 @@ public class CatalogStockReader {
     /** Stock de un solo producto en el alcance (mismo cálculo que la lista). */
     public ProductStock stats(Long tenantId, Collection<Long> branchIds, Long productId) {
         return statsByProduct(tenantId, branchIds, List.of(productId)).getOrDefault(productId, ProductStock.EMPTY);
+    }
+
+    /**
+     * De los productos indicados, los que el comercio maneja en alguna sucursal (tiene o tuvo lotes ahí), sin mirar
+     * el alcance del request. Un producto que quedó fuera del conjunto no lo trabaja ninguna sucursal: recién ahí
+     * "sin stock" es una afirmación del comercio y no de una sucursal que nunca lo recibió.
+     */
+    public Set<Long> handledAnywhere(Long tenantId, Collection<Long> productIds) {
+        if (tenantId == null || productIds == null || productIds.isEmpty()) {
+            return Set.of();
+        }
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("tenantId", tenantId)
+                .addValue("productIds", productIds);
+        return new HashSet<>(jdbc.queryForList(HANDLED_ANYWHERE_SQL, params, Long.class));
     }
 
     /**
