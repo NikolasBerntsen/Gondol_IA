@@ -16,7 +16,7 @@ python-dateutil==2.9.0.post0
 pillow==11.3.0
 opencv-python-headless==4.11.0.86
 pytesseract==0.3.13
-zxing-cpp==2.3.0
+zxing-cpp==3.1.1
 
 # Tests (se ejecutan dentro de la imagen)
 pytest==8.4.1
