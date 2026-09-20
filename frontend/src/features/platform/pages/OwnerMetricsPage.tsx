@@ -85,7 +85,7 @@ export default function OwnerMetricsPage() {
               />
               <StatCard
                 label="MRR estimado"
-                value={data ? formatMoney(data.revenue.estimatedMrr) : '—'}
+                money={data?.revenue.estimatedMrr ?? null}
                 icon={Wallet}
                 tone="ok"
                 loading={metrics.isPending}

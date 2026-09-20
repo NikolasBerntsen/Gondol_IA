@@ -578,7 +578,7 @@ export default function DashboardPage() {
         />
         <StatCard
           label="Valor inventario"
-          value={formatMoney(summary?.inventoryCostValue ?? 0)}
+          money={summary?.inventoryCostValue ?? 0}
           icon={Wallet}
           tone="ok"
           hint="a costo · stock físico"

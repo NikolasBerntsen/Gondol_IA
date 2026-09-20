@@ -146,6 +146,29 @@ export function formatMoney(value: NumericInput, options: FormatMoneyOptions = {
 }
 
 /**
+ * Monto abreviado para donde el número completo no entra (KPI de una grilla de 4 columnas, mosaicos,
+ * ejes de gráficos): `11974748.39` → `"$ 11,97 M"`, `850000` → `"$ 850 mil"`, `8450` → `"$ 8.450"`.
+ *
+ * **Siempre** acompañalo del valor exacto: `title`, tooltip o texto para lectores de pantalla
+ * (`StatCard` lo hace solo). Nunca lo uses para montos que se cobran o se firman (total del POS,
+ * etiquetas de precio, tickets): ahí va el importe completo (docs/design-system.md §3).
+ */
+export function formatMoneyCompact(value: NumericInput): string {
+  const n = toNumber(value);
+  if (n === null) return EMPTY_VALUE;
+  const abs = Math.abs(n);
+  if (abs < 10_000) return formatMoney(n, { decimals: 0 });
+  const sign = n < 0 ? '-' : '';
+  if (abs < 1_000_000) {
+    const thousands = abs / 1000;
+    return `${sign}$ ${numberFormatter(0, thousands < 100 ? 1 : 0).format(thousands)} mil`;
+  }
+  const millions = abs / 1_000_000;
+  const decimals = millions < 10 ? 2 : millions < 100 ? 1 : 0;
+  return `${sign}$ ${numberFormatter(0, decimals).format(millions)} M`;
+}
+
+/**
  * Parte un importe para la etiqueta de precio: `16270` → `{ int: "16.270", cents: "00" }`.
  * Los centavos van en superíndice subrayado (`PriceTag`), como en la góndola.
  */

@@ -268,7 +268,7 @@ export default function TenantDetailPage() {
               {tenant.notes ? (
                 <div className="sm:col-span-2">
                   <dt className="text-sm text-muted-foreground">Notas internas</dt>
-                  <dd className="mt-1 whitespace-pre-wrap text-read text-foreground">{tenant.notes}</dd>
+                  <dd className="mt-1 whitespace-pre-wrap break-words text-read text-foreground">{tenant.notes}</dd>
                 </div>
               ) : null}
             </dl>

@@ -21,7 +21,9 @@ export function useSupportBubbleSpace(enabled: boolean): void {
     if (!enabled || typeof document === 'undefined') return undefined;
     const root = document.documentElement;
     root.style.setProperty(SUPPORT_BUBBLE_SPACE_VAR, `${SUPPORT_BUBBLE_SPACE_PX}px`);
-    return () => root.style.removeProperty(SUPPORT_BUBBLE_SPACE_VAR);
+    return () => {
+      root.style.removeProperty(SUPPORT_BUBBLE_SPACE_VAR);
+    };
   }, [enabled]);
 }
 

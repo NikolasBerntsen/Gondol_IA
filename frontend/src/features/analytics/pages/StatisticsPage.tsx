@@ -159,11 +159,11 @@ function SalesTab({ stats }: { stats: StatisticsOverview }) {
   return (
     <div className="flex flex-col gap-5">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Facturación" value={formatMoney(sales.amount)} icon={TrendingUp} tone="ok" hint="ventas netas de anulaciones" />
+        <StatCard label="Facturación" money={sales.amount} icon={TrendingUp} tone="ok" hint="ventas netas de anulaciones" />
         <StatCard label="Unidades" value={formatNumber(sales.units)} icon={Boxes} tone="primary" hint={`${formatNumber(sales.avgDailyUnits)} por día`} />
         <StatCard
           label="Margen"
-          value={formatMoney(sales.margin)}
+          money={sales.margin}
           icon={BarChart3}
           tone="info"
           hint={`${formatPercent(sales.marginPct)} sobre la venta`}
@@ -485,28 +485,28 @@ function LossesTab({ stats }: { stats: StatisticsOverview }) {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Merma"
-          value={formatMoney(losses.wasteValue)}
+          money={losses.wasteValue}
           icon={Recycle}
           tone="crit"
           hint={`${formatNumber(losses.wasteUnits)} unidades descartadas`}
         />
         <StatCard
           label="Ventas perdidas"
-          value={formatMoney(losses.lostSales.estimatedAmount)}
+          money={losses.lostSales.estimatedAmount}
           icon={PackageX}
           tone="warn"
           hint={`${formatNumber(losses.lostSales.units)} u. que no pudiste cobrar`}
         />
         <StatCard
           label="En riesgo"
-          value={formatMoney(losses.expiringRiskValue)}
+          money={losses.expiringRiskValue}
           icon={Boxes}
           tone="orange"
           hint="stock por vencer, a costo"
         />
         <StatCard
           label="Recuperado con descuentos"
-          value={formatMoney(ai.recoveredSales.amount)}
+          money={ai.recoveredSales.amount}
           icon={Sparkles}
           tone="ok"
           hint={`${formatNumber(ai.recoveredSales.units)} u. de lotes en liquidación`}

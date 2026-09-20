@@ -1,7 +1,8 @@
 import { ArrowDownRight, ArrowUpRight, type LucideIcon } from 'lucide-react';
-import { useLayoutEffect, useRef, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/cn';
+import { EMPTY_VALUE, formatMoney, formatMoneyCompact, type NumericInput } from '@/lib/format';
 
 /** Tonos preferidos: `primary` · `ok` · `warn` · `crit` · `info` · `neutral` (el resto son alias). */
 export type StatTone =
@@ -56,12 +57,23 @@ export function fittedFontSize(baseFontPx: number, neededWidth: number, availabl
 }
 
 /**
- * Número del KPI en una sola línea (docs/design-system.md §7.2). Los montos largos ("$ 11.974.748,39") no entran en
- * las tarjetas angostas de la grilla de 4 columnas a 1280–1440 px: en vez de desbordar la tarjeta, se achica la letra
- * lo justo para que entren. Se vuelve a medir cuando cambia el ancho de la tarjeta o terminan de cargar las fuentes.
+ * Número del KPI en una sola línea (docs/design-system.md §3 y §7.2). Los montos largos
+ * ("$ 11.974.748,39") no entran en las tarjetas angostas de la grilla de 4 columnas a 1280–1440 px.
+ * Cuando no entra:
+ *
+ * 1. si la tarjeta tiene un valor compacto (`money` → `$ 11,97 M`), muestra ese, con el importe
+ *    exacto en el `title` y para los lectores de pantalla;
+ * 2. si no, achica la letra lo justo para que entre (nunca desborda la tarjeta).
+ *
+ * Se vuelve a medir cuando cambia el ancho de la tarjeta o terminan de cargar las tipografías.
+ * El valor completo vive siempre en un span invisible (posición absoluta, no ocupa lugar) que sirve
+ * de regla para saber si entra.
  */
-function StatValue({ children }: { children: ReactNode }) {
+function StatValue({ value, compact, exact }: { value: ReactNode; compact?: string; exact?: string }) {
   const ref = useRef<HTMLParagraphElement>(null);
+  const rulerRef = useRef<HTMLSpanElement>(null);
+  const shownRef = useRef<HTMLSpanElement>(null);
+  const [useCompact, setUseCompact] = useState(false);
 
   useLayoutEffect(() => {
     const element = ref.current;
@@ -70,7 +82,19 @@ function StatValue({ children }: { children: ReactNode }) {
     let lastWidth = -1;
     const fit = () => {
       element.style.fontSize = '';
-      const size = fittedFontSize(parseFloat(getComputedStyle(element).fontSize), element.scrollWidth, element.clientWidth);
+      const available = element.clientWidth;
+      if (available <= 0) return;
+      const fullWidth = rulerRef.current?.getBoundingClientRect().width ?? element.scrollWidth;
+      if (fullWidth <= available) {
+        setUseCompact(false);
+        return;
+      }
+      if (compact !== undefined && !useCompact) {
+        setUseCompact(true); // el siguiente pase mide el valor compacto
+        return;
+      }
+      const shownWidth = shownRef.current?.getBoundingClientRect().width ?? fullWidth;
+      const size = fittedFontSize(parseFloat(getComputedStyle(element).fontSize), shownWidth, available);
       if (size !== null) element.style.fontSize = `${size}px`;
     };
     fit();
@@ -93,21 +117,42 @@ function StatValue({ children }: { children: ReactNode }) {
       observer?.disconnect();
       cancelAnimationFrame(frame);
     };
-  }, [children]);
+  }, [value, compact, useCompact]);
+
+  const compacted = useCompact && compact !== undefined;
 
   return (
     <p
       ref={ref}
-      className="mt-2 whitespace-nowrap font-display text-xl font-bold leading-none tracking-[-0.02em] tabular-nums text-foreground sm:text-2xl"
+      title={compacted ? exact : undefined}
+      className="relative mt-2 whitespace-nowrap font-display text-xl font-bold leading-none tracking-[-0.02em] tabular-nums text-foreground sm:text-2xl"
     >
-      {children}
+      <span ref={shownRef} aria-hidden={compacted || undefined}>
+        {compacted ? compact : value}
+      </span>
+      {compacted && exact ? <span className="sr-only">{exact}</span> : null}
+      {compact !== undefined && (
+        // Regla invisible con el valor completo: mide cuánto ocupa sin ocupar lugar. Va dentro de una
+        // caja de 0 px con `overflow: hidden` para no ensanchar la página cuando el número es más ancho.
+        <span aria-hidden="true" className="pointer-events-none absolute left-0 top-0 h-0 w-0 overflow-hidden">
+          <span ref={rulerRef} className="absolute left-0 top-0 whitespace-nowrap">
+            {value}
+          </span>
+        </span>
+      )}
     </p>
   );
 }
 
 export interface StatCardProps {
   label: ReactNode;
-  value: ReactNode;
+  /** Valor ya formateado. Con `money` se puede omitir. */
+  value?: ReactNode;
+  /**
+   * Monto en pesos: la tarjeta lo formatea y, si no entra, pasa sola al formato compacto
+   * ("$ 11,97 M") con el importe exacto en el `title` y para lectores de pantalla.
+   */
+  money?: NumericInput;
   icon?: LucideIcon;
   tone?: StatTone;
   /** Texto chico debajo del valor (p. ej. "registrados"). */
@@ -128,6 +173,7 @@ export interface StatCardProps {
 export function StatCard({
   label,
   value,
+  money,
   icon: Icon,
   tone = 'primary',
   hint,
@@ -139,6 +185,10 @@ export function StatCard({
 }: StatCardProps) {
   const positive = trend ? (trend.invert ? trend.value <= 0 : trend.value >= 0) : true;
   const TrendIcon = trend && trend.value < 0 ? ArrowDownRight : ArrowUpRight;
+  const isMoney = money !== undefined && money !== null && money !== '';
+  const shownValue = value ?? (isMoney ? formatMoney(money) : EMPTY_VALUE);
+  const compactValue = isMoney ? formatMoneyCompact(money) : undefined;
+  const exactValue = isMoney ? formatMoney(money) : undefined;
 
   const body = (
     <>
@@ -154,7 +204,7 @@ export function StatCard({
       {loading ? (
         <div className="gd-skeleton mt-3 h-8 w-28 rounded-[6px] bg-muted" aria-hidden="true" />
       ) : (
-        <StatValue>{value}</StatValue>
+        <StatValue value={shownValue} compact={compactValue} exact={exactValue} />
       )}
       {(hint || trend) && (
         <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
