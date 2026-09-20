@@ -1,0 +1,185 @@
+name: Pruebas
+
+# Corre las pruebas de los tres servicios.
+#
+# Cuándo:
+#   - en cada push a una rama de trabajo (para verlo antes de abrir el pull request);
+#   - en cada pull request contra main (es el control que hay que exigir para poder mergear);
+#   - antes de cada despliegue: deploy.yml lo llama con `uses:` y solo despliega si pasó.
+#
+# Para que un pull request NO se pueda mergear con las pruebas en rojo hay que marcarlo como
+# obligatorio una sola vez en GitHub:
+#   Settings → Branches → Add branch ruleset (o Branch protection rule) sobre `main`
+#   → "Require status checks to pass before merging" → elegir: backend, frontend, ai-service, nginx.
+# Ver docs/ci-y-variables.md §3.
+on:
+  push:
+    branches-ignore: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'design/**'
+  pull_request:
+    branches: [main]
+  workflow_call: {}
+  workflow_dispatch: {}
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Backend (Spring Boot): unitarias + integración contra un PostgreSQL de verdad
+  # y piso de cobertura con JaCoCo.
+  # ---------------------------------------------------------------------------
+  backend:
+    name: Backend (Java 21)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: dev
+          POSTGRES_DB: gondolia_it
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Java 21 (Temurin) con caché de Maven
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+
+      - name: Pruebas y cobertura
+        working-directory: backend
+        # -Dgondolia.it=true enciende las pruebas de integración y, con ellas, el piso de
+        # cobertura real del perfil 'cobertura-completa' (ver backend/pom.xml).
+        run: mvn -B --no-transfer-progress verify -Dgondolia.it=true
+
+      - name: Guardar el informe de cobertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura-backend
+          path: backend/target/site/jacoco/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Guardar los resultados de las pruebas
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-backend
+          path: backend/target/surefire-reports/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # Frontend (React + Vite): tipos, pruebas con cobertura y build de producción.
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: Frontend (Node 22)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node 22 con caché de npm
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Tipos
+        run: npm run typecheck
+
+      - name: Pruebas y cobertura
+        run: npm run test:coverage
+
+      - name: Build de producción
+        run: npm run build
+
+      - name: Guardar el informe de cobertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura-frontend
+          path: frontend/coverage/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # Servicio de IA (FastAPI): pytest con el mismo Tesseract que la imagen Docker.
+  # ---------------------------------------------------------------------------
+  ai-service:
+    name: Servicio de IA (Python 3.12)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: ai-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python 3.12 con caché de pip
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: ai-service/requirements.txt
+
+      # Los mismos paquetes que instala ai-service/Dockerfile: sin ellos las pruebas de OCR se saltean.
+      - name: Tesseract (spa + eng)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-spa tesseract-ocr-eng
+
+      - run: pip install -r requirements.txt
+
+      - name: Pruebas y cobertura
+        run: pytest
+
+      - name: Guardar el informe de cobertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura-ai-service
+          path: ai-service/coverage.xml
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # nginx: la configuración compila y, detrás de un proxy TLS, borra el header Origin
+  # de las requests del propio frontend. Si no lo hiciera, el backend las rechazaría con
+  # 403 "Invalid CORS request" y no se podría iniciar sesión en el sitio publicado.
+  # ---------------------------------------------------------------------------
+  nginx:
+    name: nginx (configuración y CORS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: nginx con el módulo njs
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends nginx-light libnginx-mod-http-js
+
+      - name: Comprobar la configuración
+        run: bash frontend/nginx/test-config.sh

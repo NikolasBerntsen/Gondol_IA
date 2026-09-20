@@ -37,6 +37,15 @@ docker compose version >/dev/null 2>&1 || die "Falta el plugin 'docker compose' 
 rand() { head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c "${1:-48}"; }
 
 # --------------------------------------------------------------------------- .env
+# Agrega una clave al .env solo si todavía no está.
+ensure_env_default() {
+  local key="$1" value="$2"
+  if ! grep -q "^$key=" "$ENV_FILE"; then
+    echo "$key=$value" >> "$ENV_FILE"
+    log "Agregado $key al $ENV_FILE"
+  fi
+}
+
 # Vive SOLO en la VM: guarda los secretos y sobrevive a los despliegues (rsync lo excluye).
 ensure_env() {
   if [ ! -f "$ENV_FILE" ]; then
@@ -52,11 +61,16 @@ APP_TIMEZONE=America/Argentina/Buenos_Aires
 APP_BOOTSTRAP_OWNER_EMAIL=dueno@gondolia.app
 APP_BOOTSTRAP_OWNER_PASSWORD=Gondolia2026!
 APP_OPENFOODFACTS_ENABLED=true
+# Origen público del sitio (para la política CORS del backend).
+APP_CORS_ALLOWED_ORIGINS=https://$PUBLIC_HOST
 # Datos de demostración (los controla la variable SEED_DEMO_DATA del repo en GitHub).
 APP_SEED_DEMO=true
 EOF
     chmod 600 "$ENV_FILE"
   fi
+
+  # Claves nuevas en VMs que ya tenían un .env de antes (no pisa lo que haya editado a mano).
+  ensure_env_default APP_CORS_ALLOWED_ORIGINS "https://$PUBLIC_HOST"
 
   # SEED_DEMO_DATA (variable del repo) manda sobre APP_SEED_DEMO del .env.
   if [ -n "${SEED_DEMO_DATA:-}" ]; then

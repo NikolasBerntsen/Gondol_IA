@@ -27,8 +27,9 @@ los comercios sin ver sus datos, publican avisos y **alertas de recall**, y un e
 12. [Guion de demo](#guion-de-demo)
 13. [Desarrollo local sin Docker](#desarrollo-local-sin-docker)
 14. [Configuración (.env)](#configuración-env)
-15. [Solución de problemas](#solución-de-problemas)
-16. [Estructura del repositorio](#estructura-del-repositorio)
+15. [Pruebas y despliegue](#pruebas-y-despliegue)
+16. [Solución de problemas](#solución-de-problemas)
+17. [Estructura del repositorio](#estructura-del-repositorio)
 
 ---
 
@@ -487,7 +488,26 @@ aplicá los cambios con `./start.sh restart`.
 | `APP_TIMEZONE` | `America/Argentina/Buenos_Aires` | Zona horaria del negocio (qué es "hoy") |
 | `LAN_IPS` | detectadas por start.sh | IPs para el certificado y las URLs del celular (separadas por coma) |
 | `CERT_HOSTNAMES` | vacío | Hostnames extra para el certificado (ej.: `mi-pc.local`) |
+| `APP_CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Orígenes que acepta el backend; en Docker no hace falta tocarlo |
 | `JAVA_OPTS` | `-XX:MaxRAMPercentage=40.0 …` | Opcional: memoria y opciones de la JVM del backend |
+
+## Pruebas y despliegue
+
+Cada push a una rama y cada pull request contra `main` corren las pruebas de los tres servicios y la
+configuración de nginx (`.github/workflows/ci.yml`). El despliegue a la VM de Oracle depende de que
+esas pruebas pasen, así que un merge a `main` en rojo no llega al servidor.
+
+```bash
+cd backend    && mvn verify                 # unitarias (+ integración con -Dgondolia.it=true)
+cd frontend   && npm run test:coverage      # Vitest + cobertura
+cd ai-service && pytest                     # pytest + cobertura
+bash frontend/nginx/test-config.sh          # configuración de nginx y borrado del header Origin
+```
+
+El inventario completo de secrets y variables (los de GitHub, los del `.env` de la VM y los de las
+imágenes), y cómo exigir los checks para poder mergear, está en
+[`docs/ci-y-variables.md`](docs/ci-y-variables.md). El despliegue en sí está en
+[`deploy/README-DESPLIEGUE.md`](deploy/README-DESPLIEGUE.md).
 
 ## Solución de problemas
 
@@ -539,7 +559,9 @@ gondolia/
 ├── README.md                 # esta guía
 ├── SPEC.md                   # especificación técnica (contrato entre módulos)
 ├── certs/                    # (generado, ignorado por git) CA local + certificado del servidor
-├── docs/                     # documentación de la API por módulo
+├── .github/workflows/        # ci.yml (pruebas) y deploy.yml (despliegue a Oracle Cloud)
+├── deploy/                   # despliegue en la VM de Oracle (deploy.sh + guía)
+├── docs/                     # documentación de la API por módulo y docs/ci-y-variables.md
 ├── backend/                  # Spring Boot 3.5 · Java 21 · Maven (+ Dockerfile)
 ├── ai-service/               # Python 3.12 · FastAPI (+ Dockerfile)
 └── frontend/                 # React 18 · TypeScript · Vite 5 · Tailwind 3

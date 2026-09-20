@@ -147,7 +147,8 @@ export function formatMoney(value: NumericInput, options: FormatMoneyOptions = {
 
 /**
  * Monto abreviado para donde el número completo no entra (KPI de una grilla de 4 columnas, mosaicos,
- * ejes de gráficos): `11974748.39` → `"$ 11,97 M"`, `850000` → `"$ 850 mil"`, `8450` → `"$ 8.450"`.
+ * ejes de gráficos): `8974748.39` → `"$ 8,97 M"`, `850000` → `"$ 850 mil"`, `8450` → `"$ 8.450"`.
+ * Los decimales bajan a medida que crece el monto: 2 por debajo de 10 M, 1 hasta 100 M y ninguno arriba.
  *
  * **Siempre** acompañalo del valor exacto: `title`, tooltip o texto para lectores de pantalla
  * (`StatCard` lo hace solo). Nunca lo uses para montos que se cobran o se firman (total del POS,

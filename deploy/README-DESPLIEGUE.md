@@ -30,8 +30,13 @@ Internet ──HTTPS──> Caddy (del proyecto BioTrust: es el único dueño de
 
 ## Despliegue automático (GitHub Actions)
 
-Cada **push a `main`** dispara `.github/workflows/deploy.yml`: copia el código por rsync a
-`/home/ubuntu/Gondol_IA` y ejecuta `deploy/deploy.sh` en la VM.
+Cada **push a `main`** dispara `.github/workflows/deploy.yml`, que primero corre las pruebas de los
+tres servicios y de la configuración de nginx (`.github/workflows/ci.yml`) y, solo si pasan, copia el
+código por rsync a `/home/ubuntu/Gondol_IA` y ejecuta `deploy/deploy.sh` en la VM. Al final comprueba
+que el sitio responda y que el login acepte el `Origin` del dominio público.
+
+El inventario completo de secrets, variables y pisos de cobertura está en
+[`docs/ci-y-variables.md`](../docs/ci-y-variables.md).
 
 ### Lo que hay que configurar una sola vez en GitHub
 
@@ -78,7 +83,9 @@ bash deploy/deploy.sh logs backend
 
 Lo crea `deploy.sh` en el primer despliegue, vive **solo en la VM** (`/home/ubuntu/Gondol_IA/.env`),
 nunca se sube al repositorio y **rsync no lo pisa**. Contiene la contraseña de la base, el secreto
-JWT (ambos aleatorios), la zona horaria y `APP_SEED_DEMO`.
+JWT (ambos aleatorios), la zona horaria, `APP_CORS_ALLOWED_ORIGINS` (el origen público del sitio) y
+`APP_SEED_DEMO`. En cada despliegue `deploy.sh` agrega las claves nuevas que falten sin tocar las que
+ya están; el detalle de cada una está en [`docs/ci-y-variables.md`](../docs/ci-y-variables.md) §2.
 
 ## Entrada por Caddy
 
@@ -103,6 +110,7 @@ siguiente despliegue propio.
 |---|---|
 | 502 en la URL | `bash deploy/deploy.sh status` y `logs`: el stack está caído o todavía arrancando (la primera vez tarda: compila Java y el frontend en ARM). |
 | El sitio no carga y los otros tampoco | El Caddy de BioTrust está caído: `docker logs biotrust-caddy`. |
-| El deploy falla en GitHub | Faltó el secreto `VM_SSH_KEY` o cambió la IP de la VM (`VM_HOST` en el workflow). |
+| El deploy falla en GitHub | Faltó el secreto `VM_SSH_KEY`, cambió la IP de la VM (`VM_HOST` en el workflow) o las pruebas quedaron en rojo (mirá el job que falló). |
+| La pantalla de login se ve pero "Ingresar" dice "No tenés permisos" | El `POST /api/auth/login` volvió 403 por CORS. Revisá `APP_CORS_ALLOWED_ORIGINS` en el `.env` de la VM y corré `bash frontend/nginx/test-config.sh` (docs/ci-y-variables.md §2.1). |
 | Login demo no anda | Revisá `SEED_DEMO_DATA`; con `false` solo existe `dueno@gondolia.app`. |
 | Se llenó el disco | `docker system prune -af` en la VM (ojo: borra imágenes de los tres proyectos). |

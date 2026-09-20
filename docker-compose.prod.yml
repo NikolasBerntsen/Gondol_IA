@@ -103,6 +103,10 @@ services:
       APP_BOOTSTRAP_OWNER_PASSWORD: ${APP_BOOTSTRAP_OWNER_PASSWORD:?Falta APP_BOOTSTRAP_OWNER_PASSWORD en el .env de la VM}
       APP_OPENFOODFACTS_ENABLED: ${APP_OPENFOODFACTS_ENABLED:-true}
       APP_TIMEZONE: ${APP_TIMEZONE:-America/Argentina/Buenos_Aires}
+      # Origen público del sitio. nginx ya borra el header Origin de los pedidos del propio frontend
+      # (mismo origen = no son CORS), pero si alguna vez llega igual, el backend tiene que reconocerlo
+      # como propio: si no, responde 403 "Invalid CORS request" y no se puede iniciar sesión.
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-https://gondolia.144-22-138-149.sslip.io}
       JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=40.0 -XX:+ExitOnOutOfMemoryError}
     expose:
       - "8080"
