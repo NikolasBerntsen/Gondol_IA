@@ -1,6 +1,7 @@
 import { Paperclip, UserRound } from 'lucide-react';
 import { ROLE_LABELS, TICKET_CHANNEL_LABELS } from '@/api/types';
 import { SeverityItem } from '@/components/gondola';
+import { Truncate } from '@/components/ui/Truncate';
 import { cn } from '@/lib/cn';
 import { formatRelative } from '@/lib/format';
 import { ticketStripe } from '../labels';
@@ -37,11 +38,11 @@ export function TicketListItem({ ticket, active, showTenant, onSelect, dense }: 
         <span className="flex items-start justify-between gap-2">
           <span className="min-w-0 flex-1">
             {showTenant && (
-              <span className="block truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <Truncate className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {ticket.tenantName}
-              </span>
+              </Truncate>
             )}
-            <span className="block truncate font-medium text-foreground">{ticket.subject}</span>
+            <Truncate className="block font-medium text-foreground">{ticket.subject}</Truncate>
           </span>
           <span className="flex shrink-0 items-center gap-1.5">
             <UnreadBadge count={ticket.unreadCount} />
@@ -55,7 +56,7 @@ export function TicketListItem({ ticket, active, showTenant, onSelect, dense }: 
           {ticket.lastMessagePreview === 'Imagen adjunta' && (
             <Paperclip className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           )}
-          <span className="truncate">{ticket.lastMessagePreview ?? 'Sin mensajes todavía'}</span>
+          <Truncate>{ticket.lastMessagePreview ?? 'Sin mensajes todavía'}</Truncate>
         </span>
 
         <span className="flex flex-wrap items-center gap-1.5 pt-0.5">

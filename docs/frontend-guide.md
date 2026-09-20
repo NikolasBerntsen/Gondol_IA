@@ -449,6 +449,7 @@ papel claro con tinta oscura (§9.1). No hace falta nada en la página.
 | `Spinner`, `PageSpinner`, `Skeleton` | Cargas en línea, de sección y esqueletos (`<Skeleton className="h-4 w-32" />`). |
 | `Progress` | Barra de progreso (Radix) para la aplicación de una importación. |
 | `Tooltip` + `TooltipProvider/Trigger/Content` | Requiere un `TooltipProvider` arriba. |
+| `Truncate` (`useTruncationTitle`) | Texto de una línea (`lines={2}` o `3` para `line-clamp`) que, **solo si queda cortado**, expone el valor completo en el `title` (docs/design-system.md §3). `as` (`span` por defecto; sirve `p`, `div`, `dd`, `Link`…), `fullText` (cuando los hijos no son texto plano), `className`. Usalo en vez de `className="truncate"` para todo dato del comercio: nombres, marcas, correos, asuntos, notas, archivos. `useTruncationTitle(texto)` hace lo mismo desde un componente propio (así lo usa el rótulo de `StatCard`). |
 | `Popover`, `DropdownMenu*`, `Sheet*`, `Separator`, `Label` | Primitivas de Radix ya adaptadas a los tokens. |
 | `useDropdown`, `DropdownPanel`, `DropdownItem`, `DropdownSeparator`, `DropdownLabel` | Desplegable propio (click afuera, ESC, flechas) para paneles con contenido libre. El panel se corre solo para quedar dentro de la pantalla con 16 px de margen. Al abrir enfoca el ítem marcado (`aria-checked`); `useDropdown({ initialFocus: 'first' })` enfoca siempre el primero (menús de acciones con una opción marcada adentro, como el tema del menú de usuario). |
 | `AuthImage` | `src` (ruta `/api/...` protegida), `alt`, `fallback`, `placeholderClassName`. |

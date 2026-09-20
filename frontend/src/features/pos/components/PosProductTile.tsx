@@ -1,5 +1,6 @@
 import { Ban } from 'lucide-react';
 import { StatusPill } from '@/components/gondola';
+import { Truncate } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { formatMoney } from '@/lib/format';
 import { recallLotsLabel } from '../recall';
@@ -49,14 +50,15 @@ export function PosProductTile({ product, inCart, onAdd }: PosProductTileProps) 
       aria-label={`${product.name}, ${formatMoney(unitPrice, { decimals: 2 })}${stateLabel}`}
     >
       <div className="flex items-start justify-between gap-2">
-        <span
+        <Truncate
+          lines={2}
           className={cn(
-            'line-clamp-2 text-base font-semibold leading-5 [text-wrap:balance]',
+            'text-base font-semibold leading-5 [text-wrap:balance]',
             blocked || out ? 'text-muted-foreground' : 'text-foreground',
           )}
         >
           {product.name}
-        </span>
+        </Truncate>
         {inCart > 0 ? (
           <span
             className="grid h-6 min-w-6 place-items-center rounded-full bg-primary px-1.5 text-xs font-bold tabular-nums text-primary-foreground"
@@ -66,7 +68,7 @@ export function PosProductTile({ product, inCart, onAdd }: PosProductTileProps) 
           </span>
         ) : null}
       </div>
-      <span className="mt-0.5 truncate text-xs text-muted-foreground">{product.brand ?? ' '}</span>
+      <Truncate className="mt-0.5 text-xs text-muted-foreground">{product.brand ?? ' '}</Truncate>
 
       <div className="mt-auto flex flex-wrap items-end justify-between gap-x-2 gap-y-1 pt-2">
         {blocked ? (

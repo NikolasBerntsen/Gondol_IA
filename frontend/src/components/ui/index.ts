@@ -162,3 +162,4 @@ export { Tabs, type TabItem, type TabsProps } from './Tabs';
 export { Textarea, type TextareaProps } from './Textarea';
 export { Toggle, type ToggleProps } from './Toggle';
 export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './Tooltip';
+export { Truncate, useTruncationTitle, type TruncateLines, type TruncateProps } from './Truncate';

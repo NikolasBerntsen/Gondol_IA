@@ -1,6 +1,6 @@
 import { Trash2 } from 'lucide-react';
 import { BarcodeDigits, StockStatusPill } from '@/components/gondola';
-import { Button, Input, QtyStepper } from '@/components/ui';
+import { Button, Input, QtyStepper, Truncate } from '@/components/ui';
 import { formatMoney } from '@/lib/format';
 import type { ProductPick } from '../api';
 
@@ -42,7 +42,9 @@ export function SaleCart({ lines, onQuantityChange, onPriceChange, onRemove, dis
           <li key={line.product.id} className="flex flex-col gap-2 px-3 py-3 sm:px-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate text-base font-semibold text-foreground">{line.product.name}</p>
+                <Truncate as="p" className="text-base font-semibold text-foreground">
+                  {line.product.name}
+                </Truncate>
                 <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
                   {line.product.barcode ? <BarcodeDigits code={line.product.barcode} digitsOnly /> : null}
                   <span className="text-xs tabular-nums text-muted-foreground">{line.stock} u. vendibles</span>

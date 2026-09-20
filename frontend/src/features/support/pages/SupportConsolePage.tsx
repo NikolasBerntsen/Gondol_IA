@@ -31,6 +31,7 @@ import {
   Sheet,
   SheetContent,
   Skeleton,
+  Truncate,
   pageInfo,
 } from '@/components/ui';
 import { cn } from '@/lib/cn';
@@ -372,10 +373,12 @@ export default function SupportConsolePage() {
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-display text-lg font-semibold leading-tight">{ticket.subject}</p>
-                  <p className="truncate text-sm text-muted-foreground">
+                  <Truncate as="p" className="font-display text-lg font-semibold leading-tight">
+                    {ticket.subject}
+                  </Truncate>
+                  <Truncate as="p" className="text-sm text-muted-foreground">
                     {ticket.tenantName} · {ticket.createdByName ?? 'Usuario dado de baja'}
-                  </p>
+                  </Truncate>
                 </div>
                 {/* Con la bandeja al lado (lg+) la columna es angosta: estado y prioridad ya se ven en la fila de la
                     bandeja y en "Datos", así que el asunto se queda con el ancho. */}

@@ -13,6 +13,7 @@ import {
   SearchInput,
   Select,
   Table,
+  Truncate,
   pageInfo,
   type TableColumn,
 } from '@/components/ui';
@@ -92,7 +93,7 @@ export default function MovementsPage() {
       mobile: 'title',
       cell: (row) => (
         <span className="flex flex-col gap-0.5">
-          <span className="truncate font-semibold text-foreground">{row.productName}</span>
+          <Truncate className="font-semibold text-foreground">{row.productName}</Truncate>
           <span className="flex flex-wrap items-center gap-1.5">
             {row.barcode ? <BarcodeDigits code={row.barcode} digitsOnly /> : null}
             {row.expiryDate ? (
@@ -158,7 +159,7 @@ export default function MovementsPage() {
       cell: (row) => (
         <span className="flex flex-col gap-0.5">
           <span className="font-mono text-xs text-muted-foreground">{row.batchRef ?? '—'}</span>
-          {row.reason ? <span className="truncate text-xs text-muted-foreground">{row.reason}</span> : null}
+          {row.reason ? <Truncate className="text-xs text-muted-foreground">{row.reason}</Truncate> : null}
         </span>
       ),
     },

@@ -34,6 +34,7 @@ import {
   PageSpinner,
   StatCard,
   Table,
+  Truncate,
   type TableColumn,
 } from '@/components/ui';
 import { formatDate, formatDateTime, formatMoney, formatNumber, formatRelative } from '@/lib/format';
@@ -458,7 +459,7 @@ export default function ProductDetailPage() {
                 <ul className="divide-y">
                   {product.stockByBranch.map((branch) => (
                     <li key={branch.branchId} className="flex items-center justify-between gap-3 py-2.5">
-                      <span className="min-w-0 truncate font-medium">{branch.branchName}</span>
+                      <Truncate className="min-w-0 font-medium">{branch.branchName}</Truncate>
                       <span className="flex shrink-0 items-center gap-2">
                         <span className="font-semibold tabular-nums">
                           {formatNumber(branch.sellableStock)} {unitShort(product.unit)}

@@ -21,6 +21,7 @@ import {
   Table,
   Tabs,
   Textarea,
+  Truncate,
   pageInfo,
   type TableColumn,
 } from '@/components/ui';
@@ -62,7 +63,9 @@ function TransferResultPanel({ transfer, onNew }: { transfer: Transfer; onNew: (
         {transfer.items.map((item) => (
           <li key={item.lotId} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
             <span className="min-w-0">
-              <span className="block truncate text-base font-semibold text-foreground">{item.productName}</span>
+              <Truncate className="block text-base font-semibold text-foreground">
+                {item.productName}
+              </Truncate>
               <span className="mt-0.5 flex flex-wrap items-center gap-1.5">
                 {item.barcode ? <BarcodeDigits code={item.barcode} digitsOnly /> : null}
                 {item.expiryDate ? (
@@ -225,7 +228,7 @@ function NewTransferTab() {
             <ul className="max-h-72 divide-y divide-border overflow-y-auto border-t border-border gd-scroll">
               {entries.map((entry) => (
                 <li key={entry.lot.lotId} className="flex items-center justify-between gap-2 px-4 py-2">
-                  <span className="min-w-0 truncate text-sm text-foreground">{entry.lot.productName}</span>
+                  <Truncate className="min-w-0 text-sm text-foreground">{entry.lot.productName}</Truncate>
                   <span className="shrink-0 text-sm font-semibold tabular-nums">{entry.quantity} u.</span>
                 </li>
               ))}
@@ -299,9 +302,9 @@ function HistoryTab() {
       mobile: 'subtitle',
       cell: (row) => (
         <span className="flex items-center gap-1.5 text-foreground">
-          <span className="truncate">{row.fromBranchName}</span>
+          <Truncate>{row.fromBranchName}</Truncate>
           <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <span className="truncate">{row.toBranchName}</span>
+          <Truncate>{row.toBranchName}</Truncate>
         </span>
       ),
     },
@@ -336,7 +339,7 @@ function HistoryTab() {
       cell: (row) => (
         <span className="flex flex-col gap-0.5">
           <span className="text-muted-foreground">{row.userName ?? '—'}</span>
-          {row.note ? <span className="truncate text-xs text-muted-foreground">{row.note}</span> : null}
+          {row.note ? <Truncate className="text-xs text-muted-foreground">{row.note}</Truncate> : null}
         </span>
       ),
     },

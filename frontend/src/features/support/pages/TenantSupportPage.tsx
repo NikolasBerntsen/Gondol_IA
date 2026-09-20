@@ -14,6 +14,7 @@ import {
   PageHeader,
   Segmented,
   Skeleton,
+  Truncate,
 } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { supportKeys, tenantSupportApi } from '../api';
@@ -167,10 +168,12 @@ export default function TenantSupportPage() {
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-display text-lg font-semibold leading-tight">{ticket.subject}</p>
-                  <p className="truncate text-sm text-muted-foreground">
+                  <Truncate as="p" className="font-display text-lg font-semibold leading-tight">
+                    {ticket.subject}
+                  </Truncate>
+                  <Truncate as="p" className="text-sm text-muted-foreground">
                     {ticket.assignedToName ? `Te atiende ${ticket.assignedToName}` : 'Esperando que un agente la tome'}
-                  </p>
+                  </Truncate>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                   <TicketStatusBadge status={ticket.status} size="sm" />

@@ -17,6 +17,7 @@ import {
   Select,
   Table,
   Toggle,
+  Truncate,
   type TableColumn,
 } from '@/components/ui';
 import { formatDate, formatDateTime, formatRelative } from '@/lib/format';
@@ -47,7 +48,9 @@ export default function PlatformTeamPage() {
             {row.fullName}
             {me?.id === row.id ? <span className="text-muted-foreground"> · vos</span> : null}
           </div>
-          <div className="truncate text-xs text-muted-foreground">{row.email}</div>
+          <Truncate as="div" className="text-xs text-muted-foreground">
+            {row.email}
+          </Truncate>
         </div>
       ),
     },

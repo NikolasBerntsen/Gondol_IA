@@ -2,6 +2,7 @@ import type { LucideIcon } from 'lucide-react';
 import type { HTMLAttributes } from 'react';
 import type { ExpiryBucket, ReorderStatus, Severity, StockStatus } from '@/api/types';
 import { cn } from '@/lib/cn';
+import { Truncate } from './Truncate';
 
 /**
  * Tonos preferidos: `neutral` · `primary` · `ok` · `warn` · `crit` · `info`.
@@ -113,7 +114,7 @@ export function Badge({
         />
       )}
       {Icon && <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
-      <span className="truncate">{children}</span>
+      <Truncate>{children}</Truncate>
     </span>
   );
 }

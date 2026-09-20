@@ -1,6 +1,7 @@
 import { Store } from 'lucide-react';
 import { useMemo } from 'react';
 import type { TableColumn, TableMobileSlot } from '@/components/ui/Table';
+import { Truncate } from '@/components/ui/Truncate';
 import { useBranch } from './BranchContext';
 
 export interface BranchColumnOptions {
@@ -20,7 +21,7 @@ export function branchColumn<T extends { branchName?: string | null }>(options: 
     cell: (row) => (
       <span className="inline-flex max-w-full items-center gap-1.5 whitespace-nowrap text-muted-foreground">
         <Store className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <span className="truncate">{row.branchName ?? '—'}</span>
+        <Truncate>{row.branchName ?? '—'}</Truncate>
       </span>
     ),
   };

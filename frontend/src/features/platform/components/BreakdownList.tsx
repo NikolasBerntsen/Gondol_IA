@@ -1,3 +1,4 @@
+import { Truncate } from '@/components/ui';
 import { formatNumber, formatRatio } from '@/lib/format';
 
 export interface BreakdownRow {
@@ -22,10 +23,10 @@ export function BreakdownList({ rows, emptyLabel }: { rows: BreakdownRow[]; empt
         return (
           <li key={row.key} className="space-y-1">
             <div className="flex items-baseline justify-between gap-3 text-base">
-              <span className="min-w-0 truncate text-foreground">
+              <Truncate className="min-w-0 text-foreground">
                 {row.label}
                 {row.hint ? <span className="text-muted-foreground"> · {row.hint}</span> : null}
-              </span>
+              </Truncate>
               <span className="shrink-0 tabular-nums text-muted-foreground">
                 <span className="font-semibold text-foreground">{formatNumber(row.value)}</span> ·{' '}
                 {formatRatio(ratio)}

@@ -11,6 +11,7 @@ import {
   QtyStepper,
   SearchInput,
   Skeleton,
+  Truncate,
   pageInfo,
 } from '@/components/ui';
 import { formatDate, formatNumber } from '@/lib/format';
@@ -98,7 +99,9 @@ export function TransferLotPicker({
                 }`}
               >
                 <div className="min-w-0">
-                  <p className="truncate text-base font-semibold text-foreground">{lot.productName}</p>
+                  <Truncate as="p" className="text-base font-semibold text-foreground">
+                    {lot.productName}
+                  </Truncate>
                   <span className="mt-1 flex flex-wrap items-center gap-1.5">
                     {lot.barcode ? <BarcodeDigits code={lot.barcode} digitsOnly /> : null}
                     {lot.expiryDate ? (

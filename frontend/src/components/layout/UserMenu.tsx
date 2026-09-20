@@ -5,8 +5,9 @@ import { ROLE_LABELS } from '@/api/types';
 import { useAuth } from '@/auth/AuthContext';
 import { Avatar } from '@/components/ui/Avatar';
 import { DropdownItem, DropdownLabel, DropdownPanel, DropdownSeparator, useDropdown } from '@/components/ui/Dropdown';
+import { Truncate } from '@/components/ui/Truncate';
 import { cn } from '@/lib/cn';
-import { THEME_OPTIONS, useTheme } from '@/theme';
+import { THEME_OPTIONS, themeHint, useTheme } from '@/theme';
 
 /** Avatar con nombre y rol; menú con Perfil, Notificaciones, Tema y Cerrar sesión. */
 export function UserMenu() {
@@ -35,8 +36,8 @@ export function UserMenu() {
       >
         <Avatar name={me.fullName} />
         <span className="hidden min-w-0 max-w-[10rem] flex-col text-left leading-tight lg:flex">
-          <span className="truncate text-sm font-semibold text-foreground">{me.fullName}</span>
-          <span className="truncate text-xs text-muted-foreground">{roleLabel}</span>
+          <Truncate className="text-sm font-semibold text-foreground">{me.fullName}</Truncate>
+          <Truncate className="text-xs text-muted-foreground">{roleLabel}</Truncate>
         </span>
         <ChevronDown
           className={cn('hidden h-4 w-4 text-muted-foreground transition-transform lg:block', dropdown.open && 'rotate-180')}
@@ -49,8 +50,12 @@ export function UserMenu() {
           <div className="flex items-center gap-3 px-2.5 pb-3 pt-2">
             <Avatar name={me.fullName} size="lg" />
             <div className="min-w-0">
-              <p className="truncate text-base font-semibold text-foreground">{me.fullName}</p>
-              <p className="truncate text-xs text-muted-foreground">{me.email}</p>
+              <Truncate as="p" className="text-base font-semibold text-foreground">
+                {me.fullName}
+              </Truncate>
+              <Truncate as="p" className="text-xs text-muted-foreground">
+                {me.email}
+              </Truncate>
               <p className="mt-1 inline-flex rounded-tag bg-primary/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary">
                 {roleLabel}
                 {me.tenant ? ` · ${me.tenant.name}` : ''}
@@ -88,7 +93,7 @@ export function UserMenu() {
  * menú abierto para comparar. Las flechas ↑/↓ recorren el menú entero; ←/→ se mueven dentro del segmentado.
  */
 function ThemeSection() {
-  const { preference, setPreference } = useTheme();
+  const { preference, systemTheme, setPreference } = useTheme();
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const labelId = useId();
 
@@ -123,6 +128,7 @@ function ThemeSection() {
               role="menuitemradio"
               aria-checked={checked}
               tabIndex={-1}
+              title={themeHint(option, systemTheme)}
               onClick={() => setPreference(option.value)}
               className={cn(
                 'inline-flex h-8 min-w-0 items-center justify-center gap-1 rounded-[6px] px-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',

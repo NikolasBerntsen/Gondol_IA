@@ -180,6 +180,13 @@ pueden encogerse, `truncate` con `title` para nombres largos, `break-words` en t
 con `overflow-x` para las tablas anchas y grillas que **pasan a menos columnas** en vez de apretar
 (`sm:grid-cols-2 xl:grid-cols-4`).
 
+**El `title` no se escribe a mano:** el componente `Truncate` (`components/ui/Truncate.tsx`, o el hook
+`useTruncationTitle` si el elemento lo arma otro componente) mide el nodo y pone el texto completo en el
+`title` **solo cuando de verdad quedó cortado** — así no aparecen globos en los textos que entran enteros, y
+ningún nombre, marca, correo, asunto, nota o archivo se queda sin manera de leerse completo. Vale igual para
+`line-clamp` (`lines={2}`): el rótulo de un KPI, el nombre en un mosaico del POS y el asunto de un ticket no
+tienen pantalla de detalle que los rescate.
+
 ---
 
 ## 4. Forma, espacio y elevación

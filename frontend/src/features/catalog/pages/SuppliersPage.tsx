@@ -16,6 +16,7 @@ import {
   Table,
   Textarea,
   Toggle,
+  Truncate,
   type TableColumn,
 } from '@/components/ui';
 import { formatNumber } from '@/lib/format';
@@ -169,11 +170,11 @@ export default function SuppliersPage() {
               <span className="text-muted-foreground">Sin teléfono</span>
             )}
             {supplier.email && (
-              <div className="truncate">
+              <Truncate as="div">
                 <a href={`mailto:${supplier.email}`} className="text-muted-foreground underline-offset-2 hover:underline">
                   {supplier.email}
                 </a>
-              </div>
+              </Truncate>
             )}
           </div>
         );

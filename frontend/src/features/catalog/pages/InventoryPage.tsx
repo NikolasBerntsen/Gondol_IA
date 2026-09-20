@@ -17,6 +17,7 @@ import {
   Segmented,
   Select,
   Table,
+  Truncate,
   pageInfo,
   type TableColumn,
 } from '@/components/ui';
@@ -125,12 +126,14 @@ export default function InventoryPage() {
       mobile: 'title',
       cell: (row) => (
         <div className="min-w-0">
+          {/* El nombre del producto no se recorta: si no entra, pasa a dos renglones (en la tarjeta de 390 px es
+              el título de la fila). */}
           <Link to={`/app/products/${row.id}`} className="font-semibold text-foreground hover:underline">
             {row.name}
           </Link>
-          <div className="truncate text-sm text-muted-foreground">
+          <Truncate as="div" className="text-sm text-muted-foreground">
             {[row.brand, row.categoryName].filter(Boolean).join(' · ') || 'Sin marca'}
-          </div>
+          </Truncate>
           {row.barcode && <div className="font-mono text-xs tabular-nums text-muted-foreground">{row.barcode}</div>}
           {!row.active && <div className="text-xs font-semibold text-muted-foreground">Dado de baja</div>}
         </div>

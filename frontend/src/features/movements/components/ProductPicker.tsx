@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { getErrorMessage } from '@/api/client';
 import { BarcodeDigits, StockStatusPill } from '@/components/gondola';
 import { BarcodeScanner } from '@/components/scanner';
-import { Button, Card, SearchInput, SecureContextWarning, Spinner } from '@/components/ui';
+import { Button, Card, SearchInput, SecureContextWarning, Spinner, Truncate } from '@/components/ui';
 import { isCameraSupported } from '@/lib/secureContext';
 import { useDebounce } from '@/lib/useDebounce';
 import { formatMoney } from '@/lib/format';
@@ -140,9 +140,11 @@ export function ProductPicker({ onPick, branchId, disabled }: ProductPickerProps
                       className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none disabled:opacity-50"
                     >
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-base font-semibold text-foreground">{product.name}</span>
+                        <Truncate className="block text-base font-semibold text-foreground">
+                          {product.name}
+                        </Truncate>
                         <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
-                          {product.brand ? <span className="truncate">{product.brand}</span> : null}
+                          {product.brand ? <Truncate>{product.brand}</Truncate> : null}
                           {product.barcode ? <BarcodeDigits code={product.barcode} digitsOnly /> : null}
                         </span>
                       </span>

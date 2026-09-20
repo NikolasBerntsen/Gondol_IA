@@ -10,6 +10,7 @@ import {
   Field,
   Input,
   Skeleton,
+  Truncate,
 } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { formatMoney, formatTime } from '@/lib/format';
@@ -142,9 +143,9 @@ export function OpenSessionPanel({
                 >
                   <span className="min-w-0">
                     <span className="block text-base font-semibold text-foreground">{register.name}</span>
-                    <span className="block truncate text-sm text-muted-foreground">
+                    <Truncate className="block text-sm text-muted-foreground">
                       {register.branchName ?? 'Sucursal'}
-                    </span>
+                    </Truncate>
                   </span>
                   {occupied ? (
                     <span className="flex shrink-0 items-center gap-2">

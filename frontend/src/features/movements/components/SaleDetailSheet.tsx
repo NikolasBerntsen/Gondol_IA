@@ -14,6 +14,7 @@ import {
   SheetHeader,
   SheetTitle,
   Skeleton,
+  Truncate,
 } from '@/components/ui';
 import { formatDateTime, formatMoney, formatNumber } from '@/lib/format';
 import { salesApi } from '../api';
@@ -29,7 +30,9 @@ function LineCard({ line }: { line: SaleLine }) {
     <li className="rounded-panel border border-border p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-base font-semibold text-foreground">{line.productName}</p>
+          <Truncate as="p" className="text-base font-semibold text-foreground">
+            {line.productName}
+          </Truncate>
           {line.barcode ? (
             <span className="mt-0.5 block">
               <BarcodeDigits code={line.barcode} digitsOnly />
