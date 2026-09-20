@@ -239,7 +239,7 @@ Al arrancar, `BootstrapRunner` crea el `PLATFORM_OWNER` con `APP_BOOTSTRAP_OWNER
 ```json
 {"id":41,"type":"RECALL_ALERT","severity":"CRITICAL","title":"Alerta de recall: Sopa de tomate La Huerta 340 g",
  "body":"Sucursal Centro: el lote L2409A de Sopa de tomate La Huerta 340 g (vence 25/09/2026) está alcanzado por el recall ...",
- "link":"/app/recalls","referenceType":"RECALL_MATCH","referenceId":7,"read":false,"createdAt":"2026-09-17T14:10:00.123456Z"}
+ "link":"/app/recalls?match=7","referenceType":"RECALL_MATCH","referenceId":7,"read":false,"createdAt":"2026-09-17T14:10:00.123456Z"}
 ```
 `type`: `ANNOUNCEMENT`, `RECALL_ALERT`, `ALERT`, `RECOMMENDATION`, `TICKET_MESSAGE`, `TICKET_STATUS`, `SYSTEM`.
 `severity`: `INFO`, `WARNING`, `CRITICAL`. `link` es una ruta del frontend (puede ser `null`).
@@ -476,7 +476,8 @@ Reglas (SPEC §4.2):
   vencimiento dentro (solo "desde" o solo "hasta" también se respetan; lote sin vencimiento no coincide con un rango).
 - Devuelven las coincidencias vigentes (nuevas y previas). Solo para las **nuevas**: `recall_matches` con `branch_id`
   (idempotente por `(announcement_id, lot_id)`), lote en `RECALLED`, alerta `RECALL_MATCH` CRITICAL con `branch_id`
-  (`dedupe_key = RECALL:{announcementId}:{lotId}`), notificación `RECALL_ALERT` CRITICAL (link `/app/recalls`,
+  (`dedupe_key = RECALL:{announcementId}:{lotId}`), notificación `RECALL_ALERT` CRITICAL (link `/app/recalls?match={matchId}`,
+  el mismo deep link que el diálogo de seguridad, así la campana no cae en la sucursal elegida en el topbar;
   `referenceType = RECALL_MATCH`, `referenceId` = id de la coincidencia) y push `RecallAlertMessage` a los usuarios con
   acceso a esa sucursal, `announcements.affected_tenants_count` actualizado, `StockChangedEvent` si el lote pasó a
   cuarentena y un `RecallMatchedEvent(tenantId, announcementId, matchIds)` por tenant.

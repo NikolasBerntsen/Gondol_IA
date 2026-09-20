@@ -7,6 +7,7 @@ import com.gondolia.domain.common.Severity;
 import com.gondolia.domain.support.Attachment;
 import com.gondolia.domain.support.AttachmentPurpose;
 import com.gondolia.domain.tenant.BusinessType;
+import com.gondolia.recall.RecallMatchingService;
 import com.gondolia.seed.DemoWorldBuilder.Platform;
 import com.gondolia.seed.DemoWorldBuilder.TenantRecord;
 import com.gondolia.seed.SimModel.Lot;
@@ -254,9 +255,9 @@ final class DemoStories {
                 db.update("""
                         insert into notifications (user_id, tenant_id, type, severity, title, body, link, reference_type,
                                                    reference_id, read_at, created_at)
-                        values (?, ?, 'RECALL_ALERT', 'CRITICAL', ?, ?, '/app/recalls', 'RECALL_MATCH', ?, ?, ?)""",
-                        userId, tenant.id, "Alerta de recall: " + productName, message, matchId, readAt,
-                        recall.matchedAt());
+                        values (?, ?, 'RECALL_ALERT', 'CRITICAL', ?, ?, ?, 'RECALL_MATCH', ?, ?, ?)""",
+                        userId, tenant.id, "Alerta de recall: " + productName, message,
+                        RecallMatchingService.recallMatchLink(matchId), matchId, readAt, recall.matchedAt());
             }
         }
         db.update("update announcements set affected_tenants_count = ? where id = ?", affectedTenants.size(),

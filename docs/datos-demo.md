@@ -148,7 +148,8 @@ Fisherton**. Vida Sana no vende el producto; El Sol Centro y Echesortu tienen la
 1. Abrí tres ventanas (o perfiles del navegador) y entrá con:
    - `admin@donpepe.com` (o `cajero@donpepe.com`) → va a recibir la alerta;
    - `empleado@elsol.com` (Centro y Fisherton) → va a recibir la alerta de **Fisherton**;
-   - `empleado.echesortu@elsol.com` o `cajero@elsol.com` (control: **no** recibe nada, no tiene acceso a Fisherton).
+   - `empleado.echesortu@elsol.com` o `cajero@elsol.com` (control: **no** tiene acceso a Fisherton, así que no le
+     salta la alerta de Seguridad alimentaria; el aviso general del recall sí le llega, ver el paso 3).
 2. En otra ventana, `dueno@gondolia.app` → **Avisos y recalls** → **Nuevo aviso** → tipo **Recall**:
    - Producto: `Sopa de tomate en lata La Huerta 340 g` · Marca: `La Huerta` · Código de barras: `7791234500017`
    - Lotes: `L2409A` (sin marcar "todos los lotes", sin rango de vencimiento)
@@ -157,7 +158,11 @@ Fisherton**. Vida Sana no vende el producto; El Sol Centro y Echesortu tienen la
    - **Vista previa**: 2 comercios afectados y 2 lotes (unas 50 unidades). El dueño solo ve cantidades, nunca cuáles.
 3. **Publicar**. En el acto:
    - Don Pepe y los usuarios de El Sol con acceso a Fisherton ven el aviso de **Seguridad alimentaria** en pantalla
-     (y la notificación crítica en la campana). El usuario de control no recibe nada.
+     (el diálogo rojo bloqueante) y la alerta de recall en la campana.
+   - El usuario de control **no** ve el diálogo ni la alerta de recall: los recalls llegan como aviso a todos los
+     comercios, así que en su campana sí aparece la notificación del aviso y en **Avisos** la tarjeta del recall,
+     pero **sin** la píldora "Te afecta" y sin lotes para retirar. Ese es el contraste que se muestra: el que
+     tiene el lote queda bloqueado, el que no, solo se entera.
    - Los dos lotes quedan **en cuarentena** (`RECALLED`): dejan de ser vendibles, el POS los bloquea y el Inicio muestra
      la coincidencia abierta.
    - La consola de dueños muestra "2 comercios afectados".
@@ -168,7 +173,8 @@ Fisherton**. Vida Sana no vende el producto; El Sol Centro y Echesortu tienen la
    venderse: mientras el recall esté publicado el mostrador avisa "Recall vigente (lote L2409A)" y **no** ofrece
    "Vender igual", porque una lata sin lote registrado puede ser del lote retirado.
 5. En El Sol, `empleado@elsol.com` resuelve la de Fisherton. Aunque tenga elegida Centro en el topbar, la alerta le
-   aparece igual (se piden las de todas sus sucursales) y "Ver detalle y retirar del stock" lo lleva a Fisherton. La
+   aparece igual (se piden las de todas sus sucursales) y "Ver detalle y retirar del stock" lo lleva a Fisherton;
+   la alerta de recall de la campana lleva a la misma coincidencia, también cambiando de sucursal sola. La
    sopa de Centro (otro lote, ya chequeado al cargarlo) se sigue vendiendo hasta agotar lo cargado; por encima de eso
    tampoco hay "Vender igual" mientras dure el recall.
 6. Para comparar: en **Seguridad alimentaria** de Don Pepe o de El Sol queda también el **recall histórico resuelto**

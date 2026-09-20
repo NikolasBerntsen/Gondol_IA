@@ -165,7 +165,7 @@ class RecallMatchingServiceIntegrationTest extends PostgresIntegrationTest {
         assertThat(jdbc.queryForMap("""
                 select type, severity, link, reference_type from notifications where reference_id = ? limit 1
                 """, matchId)).containsAllEntriesOf(Map.of("type", "RECALL_ALERT", "severity", "CRITICAL",
-                "link", "/app/recalls", "reference_type", "RECALL_MATCH"));
+                "link", "/app/recalls?match=" + matchId, "reference_type", "RECALL_MATCH"));
         assertThat(affectedTenants(recall)).isEqualTo(1);
 
         @SuppressWarnings("unchecked")

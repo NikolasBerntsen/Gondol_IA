@@ -46,8 +46,9 @@ const RESOLUTION_OPTIONS: ReadonlyArray<{ value: RecallResolution; label: string
  * retiro del stock. Solo el administrador y el empleado pueden resolver (matriz §3.3).
  * <p>
  * El listado sigue la sucursal del topbar, pero una alerta puede ser de otra sucursal del usuario: con `?match=<id>`
- * (el botón del diálogo de seguridad) se cambia a la sucursal de esa coincidencia, y con una sucursal elegida se
- * avisa si quedan alertas sin resolver en las otras (el link de la campana no dice de qué sucursal es).
+ * (el botón del diálogo de seguridad y el link de la notificación `RECALL_ALERT` de la campana) se cambia a la
+ * sucursal de esa coincidencia. Con una sucursal elegida se avisa igual si quedan alertas sin resolver en las otras,
+ * para el que llega a la pantalla desde el menú.
  */
 export default function RecallsPage() {
   const { can } = useAccess();
