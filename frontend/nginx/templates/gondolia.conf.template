@@ -76,6 +76,12 @@ map $uri $gondolia_error_path {
     default                 "";
 }
 
+# "timestamp" de esos mismos errores: instante UTC terminado en "Z", igual que el del backend. No se usa
+# $time_iso8601 porque toma la zona del contenedor (TZ) y saldría "2026-09-20T01:47:20-03:00", que no es el
+# formato documentado. Ver njs/gondolia-errors.js. El módulo se carga en nginx.conf (load_module, Dockerfile).
+js_import gondolia_errors from /etc/nginx/njs/gondolia-errors.js;
+js_set $gondolia_error_timestamp gondolia_errors.utcTimestamp;
+
 # connect-src de la CSP (snippets/gondolia-csp.conf): el WebSocket de STOMP va a ws(s)://<mismo host:puerto>/ws.
 # 'self' ya lo cubre con CSP 3, pero los Safari viejos no lo aplican a ws/wss; por eso se agrega explícito
 # (solo si el Host es un host[:puerto] válido).
