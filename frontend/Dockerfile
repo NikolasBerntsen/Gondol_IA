@@ -16,17 +16,22 @@ FROM nginx:1.27-alpine
 
 # openssl: genera la CA local y el certificado del servidor al iniciar (docker-entrypoint.d).
 # worker_processes 2: sobra para una red local y evita un proceso por núcleo de la PC.
+# load_module: njs (ya viene en la imagen oficial) para el timestamp UTC de los errores que genera nginx en /api/
+# (njs/gondolia-errors.js). Va en el contexto main, por eso se agrega acá y no en templates/gondolia.conf.template.
 RUN apk add --no-cache openssl \
     && rm -f /etc/nginx/conf.d/default.conf \
     && sed -i 's/^worker_processes[[:space:]].*/worker_processes 2;/' /etc/nginx/nginx.conf \
-    && mkdir -p /etc/nginx/certs /etc/nginx/snippets
+    && test -f /usr/lib/nginx/modules/ngx_http_js_module.so \
+    && sed -i '1i load_module modules/ngx_http_js_module.so;' /etc/nginx/nginx.conf \
+    && mkdir -p /etc/nginx/certs /etc/nginx/snippets /etc/nginx/njs
 
 COPY nginx/templates/ /etc/nginx/templates/
 COPY nginx/snippets/ /etc/nginx/snippets/
+COPY nginx/njs/ /etc/nginx/njs/
 COPY nginx/docker-entrypoint.d/ /docker-entrypoint.d/
 
 # Defensa ante checkouts de Windows con CRLF: los scripts y las configs tienen que quedar con LF.
-RUN find /docker-entrypoint.d /etc/nginx/templates /etc/nginx/snippets -type f -name '*gondolia*' \
+RUN find /docker-entrypoint.d /etc/nginx/templates /etc/nginx/snippets /etc/nginx/njs -type f -name '*gondolia*' \
         -exec sed -i 's/\r$//' {} + \
     && chmod +x /docker-entrypoint.d/*.sh
 

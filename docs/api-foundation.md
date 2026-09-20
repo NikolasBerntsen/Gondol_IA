@@ -175,9 +175,12 @@ Todas las respuestas de error (controladores, filtro de seguridad y errores del 
 {"timestamp":"2026-09-17T12:00:00.123Z","status":400,"error":"Bad Request","code":"VALIDATION_ERROR",
  "message":"Revisá los datos ingresados","path":"/api/tenant/products","fieldErrors":[{"field":"name","message":"es obligatorio"}]}
 ```
-`fieldErrors` siempre está presente (lista vacía si no aplica). Detrás de nginx, los errores que genera el propio proxy en
+`fieldErrors` siempre está presente (lista vacía si no aplica) y `timestamp` es siempre un instante UTC terminado en `Z`,
+nunca una hora local con desplazamiento. Detrás de nginx, los errores que genera el propio proxy en
 `/api/` usan el mismo formato: 503 `SERVICE_UNAVAILABLE` si el backend no responde y 400 `INVALID_FILE` ("El archivo
 supera el tamaño máximo permitido (15 MB)") si el cuerpo supera los 15 MB (`frontend/nginx/snippets/gondolia-app.conf`).
+Ahí el `timestamp` lo arma njs (`frontend/nginx/njs/gondolia-errors.js`): la variable `$time_iso8601` de nginx usa la
+zona horaria del contenedor (`TZ`) y saldría como `2026-09-20T01:47:20-03:00`.
 
 Mapeo de `GlobalExceptionHandler`:
 | Excepción | Respuesta |
