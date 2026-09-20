@@ -23,6 +23,7 @@ import { Alert, type AlertTone } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { Input } from '@/components/ui/Input';
+import { Truncate } from '@/components/ui/Truncate';
 import { canAccessPath, requiredModuleForPath } from '@/config/access';
 import { cn } from '@/lib/cn';
 
@@ -416,9 +417,9 @@ export default function LoginPage() {
                                 )}
                               >
                                 <span className="min-w-0">
-                                  <span className="block truncate font-mono text-base text-foreground">
+                                  <Truncate className="block font-mono text-base text-foreground">
                                     {account.email}
-                                  </span>
+                                  </Truncate>
                                   {account.note && (
                                     <span className="block text-sm text-muted-foreground">{account.note}</span>
                                   )}

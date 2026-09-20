@@ -12,6 +12,7 @@ import {
   ErrorState,
   PageHeader,
   PageSpinner,
+  Truncate,
   WizardSteps,
 } from '@/components/ui';
 import { StatusPill } from '@/components/gondola';
@@ -253,12 +254,12 @@ export default function ImportWizardPage() {
             <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
               <div className="flex h-10 min-w-0 max-w-full items-center gap-2.5 rounded-control border border-border bg-card px-3">
                 <FileSpreadsheet className="h-4 w-4 shrink-0 text-ok" aria-hidden="true" />
-                <span className="min-w-0 truncate text-sm">
+                <Truncate className="min-w-0 text-sm">
                   <span className="font-semibold text-foreground">{job.fileName}</span>
                   <span className="text-muted-foreground">
                     {job.sheetName ? ` · hoja ${job.sheetName}` : ''} · {formatNumber(job.totalRows)} filas
                   </span>
-                </span>
+                </Truncate>
               </div>
               <StatusPill tone={IMPORT_STATUS_TONES[job.status]}>{IMPORT_STATUS_LABELS[job.status]}</StatusPill>
               {!finished ? (

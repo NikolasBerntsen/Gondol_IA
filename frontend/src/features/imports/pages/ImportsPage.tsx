@@ -18,6 +18,7 @@ import {
   Pagination,
   Skeleton,
   Table,
+  Truncate,
   pageInfo,
   type TableColumn,
 } from '@/components/ui';
@@ -74,7 +75,9 @@ export default function ImportsPage() {
         <div className="flex min-w-0 items-center gap-2">
           <FileSpreadsheet className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <div className="min-w-0">
-            <p className="truncate font-medium text-foreground">{job.fileName}</p>
+            <Truncate as="p" className="font-medium text-foreground">
+              {job.fileName}
+            </Truncate>
             <p className="text-sm text-muted-foreground">{FILE_FORMAT_LABELS[job.fileFormat]}</p>
           </div>
         </div>

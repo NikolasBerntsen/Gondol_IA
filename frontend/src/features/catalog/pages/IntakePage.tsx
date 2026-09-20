@@ -32,6 +32,7 @@ import {
   SecureContextWarning,
   Select,
   Skeleton,
+  Truncate,
 } from '@/components/ui';
 import { isCameraSupported } from '@/lib/secureContext';
 import { formatDate, formatMoney, formatNumber, todayLocalDate } from '@/lib/format';
@@ -746,7 +747,9 @@ export default function IntakePage() {
                 <li key={entry.lotId} className={`px-4 py-2.5 ${entry.quarantined ? 'gd-stripe-crit' : ''}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate text-base font-medium">{entry.productName}</p>
+                      <Truncate as="p" className="text-base font-medium">
+                        {entry.productName}
+                      </Truncate>
                       <p className="text-xs text-muted-foreground">
                         <span className="font-mono">{entry.lotNumber ?? 'Sin lote'}</span>
                         {entry.expiryDate ? ` · vence ${formatDate(entry.expiryDate)}` : ''} · {entry.branchName}

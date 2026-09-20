@@ -22,6 +22,7 @@ import {
   StatCard,
   Table,
   Textarea,
+  Truncate,
   pageInfo,
   type TableColumn,
 } from '@/components/ui';
@@ -162,14 +163,15 @@ export default function ExpirationsPage() {
       cell: (row) => (
         <span className="flex flex-col gap-0.5">
           {canViewProduct ? (
-            <Link
+            <Truncate
+              as={Link}
               to={`/app/products/${row.productId}`}
-              className="truncate font-semibold text-foreground underline-offset-2 hover:underline"
+              className="font-semibold text-foreground underline-offset-2 hover:underline"
             >
               {row.productName}
-            </Link>
+            </Truncate>
           ) : (
-            <span className="truncate font-semibold text-foreground">{row.productName}</span>
+            <Truncate className="font-semibold text-foreground">{row.productName}</Truncate>
           )}
           <span className="flex flex-wrap items-center gap-1.5">
             {row.barcode ? <BarcodeDigits code={row.barcode} digitsOnly /> : null}

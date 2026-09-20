@@ -16,6 +16,7 @@ import {
   SearchInput,
   Segmented,
   Table,
+  Truncate,
   type BadgeTone,
   type TableColumn,
 } from '@/components/ui';
@@ -92,14 +93,14 @@ export default function UsersPage() {
       cell: (user) => (
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="truncate font-medium text-foreground">{user.fullName}</span>
+            <Truncate className="font-medium text-foreground">{user.fullName}</Truncate>
             {user.id === me.id && (
               <Badge tone="primary" size="sm">
                 Vos
               </Badge>
             )}
           </div>
-          <span className="block truncate text-sm text-muted-foreground">{user.email}</span>
+          <Truncate className="block text-sm text-muted-foreground">{user.email}</Truncate>
         </div>
       ),
     },

@@ -40,6 +40,7 @@ import {
   Skeleton,
   Switch,
   Table,
+  Truncate,
   type TableColumn,
 } from '@/components/ui';
 import { formatDate, formatDateTime, formatMoney, formatNumber, formatRelative, pluralize } from '@/lib/format';
@@ -153,7 +154,9 @@ export default function TenantDetailPage() {
       cell: (row) => (
         <div className="min-w-0">
           <div className="font-semibold text-foreground">{row.fullName}</div>
-          <div className="truncate text-xs text-muted-foreground">{row.email}</div>
+          <Truncate as="div" className="text-xs text-muted-foreground">
+            {row.email}
+          </Truncate>
         </div>
       ),
     },

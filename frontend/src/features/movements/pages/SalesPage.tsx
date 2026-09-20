@@ -22,6 +22,7 @@ import {
   Select,
   Table,
   Tabs,
+  Truncate,
   pageInfo,
   type TableColumn,
 } from '@/components/ui';
@@ -57,7 +58,9 @@ function SaleResultPanel({ sale, onNew }: { sale: Sale; onNew: () => void }) {
         {sale.lines.map((line) => (
           <li key={line.productId} className="px-4 py-3">
             <div className="flex items-start justify-between gap-3">
-              <p className="min-w-0 truncate text-base font-semibold text-foreground">{line.productName}</p>
+              <Truncate as="p" className="min-w-0 text-base font-semibold text-foreground">
+                {line.productName}
+              </Truncate>
               <span className="shrink-0 text-base font-semibold tabular-nums text-foreground">
                 {formatMoney(line.total)}
               </span>

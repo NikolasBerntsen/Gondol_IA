@@ -1,6 +1,7 @@
 import { Building2, Check, ChevronDown, Store } from 'lucide-react';
 import { useAuth } from '@/auth/AuthContext';
 import { DropdownItem, DropdownLabel, DropdownPanel, DropdownSeparator, useDropdown } from '@/components/ui/Dropdown';
+import { Truncate } from '@/components/ui/Truncate';
 import { cn } from '@/lib/cn';
 import { ALL_BRANCHES_LABEL, ALL_MY_BRANCHES_LABEL, useBranch } from './BranchContext';
 
@@ -31,11 +32,13 @@ export function BranchSelector({ className, compact = false }: BranchSelectorPro
   const base =
     'inline-flex h-9 min-w-0 max-w-[58vw] shrink-0 items-center gap-2 rounded-control border border-input bg-card px-2.5 text-sm font-semibold text-foreground sm:max-w-[min(42vw,320px)] xl:max-w-none';
 
+  // El alcance dice qué se está mirando: si no entra (en móvil se recorta a ~76 px), el nombre completo
+  // del comercio y de la sucursal quedan en el `title`.
   const label = (
-    <span className="truncate">
+    <Truncate fullText={`${tenantName} · ${isAll ? allLabel : scopeLabel || tenantName}`}>
       {!compact && <span className="hidden xl:inline">{tenantName} · </span>}
       {isAll ? allLabel : scopeLabel || tenantName}
-    </span>
+    </Truncate>
   );
 
   if (branches.length <= 1) {

@@ -1,5 +1,5 @@
 import { Building2 } from 'lucide-react';
-import { Checkbox } from '@/components/ui';
+import { Checkbox, Truncate } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import type { TenantBranch } from '../types';
 
@@ -47,7 +47,7 @@ export function BranchCheckboxes({ branches, selected, onChange, disabled }: Bra
               aria-label={branch.name}
             />
             <Building2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <span className="min-w-0 flex-1 truncate text-base text-foreground">{branch.name}</span>
+            <Truncate className="min-w-0 flex-1 text-base text-foreground">{branch.name}</Truncate>
             {branch.code && <span className="font-mono text-xs text-muted-foreground">{branch.code}</span>}
           </label>
         );

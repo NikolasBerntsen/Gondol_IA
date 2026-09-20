@@ -1,5 +1,5 @@
 import { FileSpreadsheet } from 'lucide-react';
-import { Card, CardHeader, Field, Select } from '@/components/ui';
+import { Card, CardHeader, Field, Select, Truncate } from '@/components/ui';
 import { formatDateTime, formatNumber } from '@/lib/format';
 import { FILE_FORMAT_LABELS } from '../labels';
 import type { ImportJob } from '../types';
@@ -30,7 +30,9 @@ export function FileStep({ job, busy, progress, canSwitchSheet, onFile, onSheet,
           <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
             <div className="col-span-2">
               <dt className="text-sm text-muted-foreground">Archivo</dt>
-              <dd className="truncate font-medium text-foreground">{job.fileName}</dd>
+              <Truncate as="dd" className="font-medium text-foreground">
+                {job.fileName}
+              </Truncate>
             </div>
             <div>
               <dt className="text-sm text-muted-foreground">Formato</dt>

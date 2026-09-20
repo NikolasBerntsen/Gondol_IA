@@ -26,6 +26,12 @@ export interface ThemeContextValue {
   preference: ThemePreference;
   /** El tema que se ve ahora. Dependé de este valor si leés colores desde JS (canvas, `getComputedStyle`). */
   resolved: ResolvedTheme;
+  /**
+   * Tema del sistema operativo en este momento (`prefers-color-scheme`), sin importar qué eligió el usuario.
+   * Es lo que hay que mostrar al describir la opción "Sistema": con "Claro" elegido y el dispositivo en oscuro,
+   * `resolved` es `light` pero elegir "Sistema" deja la app oscura.
+   */
+  systemTheme: ResolvedTheme;
   setPreference: (preference: ThemePreference) => void;
 }
 
@@ -74,14 +80,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<ThemeContextValue>(
-    () => ({ preference, resolved, setPreference }),
-    [preference, resolved, setPreference],
+    () => ({ preference, resolved, systemTheme, setPreference }),
+    [preference, resolved, systemTheme, setPreference],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
-/** `{ preference, resolved, setPreference }` del tema. Requiere `ThemeProvider` arriba (ya está en `App.tsx`). */
+/**
+ * `{ preference, resolved, systemTheme, setPreference }` del tema. Requiere `ThemeProvider` arriba (ya está en
+ * `App.tsx`).
+ */
 export function useTheme(): ThemeContextValue {
   const context = useContext(ThemeContext);
   if (!context) throw new Error('useTheme() tiene que usarse dentro de <ThemeProvider>.');

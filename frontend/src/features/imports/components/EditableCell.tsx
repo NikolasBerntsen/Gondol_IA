@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui';
+import { Tooltip, TooltipContent, TooltipTrigger, Truncate } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import type { ImportRowMessage } from '../types';
 
@@ -107,7 +107,7 @@ export function EditableCell({
         level === 'WARNING' && 'bg-warn-soft/60 shadow-[inset_0_0_0_1px_hsl(var(--warn))] hover:bg-warn-soft',
       )}
     >
-      <span className="truncate">{value || <span className="text-muted-foreground">—</span>}</span>
+      <Truncate>{value || <span className="text-muted-foreground">—</span>}</Truncate>
     </button>
   );
 

@@ -1,7 +1,7 @@
 import { Camera, ImagePlus, Monitor, SendHorizonal, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type DragEvent } from 'react';
 import { toast } from 'sonner';
-import { Button, Kbd, Spinner, Textarea } from '@/components/ui';
+import { Button, Kbd, Spinner, Textarea, Truncate } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { formatBytes, formatNumber } from '@/lib/format';
 import type { SendMessagePayload } from '../types';
@@ -222,7 +222,9 @@ export function MessageComposer({
         <div className="mb-2 flex items-start gap-3 rounded-control border border-border bg-muted/60 p-2">
           <img src={previewUrl} alt="Vista previa de la imagen" className="h-16 w-16 rounded-tag object-cover" />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{fileName}</p>
+            <Truncate as="p" className="text-sm font-medium">
+              {fileName}
+            </Truncate>
             <p className="text-xs text-muted-foreground">{file ? formatBytes(file.size) : null}</p>
           </div>
           <Button size="icon-sm" variant="ghost" aria-label="Quitar la imagen" onClick={clearFile}>

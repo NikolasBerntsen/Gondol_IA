@@ -14,6 +14,7 @@ import {
   PageHeader,
   Table,
   Toggle,
+  Truncate,
   type TableColumn,
 } from '@/components/ui';
 import { cn } from '@/lib/cn';
@@ -121,10 +122,10 @@ export default function BranchesPage() {
       cell: (branch) => (
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="truncate font-medium text-foreground">{branch.name}</span>
+            <Truncate className="font-medium text-foreground">{branch.name}</Truncate>
             {branch.code && <span className="font-mono text-xs text-muted-foreground">{branch.code}</span>}
           </div>
-          <span className="flex items-center gap-1 truncate text-sm text-muted-foreground">
+          <Truncate className="flex items-center gap-1 text-sm text-muted-foreground">
             {branch.address || branch.city ? (
               <>
                 <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
@@ -133,7 +134,7 @@ export default function BranchesPage() {
             ) : (
               'Sin dirección cargada'
             )}
-          </span>
+          </Truncate>
         </div>
       ),
     },

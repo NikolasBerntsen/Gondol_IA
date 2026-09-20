@@ -1,6 +1,6 @@
 import { ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { StatusPill } from '@/components/gondola';
-import { Card } from '@/components/ui';
+import { Card, Truncate } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatMoney, formatTime } from '@/lib/format';
 import {
@@ -134,7 +134,7 @@ export function SessionReport({ session, className }: SessionReportProps) {
                 key={product.productId ?? `${product.productName}-${index}`}
                 className="flex items-baseline justify-between gap-3 py-1.5 text-base"
               >
-                <span className="min-w-0 truncate">{product.productName}</span>
+                <Truncate className="min-w-0">{product.productName}</Truncate>
                 <span className="shrink-0 tabular-nums text-muted-foreground">
                   {product.units} u. · {formatMoney(product.total, { decimals: 2 })}
                 </span>
@@ -159,7 +159,7 @@ export function SessionReport({ session, className }: SessionReportProps) {
                       aria-hidden="true"
                     />
                     <span className="min-w-0">
-                      <span className="block truncate">{movement.reason}</span>
+                      <Truncate className="block">{movement.reason}</Truncate>
                       <span className="block text-xs text-muted-foreground">
                         {CASH_MOVEMENT_TYPE_LABELS[movement.type]} · {formatTime(movement.createdAt)}
                         {movement.userName ? ` · ${movement.userName}` : ''}

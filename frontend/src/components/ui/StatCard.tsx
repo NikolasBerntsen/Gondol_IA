@@ -3,6 +3,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/cn';
 import { EMPTY_VALUE, formatMoney, formatMoneyCompact, type NumericInput } from '@/lib/format';
+import { plainText, useTruncationTitle } from './Truncate';
 
 /** Tonos preferidos: `primary` · `ok` · `warn` · `crit` · `info` · `neutral` (el resto son alias). */
 export type StatTone =
@@ -185,6 +186,9 @@ export function StatCard({
 }: StatCardProps) {
   const positive = trend ? (trend.invert ? trend.value <= 0 : trend.value >= 0) : true;
   const TrendIcon = trend && trend.value < 0 ? ArrowDownRight : ArrowUpRight;
+  // El rótulo es un nombre corto sin pantalla de detalle detrás: si se corta ("Valor invent…"), el número se
+  // queda sin nombre. Va con `title` cuando no entra (docs/design-system.md §3).
+  const labelRef = useTruncationTitle<HTMLParagraphElement>(plainText(label));
   const isMoney = money !== undefined && money !== null && money !== '';
   const shownValue = value ?? (isMoney ? formatMoney(money) : EMPTY_VALUE);
   const compactValue = isMoney ? formatMoneyCompact(money) : undefined;
@@ -198,7 +202,9 @@ export function StatCard({
             <Icon className="h-4 w-4" aria-hidden="true" />
           </span>
         )}
-        <p className="min-w-0 flex-1 truncate text-base font-medium text-muted-foreground">{label}</p>
+        <p ref={labelRef} className="min-w-0 flex-1 truncate text-base font-medium text-muted-foreground">
+          {label}
+        </p>
         {sparkline && <span className="shrink-0">{sparkline}</span>}
       </div>
       {loading ? (

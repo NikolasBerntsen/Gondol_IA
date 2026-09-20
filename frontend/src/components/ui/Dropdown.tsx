@@ -14,6 +14,7 @@ import {
 import { useLocation } from 'react-router-dom';
 import { cn } from '@/lib/cn';
 import { useOnClickOutside } from '@/lib/useOnClickOutside';
+import { Truncate } from './Truncate';
 
 const ITEM_SELECTOR = '[role="menuitem"]:not([aria-disabled="true"]),[role="menuitemradio"]:not([aria-disabled="true"])';
 
@@ -216,8 +217,8 @@ export const DropdownItem = forwardRef<HTMLButtonElement, DropdownItemProps>(fun
     >
       {icon && <span className="flex shrink-0 items-center [&_svg]:h-4 [&_svg]:w-4">{icon}</span>}
       <span className="min-w-0 flex-1">
-        <span className="block truncate font-medium">{children}</span>
-        {description && <span className="block truncate text-xs text-muted-foreground">{description}</span>}
+        <Truncate className="block font-medium">{children}</Truncate>
+        {description && <Truncate className="block text-xs text-muted-foreground">{description}</Truncate>}
       </span>
       {trailing}
     </button>
