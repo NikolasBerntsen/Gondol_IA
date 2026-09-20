@@ -11,6 +11,7 @@ import { NewTicketForm } from './NewTicketForm';
 import { PresenceDot } from './TicketBadges';
 import { TicketListItem } from './TicketListItem';
 import { useBottomBarClearance } from '../hooks/useBottomBarClearance';
+import { useModalOpen, useSupportBubbleSpace } from '../hooks/useSupportBubbleSpace';
 import { useSupportPresence, useTicketTopics, useTypingNotifier } from '../hooks/useSupportRealtime';
 import { invalidateSupportLists, useTicketConversation } from '../hooks/useTicketConversation';
 import { isTicketWritable } from '../labels';
@@ -32,8 +33,13 @@ const LIST_REFRESH_DEBOUNCE_MS = 250;
  * arrastre, cámara y "Capturar pantalla"). Se marca con `data-support-widget` para que la captura de pantalla no
  * se fotografíe a sí misma.
  *
- * Nunca tapa la acción principal de la pantalla: si hay una barra fija abajo (marcada con `data-bottom-action-bar`,
- * como el "Cobrar" del POS o el "Registrar ingreso" de la carga en mobile), la burbuja se ubica arriba de ella.
+ * Nunca tapa contenido:
+ *
+ * - mientras está montada publica `--support-bubble-space` en `<html>` y los contenedores de scroll dejan ese
+ *   aire abajo (`index.css`), así el final de cualquier pantalla se puede desplazar por encima de la burbuja;
+ * - si hay una barra fija abajo (marcada con `data-bottom-action-bar`, como el "Cobrar" del POS o el
+ *   "Registrar ingreso" de la carga), la burbuja se ubica arriba de ella;
+ * - con un diálogo o una hoja abierta se esconde.
  */
 export default function SupportWidget() {
   const location = useLocation();
@@ -93,6 +99,10 @@ export default function SupportWidget() {
   const onSupportScreen = location.pathname.startsWith('/app/support');
   const clearance = useBottomBarClearance(launcherRef, !onSupportScreen);
   const bottom = Math.max(BASE_BOTTOM_PX, clearance);
+  // Aire abajo en toda la app para poder desplazar el final de la pantalla por encima de la burbuja.
+  useSupportBubbleSpace(!onSupportScreen);
+  // Con un diálogo o una hoja abierta la burbuja se esconde (no se ve a través del velo ni tapa el pie).
+  const modalOpen = useModalOpen();
   useEffect(() => {
     if (onSupportScreen) setOpen(false);
   }, [onSupportScreen]);
@@ -101,7 +111,8 @@ export default function SupportWidget() {
   return (
     <div
       data-support-widget="true"
-      className="fixed right-4 z-50 flex flex-col items-end gap-2 print:hidden"
+      aria-hidden={modalOpen || undefined}
+      className={cn('fixed right-4 z-50 flex flex-col items-end gap-2 print:hidden', modalOpen && 'hidden')}
       style={{ bottom }}
     >
       {open && (

@@ -335,7 +335,8 @@ export default function IntakePage() {
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
-      <div className="flex min-w-0 flex-1 flex-col gap-4 lg:max-w-[560px]">
+      {/* El aire de la burbuja de soporte va acá (no en el shell) para que la barra de acción siga pegada abajo. */}
+      <div className="flex min-w-0 flex-1 flex-col gap-4 pb-[var(--support-bubble-space,0px)] lg:max-w-[560px]">
         <PageHeader
           title="Carga de mercadería"
           icon={ScanBarcode}

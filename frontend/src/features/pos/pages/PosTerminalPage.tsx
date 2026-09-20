@@ -30,6 +30,7 @@ import {
 import { cn } from '@/lib/cn';
 import { formatMoney, formatTime } from '@/lib/format';
 import { useDebounce } from '@/lib/useDebounce';
+import { useMediaQuery } from '@/lib/useMediaQuery';
 import { posApi, posKeys } from '../api';
 import { CashMovementDialog } from '../components/CashMovementDialog';
 import { CloseSessionDialog } from '../components/CloseSessionDialog';
@@ -86,6 +87,8 @@ export default function PosTerminalPage() {
   const [allowShortage, setAllowShortage] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  /** Desde `lg` la terminal son dos paneles a pantalla completa (sin barra fija abajo). */
+  const twoPanelLayout = useMediaQuery('(min-width: 1024px)');
 
   const debouncedQuery = useDebounce(query, 250);
 
@@ -481,7 +484,9 @@ export default function PosTerminalPage() {
   return (
     // El shell compacto envuelve la página en un contenedor con `min-height` (sin alto definido),
     // así que `h-full` no resuelve: crecemos con `flex-1` para ocupar la pantalla en escritorio.
-    <div className="flex min-h-full flex-col lg:min-h-0 lg:flex-1">
+    // En mobile (la terminal se apila y scrollea) el aire de la burbuja de soporte va en la página, arriba de la
+    // barra fija de cobro; en escritorio los dos paneles ocupan el alto exacto de la pantalla y no lleva aire.
+    <div className="flex min-h-full flex-col pb-[var(--support-bubble-space,0px)] lg:min-h-0 lg:flex-1 lg:pb-0">
       {/* Franja de caja */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border bg-card px-4 py-2.5 sm:px-5">
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
@@ -828,7 +833,13 @@ export default function PosTerminalPage() {
             )}
           </div>
 
-          <div id="pos-totales" className="border-t border-border bg-card px-4 pb-4 pt-3 sm:px-5">
+          {/* En escritorio esta zona queda pegada abajo a la derecha: la burbuja de soporte se corre arriba
+              del "Cobrar" (en mobile lo hace la barra fija de abajo, así que acá no se marca). */}
+          <div
+            id="pos-totales"
+            {...(twoPanelLayout ? { 'data-bottom-action-bar': '' } : null)}
+            className="border-t border-border bg-card px-4 pb-4 pt-3 sm:px-5"
+          >
             <dl className="grid grid-cols-2 gap-y-0.5 text-base">
               <dt className="text-muted-foreground">Subtotal · {units} u.</dt>
               <dd className="text-right tabular-nums">{formatMoney(subtotal, { decimals: 2 })}</dd>
