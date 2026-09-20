@@ -179,8 +179,12 @@
   --gd-scroll-space: var(--support-bubble-space);
 }
 
+/* Pantallas con barra de acción pegada abajo: el aire lo pone la página (`BubbleSpacer`, arriba de la
+   barra) y el contenedor de scroll no lleva ninguno — ni el de la burbuja ni el de siempre — porque el
+   `position: sticky` se frena en la caja de contenido y la barra se despegaría del borde inferior. */
 main:has([data-bottom-action-bar]) {
   --gd-scroll-space: 0px;
+  --gd-scroll-pad: 0px;
 }
 
 /* ===================================================================== */

@@ -84,7 +84,7 @@ export function AppShell() {
             // fila o botón de cualquier pantalla se puede desplazar por encima de la burbuja.
             compact
               ? 'min-h-0 overflow-y-auto'
-              : 'px-4 pb-[calc(1.5rem+var(--gd-scroll-space,0px))] pt-5 sm:px-6 lg:px-8 lg:pb-[calc(2.5rem+var(--gd-scroll-space,0px))] lg:pt-7',
+              : 'px-4 pb-[calc(var(--gd-scroll-pad,1.5rem)+var(--gd-scroll-space,0px))] pt-5 sm:px-6 lg:px-8 lg:pb-[calc(var(--gd-scroll-pad,2.5rem)+var(--gd-scroll-space,0px))] lg:pt-7',
           )}
         >
           <div className={cn(compact ? 'flex min-h-full flex-col' : 'mx-auto w-full max-w-7xl')}>

@@ -18,6 +18,7 @@ import { StatusPill } from '@/components/gondola';
 import { getErrorMessage, isApiError } from '@/api/client';
 import { cn } from '@/lib/cn';
 import { formatNumber } from '@/lib/format';
+import { BubbleSpacer } from '@/components/layout/BubbleSpacer';
 import { importKeys, importsApi } from '../api';
 import { ConfirmStep } from '../components/ConfirmStep';
 import { FileStep } from '../components/FileStep';
@@ -241,8 +242,7 @@ export default function ImportWizardPage() {
             : 'La importación terminó.';
 
   return (
-    // El aire de la burbuja de soporte va acá (no en el shell) para que la barra de acción siga pegada abajo.
-    <div className="flex min-h-full flex-col gap-5 pb-[var(--support-bubble-space,0px)]">
+    <div className="flex min-h-full flex-col gap-5">
       <PageHeader
         eyebrow={`Importaciones · ${job ? `#${job.id}` : 'Nueva importación'}`}
         title="Importar Excel/CSV"
@@ -327,6 +327,9 @@ export default function ImportWizardPage() {
           }}
         />
       ) : null}
+
+      {/* Aire para que la burbuja de soporte no tape el final de la revisión (queda arriba de la barra). */}
+      <BubbleSpacer className="mt-auto" />
 
       {/* Barra de acciones fija */}
       <div

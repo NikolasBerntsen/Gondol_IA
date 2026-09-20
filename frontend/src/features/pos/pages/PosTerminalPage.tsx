@@ -31,6 +31,7 @@ import { cn } from '@/lib/cn';
 import { formatMoney, formatTime } from '@/lib/format';
 import { useDebounce } from '@/lib/useDebounce';
 import { useMediaQuery } from '@/lib/useMediaQuery';
+import { BubbleSpacer } from '@/components/layout/BubbleSpacer';
 import { posApi, posKeys } from '../api';
 import { CashMovementDialog } from '../components/CashMovementDialog';
 import { CloseSessionDialog } from '../components/CloseSessionDialog';
@@ -484,9 +485,7 @@ export default function PosTerminalPage() {
   return (
     // El shell compacto envuelve la página en un contenedor con `min-height` (sin alto definido),
     // así que `h-full` no resuelve: crecemos con `flex-1` para ocupar la pantalla en escritorio.
-    // En mobile (la terminal se apila y scrollea) el aire de la burbuja de soporte va en la página, arriba de la
-    // barra fija de cobro; en escritorio los dos paneles ocupan el alto exacto de la pantalla y no lleva aire.
-    <div className="flex min-h-full flex-col pb-[var(--support-bubble-space,0px)] lg:min-h-0 lg:flex-1 lg:pb-0">
+    <div className="flex min-h-full flex-col lg:min-h-0 lg:flex-1">
       {/* Franja de caja */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border bg-card px-4 py-2.5 sm:px-5">
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
@@ -870,7 +869,9 @@ export default function PosTerminalPage() {
         </aside>
       </div>
 
-      {/* Móvil: total y cobro al alcance del pulgar (la burbuja de soporte se corre arriba de esta barra) */}
+      {/* Móvil: total y cobro al alcance del pulgar (la burbuja de soporte se corre arriba de esta barra, y el
+          espaciador deja el aire para que no tape el final del ticket). En escritorio no hay barra ni aire. */}
+      <BubbleSpacer className="lg:hidden" />
       <div
         data-bottom-action-bar=""
         className="sticky bottom-0 z-10 flex items-center gap-3 border-t-2 border-border bg-card px-4 pt-3 lg:hidden"
