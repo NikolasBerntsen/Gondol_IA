@@ -105,7 +105,7 @@ final class DemoScenarios {
                         new ScriptedLot("PRI", LIVE_RECALL_PRODUCT, 34, 10, 36, 0, LIVE_RECALL_EXPIRY,
                                 LIVE_RECALL_LOT, false, "recall-live"),
                         // Lote del recall pendiente: entró a la mañana y a la tarde salió el recall. Con FIFO se
-                        // venden antes los lotes más viejos, así la cuarentena lo agarra entero (o casi).
+                        // venden antes los lotes más viejos, así la cuarentena lo agarra entero (datos-demo §5.1).
                         new ScriptedLot("PRI", PENDING_RECALL_PRODUCT, PENDING_RECALL_DAYS_AGO, 10, 24, 67, null,
                                 PENDING_RECALL_LOT, false, "recall-pending"),
                         // Caso FIFO: el lote más nuevo vence antes que el que entró antes.

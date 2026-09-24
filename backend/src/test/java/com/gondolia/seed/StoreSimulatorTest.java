@@ -231,9 +231,17 @@ class StoreSimulatorTest {
             Lot lot = recall.lot();
             assertThat(lot.lotNumber).isEqualTo(DemoScenarios.PENDING_RECALL_LOT);
             assertThat(lot.recalled).isTrue();
-            // Publicado ayer a la tarde y sin resolver: el lote sigue en cuarentena con todo lo que tenía.
+            // Publicado ayer a la tarde y sin resolver: el lote entró esa mañana, la cuarentena lo agarró entero (lo
+            // que dice datos-demo §5.1: 24 u. en Don Pepe, 30 u. en Centro) y sigue con todo lo que tenía.
             assertThat(recall.matchedAt().atZone(ZONE).toLocalDate()).isEqualTo(TODAY.minusDays(1));
-            assertThat(recall.quantityAtMatch()).isPositive();
+            StoreSimulator.TenantRun run = recall.tenantId() == donPepe.tenantId ? donPepe : elSol;
+            String branchKey = run.branches.stream().filter(b -> b.id == recall.branchId()).findFirst()
+                    .orElseThrow().spec.key();
+            DemoScenarios.ScriptedLot scripted = run.scenario.lots().stream()
+                    .filter(s -> DemoScenarios.PENDING_RECALL_LOT.equals(s.lotNumber())
+                            && s.branch().equals(branchKey))
+                    .findFirst().orElseThrow();
+            assertThat(recall.quantityAtMatch()).isEqualTo(scripted.quantity());
             assertThat(lot.quantity).isEqualTo(recall.quantityAtMatch());
             assertThat(recall.branchUserIds()).isNotEmpty();
             assertThat(out.movements).noneMatch(m -> m.lot == lot && m.occurredAt.isAfter(recall.matchedAt()));

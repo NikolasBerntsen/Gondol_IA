@@ -166,7 +166,8 @@ final class DemoStories {
     /**
      * Notificaciones y lecturas de los avisos para los usuarios de los comercios activos en ese momento. Los usuarios
      * de {@code recallAlerted} (los que recibieron la alerta del recall pendiente) no leyeron el aviso del recall:
-     * no entraron desde que salió, si no les habría saltado el diálogo de Seguridad alimentaria.
+     * nadie confirmó el diálogo de Seguridad alimentaria ni abrió el aviso (los que entraron hoy lo cerraron con
+     * "Ver detalle", que no confirma, y los demás todavía no lo vieron), así la coincidencia sigue sin atender.
      */
     void announcementNotifications(List<TenantRecord> tenants, Announcements announcements, Set<Long> recallAlerted) {
         List<Published> all = new ArrayList<>(announcements.general());

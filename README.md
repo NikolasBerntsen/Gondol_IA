@@ -155,7 +155,7 @@ métricas de la consola de dueños tengan historia.
 
 Datos preparados para la demo:
 
-- **Recall listo**: "Sopa de tomate en lata La Huerta 340 g", EAN `7791234500012`, lote `L2409A`, en stock de
+- **Recall listo**: "Sopa de tomate en lata La Huerta 340 g", EAN `7791234500017`, lote `L2409A`, en stock de
   **Almacén Don Pepe** y de **Minimercado El Sol solo en la sucursal Fisherton** (Vida Sana no lo tiene).
 - **Varios lotes por producto** en cada sucursal, incluido al menos un caso en el que un lote más nuevo vence antes que uno más viejo.
 - Patrones de venta variados (fin de semana fuerte, estable, intermitente, creciente, en declive, sin movimiento, picos
@@ -405,7 +405,7 @@ y un celular en la misma red WiFi.
    gaseosa, unas galletitas): nombre, marca, contenido y categoría se completan solos, aun sin internet.
 3. **Recall en vivo** — Dejá abiertas las sesiones de `admin@elsol.com` (incógnito) y `empleado@elsol.com` (celular). Con
    `dueno@gondolia.app`, en *Avisos y recalls*, creá un recall de "Sopa de tomate en lata La Huerta 340 g", EAN
-   `7791234500012`, lote `L2409A`. La vista previa informa **2 comercios afectados** (sin decir cuáles). Al publicar, el
+   `7791234500017`, lote `L2409A`. La vista previa informa **2 comercios afectados** (sin decir cuáles). Al publicar, el
    administrador y el empleado de El Sol reciben al instante la alerta de seguridad (el lote está en Fisherton);
    `empleado.echesortu@elsol.com` no la recibe y Vida Sana solo ve el aviso general. En *Seguridad alimentaria* marcá
    "Entendido" y retirá el lote del stock. Volvé a la consola del dueño: solo ve cantidades.

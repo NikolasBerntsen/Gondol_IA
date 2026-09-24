@@ -320,7 +320,7 @@ Nunca se acepta SEND directo a `/topic`, `/queue` o `/user`.
 ```json
 {"matchId":7,"announcementId":3,"branchId":4,"branchName":"Sucursal Fisherton","title":"Retiro preventivo de sopa de tomate",
  "severity":"CRITICAL","reason":"Posible contaminación","instructions":"Retirá el producto de la góndola",
- "productId":10,"productName":"Sopa de tomate La Huerta 340 g","barcode":"7791234500012","lotId":55,"lotNumber":"L2409A",
+ "productId":10,"productName":"Sopa de tomate La Huerta 340 g","barcode":"7791234500017","lotId":55,"lotNumber":"L2409A",
  "expiryDate":"2026-12-01","quantity":12,"matchedAt":"2026-09-17T14:10:00.123456Z"}
 ```
 

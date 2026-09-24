@@ -346,7 +346,8 @@ class DemoDataSeederIntegrationTest {
                 Map.entry("empleado@elsol.com", 1L), Map.entry("cajero@elsol.com", 1L),
                 Map.entry("empleado.echesortu@elsol.com", 0L), Map.entry("cajero.fisherton@elsol.com", 0L),
                 Map.entry("cajera.tarde@elsol.com", 0L)));
-        // Ninguno de ellos entró desde que salió (si no, le habría saltado el diálogo): tampoco leyó el aviso.
+        // Ninguno de ellos confirmó el diálogo ni abrió el aviso (los que entraron hoy lo cerraron con "Ver detalle",
+        // que no confirma): el aviso del recall sigue sin leer.
         assertThat(count("""
                 select count(*) from notifications n where n.type = 'ANNOUNCEMENT' and n.reference_id = ?
                   and n.read_at is null
