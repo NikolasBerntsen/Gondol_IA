@@ -35,6 +35,9 @@ tres servicios y de la configuración de nginx (`.github/workflows/ci.yml`) y, s
 código por rsync a `/home/ubuntu/Gondol_IA` y ejecuta `deploy/deploy.sh` en la VM. Al final comprueba
 que el sitio responda y que el login acepte el `Origin` del dominio público.
 
+Para volver a desplegar sin cambiar código (por ejemplo, para borrar la base con `DEV_WIPE_DB=true`)
+no hace falta un commit: *Actions → Deploy a Oracle Cloud → Run workflow* sobre `main`.
+
 El inventario completo de secrets, variables y pisos de cobertura está en
 [`docs/ci-y-variables.md`](../docs/ci-y-variables.md).
 
