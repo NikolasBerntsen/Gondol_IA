@@ -4,8 +4,15 @@ Endpoints de la consola con la que **los dueños de GondolIA** administran su ne
 comercios clientes, módulos por cliente y equipo interno. Implementa SPEC.md §6.6 y §14.3 y se apoya en la fundación
 (`docs/api-foundation.md`).
 
-- Base: `/api/platform`. Todo requiere **rol `PLATFORM_OWNER`** (`@PreAuthorize(Roles.OWNER)`): un `SUPPORT_AGENT`,
-  un usuario de comercio o un pedido sin token reciben `403 FORBIDDEN` / `401`.
+- Base: `/api/platform`. Todo requiere **rol `PLATFORM_OWNER`** (`@PreAuthorize(Roles.OWNER)`): un usuario de comercio
+  o un pedido sin token reciben `403 FORBIDDEN` / `401`.
+- **Soporte** (`SUPPORT_AGENT`, `Roles.PLATFORM_ANY`) usa Clientes y Módulos por cliente para resolver tickets:
+  `GET /tenants`, `GET /tenants/{id}`, `PUT /tenants/{id}` (sin `plan` o con el actual; uno distinto responde `403`),
+  `POST /tenants/{id}/reset-admin-password`, `GET /tenant-modules`, `GET /tenants/{id}/modules` y
+  `PUT /tenants/{id}/modules/{module}`. El resto (métricas, catálogo con adopción, alta, deshabilitar, habilitar, baja,
+  reactivar, eliminar, avisos y equipo) le responde `403`. Son dos barreras: la regla por URL y método de
+  `SecurityConfig` y el `@PreAuthorize` de cada endpoint. Lo que cambia soporte queda en el historial a su nombre:
+  `DATA_UPDATED`, `ADMIN_PASSWORD_RESET` y `MODULE_ENABLED`/`MODULE_DISABLED`.
 - JSON en camelCase, instantes ISO-8601 UTC, importes en ARS. Paginación con `PageResponse<T>`
   (`content`, `page` 0-based, `size`, `totalElements`, `totalPages`).
 - Pantallas: `/owner` (métricas), `/owner/tenants`, `/owner/tenants/new`, `/owner/tenants/:id`,
@@ -154,8 +161,11 @@ si no se manda `modules` (FREEMIUM → `POS_GONDOLIA`; BASICO y PROFESIONAL → 
 
 ### 2.4 `PUT /api/platform/tenants/{id}` → `TenantDetail`
 
-Datos administrativos, rubro, rotación y **plan**. Si el plan cambia se registra `PLAN_CHANGED`
-(con `planChangeReason` en el historial). Los módulos **no** se tocan acá: se cambian en §4.
+Datos administrativos, rubro, rotación y **plan**. Si cambia algún dato se registra `DATA_UPDATED` a nombre de quien
+edita, con qué cambió en `reason` (`"Cambios: teléfono y notas internas"`; los valores no se guardan). Si el plan
+cambia se registra `PLAN_CHANGED` (con `planChangeReason` en el historial); cambiarlo es solo del dueño. `plan` es
+opcional: sin él se deja el actual (así lo manda soporte, que no puede cambiarlo, y guardar no pisa un cambio de plan
+que haya hecho un dueño mientras tanto). Los módulos **no** se tocan acá: se cambian en §4.
 
 Bajar a un plan con menos sucursales que las activas:
 
@@ -197,7 +207,12 @@ entrar. Se devuelve **una sola vez**: no se guarda en claro.
 ```
 
 Formato `Gnd-XXXX-9999`, sin caracteres que se confundan (`0/O`, `1/l/I`), pensado para dictarla por teléfono.
-Si el comercio no tiene un administrador activo → `409`.
+Si el comercio no tiene un administrador activo → `409`. Con la temporal se puede entrar a la cuenta del
+administrador, así que queda en el historial: evento `ADMIN_PASSWORD_RESET` a nombre de quien la generó. En la
+tabla se guarda el id de la cuenta en `to_value` y no su email (el historial de un comercio eliminado se conserva para
+las métricas y no tiene que llevarse datos personales); al leer el detalle, `reason` =
+`"Contraseña temporal para <email actual del admin>"`, o `"Contraseña temporal para el administrador"` si la cuenta ya
+no existe.
 
 ---
 
@@ -273,7 +288,7 @@ Deshabilitar `MULTI_BRANCH` con más de una sucursal activa:
 | `/owner/tenants` | `TenantsPage` | Píldoras de estado con contadores, buscador con *debounce*, filtros por plan, rubro y **módulo** (todo en la URL), tabla con plan, estado, módulos, sucursales, usuarios, actividad y cuota, y menú de acciones por fila. |
 | `/owner/tenants/new` · `/owner/tenants/:id/edit` | `TenantFormPage` | Alta con primera sucursal, los tres usuarios (con "Generar una" contraseña) y los módulos con **preset por plan**; edición de datos y plan, con aviso previo si el plan nuevo no alcanza para las sucursales activas. |
 | `/owner/tenants/:id` | `TenantDetailPage` | Datos, plan y facturación, módulos con switches, sucursales y usuarios (solo administrativo), historial de eventos, acciones de estado con motivo obligatorio, eliminación escribiendo el nombre y reseteo de la contraseña del admin mostrando la temporal una sola vez. |
-| `/owner/modules` | `ModulesMatrixPage` | Adopción arriba, buscador y filtros, matriz clientes × módulos con switches, MRR estimado **en vivo** de la lista, confirmación al desactivar explicando qué pierde el cliente y el bloqueo de `MULTI_BRANCH` en uso. |
+| `/owner/modules` | `ModulesMatrixPage` | Adopción arriba, buscador y filtros, matriz clientes × módulos con switches, MRR estimado **en vivo** de la lista, confirmación al desactivar explicando qué pierde el cliente y el bloqueo de `MULTI_BRANCH` en uso. Soporte no ve la adopción ni el MRR de la lista: la cuota de cada cliente le aparece como «Cuota», igual que en Clientes. |
 | `/owner/team` | `PlatformTeamPage` | Equipo de GondolIA: alta, edición (sin poder desactivarse a sí mismo) y reseteo de contraseña. |
 
 Notas de implementación:
@@ -291,14 +306,22 @@ Notas de implementación:
 
 ## 6. Pruebas
 
-`backend/src/test/java/com/gondolia/platform` (19 tests, todos sobre Postgres real vía `PostgresIntegrationTest`):
+`backend/src/test/java/com/gondolia/platform` (43 tests; los de integración, sobre Postgres real vía
+`PostgresIntegrationTest`):
 
-- `PlatformApiIsolationIntegrationTest` — un dueño recibe `403` en `/api/tenant/**`; los usuarios de comercio y el
-  soporte reciben `403` en `/api/platform/**`; el detalle y las métricas solo traen datos administrativos y agregados.
+- `PlatformApiIsolationIntegrationTest` — un dueño recibe `403` en `/api/tenant/**`; los usuarios de comercio reciben
+  `403` en `/api/platform/**` y el soporte en las métricas, el equipo y las acciones de estado; el detalle y las
+  métricas solo traen datos administrativos y agregados.
+- `SupportClientAccessIntegrationTest` — soporte lista, abre y edita un cliente (sin cambiar el plan, y sin mandarlo
+  no pisa el de un dueño), activa o desactiva módulos y restablece la contraseña del admin; el historial lo nombra en
+  cada caso y todo lo demás le responde `403`.
+- `PlatformConsoleAccessMatrixTest` (sin base) — fija qué `@PreAuthorize` tiene cada endpoint de la consola.
+- `PlatformQueriesTest` (sin base) — normalización del texto de búsqueda de comercios.
 - `PlatformMetricsServiceIntegrationTest` — MRR con plan + módulos por sucursal activa, uso, crecimiento reconstruido
   desde los eventos, agregados de soporte y recalls, conversión a plan pago.
 - `TenantAdminServiceIntegrationTest` — alta con preset y con módulos explícitos, emails repetidos, `BRANCH_LIMIT_REACHED`,
-  flujo de estados con sus eventos, borrado con `confirmName` y reseteo de la contraseña del admin.
+  `DATA_UPDATED` solo si algo cambió, flujo de estados con sus eventos, borrado con `confirmName` y reseteo de la
+  contraseña del admin con su evento (que no deja el email del admin en el historial de un comercio eliminado).
 
 Comprobado además contra el jar (puerto 18104) con curl: camino feliz de cada endpoint, `403` por rol, `401` sin token,
 `403` de un dueño sobre `/api/tenant/**`, `400 VALIDATION_ERROR`, `409 EMAIL_TAKEN`, `409 BRANCH_LIMIT_REACHED`,

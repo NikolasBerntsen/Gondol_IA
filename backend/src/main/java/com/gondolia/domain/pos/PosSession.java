@@ -71,6 +71,12 @@ public class PosSession {
 
     private String closingNote;
 
+    /**
+     * El turno cerró sin ninguna venta vigente (el mostrador pide confirmarlo con un aviso). Se fija al cerrar, como
+     * el arqueo: anular después una venta del turno cerrado no la cambia.
+     */
+    private boolean closedWithoutSales;
+
     /** Se completa al insertar si no se asignó (el seeder puede fijar turnos históricos). */
     private Instant openedAt;
 

@@ -103,13 +103,13 @@ Errores: 400 `VALIDATION_ERROR` (`newPassword` entre 8 y 72 caracteres), 400 `IN
 | Ruta | Acceso |
 |---|---|
 | `/api/auth/login`, `/api/integrations/pos/**`, `/actuator/health`, `/api/docs/**`, `/api/swagger-ui/**`, `/ws/**` | Público (el WebSocket autentica en el CONNECT de STOMP; el webhook POS con `X-API-Key`) |
-| `/api/platform/**` | `PLATFORM_OWNER` |
+| `/api/platform/**` | `PLATFORM_OWNER` (soporte solo entra a clientes y módulos: ver `docs/api-c.md`) |
 | `/api/support/**` | `SUPPORT_AGENT` |
 | `/api/tenant/**` | `TENANT_BOSS`, `TENANT_ADMIN`, `TENANT_EMPLOYEE`, `TENANT_CASHIER` |
 | resto de `/api/**` (`/api/auth/me`, `/api/notifications/**`, `/api/presence/**`, `/api/attachments/**`) | cualquier usuario autenticado |
 
-El detalle fino se declara en cada controlador con `@PreAuthorize(Roles.X)` (`Roles.OWNER`, `SUPPORT`, `TENANT_ANY`
-—incluye al cajero—, `TENANT_POS` = ADMIN + EMPLOYEE + CASHIER, `TENANT_ADMIN`, `TENANT_DASHBOARD` = BOSS + ADMIN,
+El detalle fino se declara en cada controlador con `@PreAuthorize(Roles.X)` (`Roles.OWNER`, `SUPPORT`, `PLATFORM_ANY` = OWNER +
+SUPPORT, `TENANT_ANY` —incluye al cajero—, `TENANT_POS` = ADMIN + EMPLOYEE + CASHIER, `TENANT_ADMIN`, `TENANT_DASHBOARD` = BOSS + ADMIN,
 `TENANT_INVENTORY` = ADMIN + EMPLOYEE, `TENANT_INVENTORY_READ` = BOSS + ADMIN + EMPLOYEE para las lecturas de
 inventario). Una denegación por método responde 403 `FORBIDDEN` con el formato estándar. Regla de SPEC §3.3: todo
 botón o enlace que el frontend le muestra a un rol tiene que responder 2xx para ese rol.
@@ -320,7 +320,7 @@ Nunca se acepta SEND directo a `/topic`, `/queue` o `/user`.
 ```json
 {"matchId":7,"announcementId":3,"branchId":4,"branchName":"Sucursal Fisherton","title":"Retiro preventivo de sopa de tomate",
  "severity":"CRITICAL","reason":"Posible contaminación","instructions":"Retirá el producto de la góndola",
- "productId":10,"productName":"Sopa de tomate La Huerta 340 g","barcode":"7791234500012","lotId":55,"lotNumber":"L2409A",
+ "productId":10,"productName":"Sopa de tomate La Huerta 340 g","barcode":"7791234500017","lotId":55,"lotNumber":"L2409A",
  "expiryDate":"2026-12-01","quantity":12,"matchedAt":"2026-09-17T14:10:00.123456Z"}
 ```
 

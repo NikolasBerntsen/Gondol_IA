@@ -81,7 +81,7 @@ gondolia/
 | `APP_SEED_DEMO` | true | Carga datos demo si no hay tenants |
 | `APP_DEV_FIXTURE` | false | Fixture mínimo para desarrollo local |
 | `APP_BOOTSTRAP_OWNER_EMAIL` / `..._PASSWORD` | dueno@gondolia.app / Gondolia2026! | Dueño inicial |
-| `APP_OPENFOODFACTS_ENABLED` | true | Autocompletar productos por código de barras (internet) |
+| `APP_OPENFOODFACTS_ENABLED` | true | Autocompletar por código de barras con Open Food Facts (internet) los productos que no están en el catálogo de referencia |
 | `APP_TIMEZONE` | America/Argentina/Buenos_Aires | Zona de negocio |
 | `LAN_IPS` | (start.sh detecta) | IPs para el certificado y URLs impresas |
 | `CERT_HOSTNAMES` | (vacío) | Hostnames extra para el certificado |
@@ -99,7 +99,7 @@ Backend (Spring) las lee como: `spring.datasource.url=jdbc:postgresql://${DB_HOS
 | Rol | Ámbito | Etiqueta UI | Propósito |
 |---|---|---|---|
 | `PLATFORM_OWNER` | plataforma (tenant_id NULL) | Dueño GondolIA | Alta/baja/habilitación de tenants, métricas agregadas, avisos y recalls, equipo interno. **Nunca ve datos de negocio de un tenant** (productos, stock, ventas, chats). |
-| `SUPPORT_AGENT` | plataforma | Soporte | Atiende tickets y chat en vivo de todos los tenants. Ve solo lo que el cliente envía en el ticket (texto e imágenes) + nombre de comercio/usuario. |
+| `SUPPORT_AGENT` | plataforma | Soporte | Atiende tickets y chat en vivo de todos los tenants. Ve solo lo que el cliente envía en el ticket (texto e imágenes) + nombre de comercio/usuario. Para resolver tickets también entra a **Clientes** y **Módulos por cliente** de la consola (§6.6): ve y edita los datos administrativos de un comercio, activa o desactiva sus módulos y restablece la contraseña de su administrador. No da de alta comercios, no cambia el plan ni el estado (deshabilitar, baja, reactivar, eliminar) y no ve métricas, avisos ni el equipo. |
 | `TENANT_BOSS` | tenant | Jefe | Dueño y tomador de decisiones, con **vista resumida**: Inicio, Estadísticas, Inteligencia IA y Alertas; **ve** (sin cargar ni editar) inventario, ficha de producto con lotes y movimientos, vencimientos, historial de ventas, movimientos y transferencias; **decide** sobre las recomendaciones de la IA y las alertas (y puede recalcular la IA) + Avisos, Seguridad alimentaria, Soporte. |
 | `TENANT_ADMIN` | tenant | Administrador | Máximo nivel dentro del tenant: todo. |
 | `TENANT_EMPLOYEE` | tenant | Empleado | Carga de inventario y productos con vencimiento/lote (escáner y OCR), vencimientos y **cobro en el POS GondolIA** (si el módulo está activo) + Avisos, Seguridad alimentaria, Soporte. |
@@ -154,7 +154,7 @@ Las filas marcadas con [módulo] además requieren que ese módulo esté habilit
 3. `/api/platform/**` solo devuelve agregados o datos administrativos del tenant (nombre, contacto, plan,
    estado, cantidad de usuarios, última actividad). Prohibido exponer productos, stock, ventas, alertas,
    chats o qué tenants coinciden con un recall (solo **cantidades**).
-4. `SUPPORT_AGENT` no accede a `/api/tenant/**`. Los tenant users no acceden a `/api/support/**` ni `/api/platform/**`.
+4. `SUPPORT_AGENT` no accede a `/api/tenant/**` y de `/api/platform/**` solo a las rutas de clientes y módulos de §6.6. Los tenant users no acceden a `/api/support/**` ni `/api/platform/**`.
 5. Suscripciones STOMP autorizadas por destino (§7).
 6. **Sucursales**: toda operación sobre datos por sucursal valida que la sucursal pertenezca al tenant y que el usuario
    tenga acceso (`BranchAccessService`, §5.3). Un empleado nunca ve ni modifica stock, lotes, ventas, alertas o recalls
@@ -194,7 +194,7 @@ ImportFileFormat: XLSX, XLS, CSV · ImportRowStatus: PENDING, VALID, WARNING, ER
 TenantPlan: FREEMIUM, BASICO, PROFESIONAL            (precio mensual ARS POR SUCURSAL activa: 0, 25000, 55000; máx. sucursales: 1, 3, 10)
 StockRotation: FIFO, FEFO                             (default FIFO)
 BusinessType: KIOSCO, ALMACEN, DIETETICA, MINIMERCADO, FARMACIA, OTRO
-TenantEventType: CREATED, PLAN_CHANGED, DISABLED, ENABLED, CANCELLED, REACTIVATED, DELETED, MODULE_ENABLED, MODULE_DISABLED
+TenantEventType: CREATED, PLAN_CHANGED, DISABLED, ENABLED, CANCELLED, REACTIVATED, DELETED, MODULE_ENABLED, MODULE_DISABLED, DATA_UPDATED, ADMIN_PASSWORD_RESET
 ProductUnit: UNIDAD, KG, LITRO, PAQUETE, CAJA
 LotStatus: ACTIVE, DEPLETED, EXPIRED_DISCARDED, RECALLED
 MovementType: ENTRY, SALE, SALE_VOID, ADJUSTMENT_IN, ADJUSTMENT_OUT, WASTE_EXPIRED, WASTE_DAMAGED, RECALL_REMOVAL, TRANSFER_OUT, TRANSFER_IN
@@ -289,6 +289,8 @@ spring-boot-starter-test, spring-security-test. `artifactId=gondolia-backend`, j
   ```java
   public static final String OWNER = "hasRole('PLATFORM_OWNER')";
   public static final String SUPPORT = "hasRole('SUPPORT_AGENT')";
+  // Equipo de GondolIA: soporte también usa Clientes y Módulos por cliente para resolver tickets (§6.6).
+  public static final String PLATFORM_ANY = "hasAnyRole('PLATFORM_OWNER','SUPPORT_AGENT')";
   public static final String TENANT_ANY = "hasAnyRole('TENANT_BOSS','TENANT_ADMIN','TENANT_EMPLOYEE','TENANT_CASHIER')";
   public static final String TENANT_POS = "hasAnyRole('TENANT_ADMIN','TENANT_EMPLOYEE','TENANT_CASHIER')";
   public static final String TENANT_ADMIN = "hasRole('TENANT_ADMIN')";
@@ -299,8 +301,12 @@ spring-boot-starter-test, spring-security-test. `artifactId=gondolia-backend`, j
   ```
   Además `SecurityConfig` protege por prefijo: `/api/auth/login`, `/api/integrations/pos/**`, `/actuator/health`,
   `/api/docs/**`, `/api/swagger-ui/**`, `/ws/**` → permitAll (el WS autentica en CONNECT; POS con API key);
-  `/api/platform/**` → PLATFORM_OWNER; `/api/support/**` → SUPPORT_AGENT; `/api/tenant/**` → roles tenant;
-  resto `/api/**` → authenticated. Sesión STATELESS, CSRF deshabilitado, CORS permitido para `http://localhost:5173` (dev).
+  antes del prefijo de la consola, reglas por URL y método para soporte (PLATFORM_OWNER o SUPPORT_AGENT):
+  `SUPPORT_PLATFORM_READS` (GET de `/api/platform/tenants`, `/tenants/*`, `/tenants/*/modules` y `/tenant-modules`),
+  `SUPPORT_PLATFORM_EDITS` (PUT de `/tenants/*` y `/tenants/*/modules/*`) y `SUPPORT_PLATFORM_ADMIN_PASSWORD`
+  (POST de `/tenants/*/reset-admin-password`); el resto de `/api/platform/**` → PLATFORM_OWNER (cada endpoint repite
+  la regla con su `@PreAuthorize`: son dos barreras); `/api/support/**` → SUPPORT_AGENT; `/api/tenant/**` → roles
+  tenant; resto `/api/**` → authenticated. Sesión STATELESS, CSRF deshabilitado, CORS permitido para `http://localhost:5173` (dev).
 - **Errores**: `com.gondolia.common.error`: `ApiException(HttpStatus status, String code, String message)` y
   `NotFoundException(String msg)` (404 `NOT_FOUND`), `BadRequestException(String code, String msg)` (400),
   `ForbiddenException(String code, String msg)` (403), `ConflictException(String code, String msg)` (409).
@@ -475,7 +481,7 @@ Dinero y decimales → número JSON. En cada módulo documentá los endpoints fi
   - `GET /api/tenant/products/by-barcode/{barcode}` → `ProductDetail` | 404
   - `POST /api/tenant/products` `{barcode,name,brand,description,categoryId,categoryName? (crea si no existe),supplierId,unit,costPrice,salePrice,minStock,perishable}` → `ProductDetail` (409 `DUPLICATE_BARCODE`)
   - `PUT /api/tenant/products/{id}` (mismo body) · `DELETE /api/tenant/products/{id}` (ADMIN; si tiene movimientos → `active=false`)
-- `GET /api/tenant/catalog/lookup/{barcode}` → `{"found":true,"source":"OPEN_FOOD_FACTS","barcode":"...","name":"...","brand":"...","quantity":"340 g","categoryHint":"Sopas","imageUrl":"..."}` (timeout 4s; `found:false` si falla o está deshabilitado)
+- `GET /api/tenant/catalog/lookup/{barcode}` → `{"found":true,"source":"REFERENCE_CATALOG|OPEN_FOOD_FACTS","barcode":"...","name":"...","brand":"...","quantity":"340 g","categoryHint":"Sopas","imageUrl":"..."}`: primero el catálogo de referencia de productos argentinos del backend (`catalog/productos-argentina.csv`, sin internet), después Open Food Facts (timeout 4s); `found:false` si ninguno lo conoce, falla o está deshabilitado
 - Lotes (carga de mercadería):
   - `POST /api/tenant/lots` `{branchId?,productId,lotNumber,expiryDate,quantity,costPrice,supplierId,source:"MANUAL|SCAN|OCR"}`
     → `{"lot":LotDto,"quarantined":false,"recalls":[RecallInfo],"rotationWarning":null,"existingLots":[LotDto]}` (usa `StockService.receiveLot`;
@@ -543,7 +549,16 @@ Roles: lectura **y decisiones** (gestionar alertas, aceptar/descartar recomendac
   · `POST /api/tenant/recommendations/{id}/discard` `{note?}`. Job diario mide `outcome` de DISCOUNT aceptados a los 7 días
   (`{unitsBefore7d,unitsAfter7d,lift,lotUnitsSold,lotUnitsRemaining}`) y lo envía como `feedback` en el próximo análisis.
 
-### 6.6 Módulo C — Consola de dueños (`com.gondolia.platform`) · rol PLATFORM_OWNER
+### 6.6 Módulo C — Consola de dueños (`com.gondolia.platform`) · rol PLATFORM_OWNER (+ SUPPORT_AGENT en clientes y módulos)
+- **Soporte** (`Roles.PLATFORM_ANY` = PLATFORM_OWNER + SUPPORT_AGENT) usa, para resolver tickets: `GET /api/platform/tenants`,
+  `GET/PUT /api/platform/tenants/{id}` (sin plan se deja el actual; un plan distinto del actual → 403: el plan lo
+  cambia el dueño),
+  `POST /api/platform/tenants/{id}/reset-admin-password`, `GET /api/platform/tenant-modules`,
+  `GET /api/platform/tenants/{id}/modules` y `PUT /api/platform/tenants/{id}/modules/{module}`. Todo lo demás de
+  `/api/platform/**` (métricas, catálogo con adopción, alta, estado, eliminación, avisos, equipo) es solo del dueño (403).
+  Lo que cambia soporte queda en el historial del comercio a su nombre, igual que lo del dueño: `DATA_UPDATED` (qué
+  datos editó, sin los valores), `ADMIN_PASSWORD_RESET` (para qué cuenta generó la temporal) y
+  `MODULE_ENABLED`/`MODULE_DISABLED`.
 - `GET /api/platform/metrics` →
   ```json
   {"tenants":{"total":18,"active":14,"disabled":2,"cancelled":2,"newLast30d":3,"cancelledLast30d":1},
@@ -563,10 +578,10 @@ Roles: lectura **y decisiones** (gestionar alertas, aceptar/descartar recomendac
     (de las sucursales solo datos administrativos: nombre, ciudad, estado — nunca stock ni ventas)
   · `POST /api/platform/tenants` `{name,legalName,taxId,businessType,plan,contactName,contactEmail,contactPhone,address,city,province,notes,firstBranch:{name,address,city,province},boss:{fullName,email,password},admin:{...},employee:{...}}`
     (crea tenant + settings + primera sucursal + 3 usuarios; el empleado queda asignado a la primera sucursal)
-  · `PUT /{id}` (datos y plan; plan distinto → evento PLAN_CHANGED; bajar a un plan con menos sucursales que las activas → 409 `BRANCH_LIMIT_REACHED`)
+  · `PUT /{id}` (datos y plan; datos distintos → evento DATA_UPDATED con qué cambió; `plan` nulo = el actual; plan distinto → evento PLAN_CHANGED; bajar a un plan con menos sucursales que las activas → 409 `BRANCH_LIMIT_REACHED`)
   · `POST /{id}/disable {reason}` · `POST /{id}/enable` · `POST /{id}/cancel {reason}` · `POST /{id}/reactivate`
     (eventos + `TenantStatusChangedEvent` + `SessionTerminationService.forceLogoutTenant` al bloquear)
-  · `DELETE /{id}?confirmName=` (solo CANCELLED; nombre exacto) · `POST /{id}/reset-admin-password` → `{email,temporaryPassword}`
+  · `DELETE /{id}?confirmName=` (solo CANCELLED; nombre exacto) · `POST /{id}/reset-admin-password` → `{email,temporaryPassword}` (evento ADMIN_PASSWORD_RESET)
 - **Módulos por cliente** (§14): catálogo, matriz tenants × módulos, activar/desactivar por tenant, presets al crear,
   `modules` en TenantSummary, filtro `?module=`, adopción y MRR con adicionales en `/metrics`.
 - Equipo: `GET /api/platform/users` → `[{id,fullName,email,role,active,lastLoginAt,createdAt}]` (roles de plataforma) ·
@@ -760,7 +775,8 @@ archivos nuevos solo dentro de `features/<modulo>/` (`api.ts`, `types.ts`, `comp
 | `/login` | LoginPage | público |
 | `/` | redirección por rol: OWNER→`/owner`, SUPPORT→`/support`, BOSS/ADMIN→`/app/dashboard`, EMPLOYEE→`/app/intake`, CASHIER→`/app/pos` | auth |
 | `/profile`, `/notifications` | ProfilePage, NotificationsPage | todos |
-| `/owner` · `/owner/tenants` · `/owner/tenants/new` · `/owner/tenants/:id` · `/owner/tenants/:id/edit` · `/owner/announcements` · `/owner/announcements/new` · `/owner/team` | OwnerMetricsPage · TenantsPage · TenantFormPage · TenantDetailPage · TenantFormPage · OwnerAnnouncementsPage · AnnouncementFormPage · PlatformTeamPage | PLATFORM_OWNER |
+| `/owner` · `/owner/tenants/new` · `/owner/announcements` · `/owner/announcements/new` · `/owner/team` | OwnerMetricsPage · TenantFormPage · OwnerAnnouncementsPage · AnnouncementFormPage · PlatformTeamPage | PLATFORM_OWNER |
+| `/owner/tenants` · `/owner/tenants/:id` · `/owner/tenants/:id/edit` | TenantsPage · TenantDetailPage · TenantFormPage | PLATFORM_OWNER, SUPPORT_AGENT (sin alta, plan ni estado) |
 | `/support` · `/support/tickets/:id` | SupportConsolePage | SUPPORT_AGENT |
 | `/app/dashboard` · `/app/statistics` · `/app/insights` · `/app/alerts` | Dashboard · Statistics · Insights · Alerts | BOSS, ADMIN |
 | `/app/inventory` (acepta `?q=` y `?stockStatus=`) · `/app/products/:id` · `/app/expirations` | Inventory · ProductDetail · Expirations | BOSS (solo lectura), ADMIN, EMPLOYEE |
@@ -773,7 +789,7 @@ archivos nuevos solo dentro de `features/<modulo>/` (`api.ts`, `types.ts`, `comp
 | `/app/pos/sales/:id/ticket` | PosTicketPage (**fuera del AppShell**, para imprimir) | ADMIN, EMPLOYEE, CASHIER + POS_GONDOLIA |
 | `/app/integrations` | IntegrationsPage (A2: POS propio) | ADMIN + POS_INTEGRATION |
 | `/app/imports` · `/app/imports/:id` | ImportsPage · ImportWizardPage (§16) | ADMIN |
-| `/owner/modules` | ModulesMatrixPage (§14) | PLATFORM_OWNER |
+| `/owner/modules` | ModulesMatrixPage (§14) | PLATFORM_OWNER, SUPPORT_AGENT (sin adopción ni MRR de la lista; ve la cuota de cada cliente, como en Clientes) |
 `/app/transfers` requiere además MULTI_BRANCH. Rutas con módulo deshabilitado → `ModuleDisabledPage` (guard `RequireModule`).
 Las rutas y los botones salen de los permisos de `config/access.ts` (regla de §3.3): en las pantallas que el jefe ve en
 solo lectura no aparecen Nuevo producto, Editar, Dar de baja, Importar, Cargar mercadería, Descartar, Registrar venta,
@@ -784,7 +800,7 @@ reponer → `/app/inventory?stockStatus=LOW` y cada producto → `/app/products/
 ### 9.4 Navegación (sidebar, íconos lucide)
 Cada ítem puede declarar `module`; si el tenant no lo tiene habilitado, el ítem no se muestra.
 - OWNER: Métricas (BarChart3) · Clientes (Store) · Módulos por cliente (Blocks) · Avisos y recalls (Megaphone) · Equipo GondolIA (Users)
-- SUPPORT: Bandeja de soporte (Headset)
+- SUPPORT: Bandeja de soporte (Headset) ‖ Clientes (Store) · Módulos por cliente (Blocks)
 - BOSS: Inicio (Home) · Inventario (Package) · Vencimientos (CalendarClock) · Ventas (ShoppingCart) · Estadísticas (BarChart3) · Inteligencia IA (Sparkles) · Alertas (Bell) ‖ Avisos (Megaphone) · Seguridad alimentaria (ShieldAlert) · Soporte (LifeBuoy)
   (vista resumida: Movimientos y Transferencias no están en su menú, pero las puede abrir en solo lectura)
 - ADMIN: Inicio · Punto de venta (MonitorSmartphone)[POS_GONDOLIA] · Inventario (Package) · Carga de mercadería (ScanBarcode) · Importar Excel/CSV (FileSpreadsheet) · Vencimientos (CalendarClock) · Ventas (ShoppingCart) · Transferencias (ArrowLeftRight)[MULTI_BRANCH] · Movimientos (History) · Estadísticas · Inteligencia IA · Alertas · Proveedores (Truck) · Categorías (Tags) ‖ Sucursales (Building2) · Usuarios (UserCog) · Cajas y turnos (Calculator)[POS_GONDOLIA] · Integración POS (Plug)[POS_INTEGRATION] · Configuración (Settings) ‖ Avisos · Seguridad alimentaria · Soporte
@@ -874,7 +890,8 @@ Contraseñas: plataforma `Gondolia2026!`, comercios `Demo2026!`.
   (incluido al menos un caso donde un lote más nuevo vence antes que uno más viejo, para mostrar el aviso de FIFO).
 - Patrones sembrados: finde fuerte (bebidas, snacks), estable (leche, pan), intermitente (especias), creciente,
   decreciente, sin movimiento, picos anómalos, lotes por vencer con sobrestock, productos bajo mínimo, algunos
-  vencidos pendientes; tickets de soporte con conversación (incluida una imagen), avisos generales y un recall histórico resuelto.
+  vencidos pendientes; tickets de soporte con conversación (incluida una imagen), avisos generales y un recall pendiente
+  (publicado el día anterior, sin resolver en los comercios alcanzados) para mostrar y resolver en la demo.
 
 ---
 
@@ -966,7 +983,8 @@ los faltantes (`lot_id NULL`) no devuelven stock; 409 `ALREADY_VOIDED` si el bat
   `POST /api/tenant/pos/sessions/open` `{registerId,openingCash}` (409 `REGISTER_BUSY` / `SESSION_ALREADY_OPEN`) ·
   `POST /api/tenant/pos/sessions/{id}/cash-movements` `{type,amount,reason}` · `POST /api/tenant/pos/sessions/{id}/close` `{countedCash,note}` → reporte ·
   `GET /api/tenant/pos/sessions?status=&from=&to=&page=` (ADMIN: todos los del scope; EMPLOYEE/CASHIER: los propios) · `GET /api/tenant/pos/sessions/{id}` → reporte
-  `{id,branchId,branchName,registerId,registerName,status,openedByName,closedByName,openedAt,closedAt,openingCash,totalsByMethod:{CASH,DEBIT,CREDIT,TRANSFER,QR},cashIn,cashOut,changeGiven,expectedCash,countedCash,difference,salesCount,salesTotal,voidedCount,voidedTotal,topProducts:[{productName,units,total}],cashMovements:[...]}`.
+  `{id,branchId,branchName,registerId,registerName,status,openedByName,closedByName,openedAt,closedAt,openingCash,totalsByMethod:{CASH,DEBIT,CREDIT,TRANSFER,QR},cashIn,cashOut,changeGiven,expectedCash,countedCash,difference,salesCount,salesTotal,voidedCount,voidedTotal,topProducts:[{productName,units,total}],cashMovements:[...],closedWithoutSales}`.
+  El cierre no exige ventas: un turno sin ventas vigentes se cierra igual, libera la caja y queda con `closedWithoutSales:true`.
   `expectedCash = openingCash + Σ pagos CASH − Σ vuelto + CASH_IN − CASH_OUT − efectivo neto de ventas anuladas`.
 - **Productos para vender** (sucursal del turno): `GET /api/tenant/pos/products/lookup?code=` (código exacto) y
   `GET /api/tenant/pos/products/search?q=` (top 20) → `{productId,barcode,name,brand,unit,listPrice,sellableStock,nextLot:{lotId,lotNumber,expiryDate,discountPct,unitPrice}|null,hasRecalledStock,hasExpiredStock,outOfStock}`.
@@ -987,7 +1005,8 @@ los faltantes (`lot_id NULL`) no devuelven stock; 409 `ALREADY_VOIDED` si el bat
   lector USB siempre enfocado + botón cámara (`BarcodeScanner` compartido); carrito con +/−, precio con descuento por lote y chip
   de lote/vencimiento; productos en cuarentena bloqueados y aviso de sin stock; atajos **F2** buscar, **F4** cobrar, **F8** quitar ítem,
   **Esc** cancelar; modal de cobro con medios combinables, billetes rápidos y vuelto; al confirmar muestra el ticket con Imprimir /
-  Nueva venta; retiros e ingresos de efectivo; cerrar caja con arqueo.
+  Nueva venta; retiros e ingresos de efectivo; cerrar caja con arqueo (sin ventas también, después del aviso
+  "Estás a punto de cerrar la caja sin ventas"; el turno queda como "Cerrado sin ventas").
 - `/app/pos/sessions` **PosSessionsPage** (turnos, ventas, reporte de cierre, anulación) · `/app/pos/registers` **PosRegistersPage** (ADMIN) ·
   `/app/pos/sales/:id/ticket` **PosTicketPage** (sin AppShell, CSS de impresión 80 mm, `window.print()`).
 

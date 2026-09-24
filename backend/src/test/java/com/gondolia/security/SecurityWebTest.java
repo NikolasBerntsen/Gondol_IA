@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -41,6 +42,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -98,6 +100,17 @@ class SecurityWebTest {
         @GetMapping("/api/platform/ping")
         Map<String, String> platformPing() {
             return Map.of("ok", "true");
+        }
+
+        /** Sin {@code @PreAuthorize}: prueban solo la regla por URL de las rutas de clientes que usa soporte. */
+        @GetMapping("/api/platform/tenants/{id}")
+        Map<String, Object> platformTenant(@PathVariable Long id) {
+            return Map.of("id", id);
+        }
+
+        @DeleteMapping("/api/platform/tenants/{id}")
+        Map<String, Object> platformTenantDelete(@PathVariable Long id) {
+            return Map.of("id", id);
         }
 
         @GetMapping("/api/support/ping")
@@ -186,6 +199,22 @@ class SecurityWebTest {
         mvc.perform(get("/api/misc/ping").header(HttpHeaders.AUTHORIZATION, bearer(OWNER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.userId").value(1));
+    }
+
+    @Test
+    void supportReachesOnlyTheClientRoutesOfTheConsoleWithTheirMethods() throws Exception {
+        // Primera barrera (por URL y método): soporte ve un cliente pero no lo elimina, aunque el controlador no
+        // tuviera @PreAuthorize.
+        mvc.perform(get("/api/platform/tenants/7").header(HttpHeaders.AUTHORIZATION, bearer(SUPPORT)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(7));
+        mvc.perform(delete("/api/platform/tenants/7").header(HttpHeaders.AUTHORIZATION, bearer(SUPPORT)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+        mvc.perform(delete("/api/platform/tenants/7").header(HttpHeaders.AUTHORIZATION, bearer(OWNER)))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/platform/tenants/7").header(HttpHeaders.AUTHORIZATION, bearer(ADMIN)))
+                .andExpect(status().isForbidden());
     }
 
     @Test

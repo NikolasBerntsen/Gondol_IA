@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Banknote,
+  Check,
   CheckCircle2,
   CreditCard,
   Landmark,
   Printer,
   QrCode,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 import { PriceTag, Ticket80mm, type Ticket80mmData } from '@/components/gondola';
@@ -20,7 +22,22 @@ import {
 } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { formatMoney } from '@/lib/format';
-import { formatArsInput, parseArs, QUICK_BILLS, subtractMoney, sumMoney } from '../money';
+import { useMediaQuery } from '@/lib/useMediaQuery';
+import { QUICK_BILLS } from '../money';
+import {
+  addBill,
+  canCharge,
+  exactCash,
+  hasMethod,
+  isInvalidAmount,
+  paymentTotals,
+  rebalanceSuggested,
+  removeLine,
+  setLineAmount,
+  toggleMethod,
+  toPayments,
+  type PaymentLine,
+} from '../payments';
 import { PAYMENT_METHOD_LABELS, type PaymentMethod, type PosSale } from '../types';
 import { saleToTicketData } from '../ticket';
 
@@ -34,11 +51,8 @@ const METHOD_ICONS: Record<PaymentMethod, LucideIcon> = {
 
 const METHOD_ORDER: PaymentMethod[] = ['CASH', 'DEBIT', 'CREDIT', 'TRANSFER', 'QR'];
 
-interface PaymentLine {
-  id: number;
-  method: PaymentMethod;
-  amount: string;
-}
+const methodButtonId = (method: PaymentMethod) => `pay-method-${method}`;
+const lineInputId = (id: number) => `pay-${id}`;
 
 export interface PaymentSheetProps {
   open: boolean;
@@ -64,6 +78,12 @@ export interface PaymentSheetProps {
 /**
  * Hoja de cobro (SPEC §15.3): medios combinables, billetes rápidos, vuelto en vivo y, al confirmar,
  * el ticket con "Imprimir" y "Nueva venta".
+ *
+ * Arranca sin pagos: el cajero toca los medios con los que paga el cliente (quedan iluminados) y cada uno suma una
+ * línea abajo con lo que falta; volver a tocar un medio iluminado quita su línea. Lo que el cajero no escribió se
+ * acomoda solo a lo que falte, también si cambia el total (reglas en `../payments`). Los billetes rápidos aparecen
+ * solo con una línea de efectivo. El resumen (Total, Pagado, Falta, Vuelto) y los botones quedan fijos abajo: lo
+ * único que se desplaza es la lista de pagos (en una pantalla baja, la hoja entera, con el pie siempre a la vista).
  */
 export function PaymentSheet({
   open,
@@ -79,88 +99,65 @@ export function PaymentSheet({
   storeName,
   taxId,
 }: PaymentSheetProps) {
-  const [lines, setLines] = useState<PaymentLine[]>([{ id: 1, method: 'CASH', amount: '' }]);
-  const [active, setActive] = useState(1);
-  const nextId = useRef(2);
+  const [lines, setLines] = useState<PaymentLine[]>([]);
+  const nextId = useRef(1);
+  // Cabecera compacta (etiqueta chica y unidades abajo) cuando la mediana no deja lugar al título: por debajo de
+  // 360 px, o de 400 px si el total llega al millón.
+  const compactHeader = useMediaQuery(total >= 1_000_000 ? '(max-width: 399px)' : '(max-width: 359px)');
 
   useEffect(() => {
     if (open && !sale) {
-      setLines([{ id: 1, method: 'CASH', amount: '' }]);
-      setActive(1);
-      nextId.current = 2;
+      setLines([]);
+      nextId.current = 1;
     }
   }, [open, sale]);
 
-  const amountOf = useCallback((line: PaymentLine) => parseArs(line.amount) ?? 0, []);
+  // El mostrador puede cambiar el total con la hoja abierta (vuelve a pedir el carrito al abrirla y después de un
+  // PAYMENT_INSUFFICIENT): los montos sugeridos lo siguen y lo que escribió el cajero no se toca.
+  useEffect(() => {
+    setLines((prev) => rebalanceSuggested(prev, total));
+  }, [total]);
 
-  const totals = useMemo(() => {
-    const paid = sumMoney(lines.map(amountOf));
-    const cash = sumMoney(lines.filter((line) => line.method === 'CASH').map(amountOf));
-    const nonCash = subtractMoney(paid, cash);
-    const remaining = Math.max(0, subtractMoney(total, paid));
-    const over = Math.max(0, subtractMoney(paid, total));
-    const nonCashOver = nonCash > total;
-    const change = nonCashOver ? 0 : Math.min(over, cash);
-    const invalid = lines.some((line) => line.amount.trim() !== '' && parseArs(line.amount) === null);
-    return { paid, cash, nonCash, remaining, nonCashOver, change, invalid };
-  }, [lines, total, amountOf]);
+  const totals = useMemo(() => paymentTotals(lines, total), [lines, total]);
+  const canConfirm = canCharge(totals, total) && !pending && !refreshing;
 
-  const canConfirm = totals.paid >= total && !totals.nonCashOver && !totals.invalid && !pending && !refreshing;
-
-  const focusLine = (id: number) => {
-    setActive(id);
+  /**
+   * Enfoca después del render que agrega o quita la línea (el elemento todavía no existe o está por irse). Si es el
+   * monto de una línea, además la muestra entera (con los billetes rápidos) por encima del pie fijo: en una pantalla
+   * baja el pie tapa la lista y el navegador, al enfocar, no lo tiene en cuenta (lo corrige el `scroll-padding` del
+   * diálogo).
+   */
+  const focusLater = (elementId: string, select = false) => {
     requestAnimationFrame(() => {
-      const el = document.getElementById(`pay-${id}`) as HTMLInputElement | null;
+      const el = document.getElementById(elementId);
       el?.focus();
-      el?.select();
+      if (select && el instanceof HTMLInputElement) el.select();
+      el?.closest('li')?.scrollIntoView?.({ block: 'nearest' });
     });
   };
 
-  const addMethod = (method: PaymentMethod) => {
-    const existing = lines.find((line) => line.method === method);
-    if (existing) {
-      focusLine(existing.id);
-      return;
-    }
-    const id = nextId.current++;
-    const onlyEmpty = lines.length === 1 && lines[0].amount.trim() === '';
-    const line: PaymentLine = {
-      id,
-      method,
-      amount: method === 'CASH' ? '' : totals.remaining ? formatArsInput(totals.remaining) : '',
-    };
-    setLines(onlyEmpty ? [line] : [...lines, line]);
-    focusLine(id);
+  const toggle = (method: PaymentMethod) => {
+    const adding = !hasMethod(lines, method);
+    const id = nextId.current;
+    if (adding) nextId.current += 1;
+    setLines(toggleMethod(lines, method, id, total));
+    // Al agregar, el cursor va al monto (Enter cobra); al quitar, se queda en el botón que se apagó.
+    if (adding) focusLater(lineInputId(id), true);
   };
 
-  const setCashAmount = (value: number) => {
-    const cashLine = lines.find((line) => line.method === 'CASH');
-    if (cashLine) {
-      setLines(lines.map((line) => (line.id === cashLine.id ? { ...line, amount: formatArsInput(value) } : line)));
-      focusLine(cashLine.id);
-    } else {
-      const id = nextId.current++;
-      setLines([...lines, { id, method: 'CASH', amount: formatArsInput(value) }]);
-      focusLine(id);
-    }
+  const remove = (line: PaymentLine) => {
+    setLines(removeLine(lines, line.id, total));
+    focusLater(methodButtonId(line.method));
   };
 
-  const addBill = (bill: number) => {
-    const cashLine = lines.find((line) => line.method === 'CASH');
-    setCashAmount(sumMoney([cashLine ? amountOf(cashLine) : 0, bill]));
-  };
-
-  const exactAmount = () => {
-    const need = subtractMoney(total, totals.nonCash);
-    if (need <= 0) return;
-    setCashAmount(need);
+  const cashLine = lines.find((line) => line.method === 'CASH');
+  const focusCash = () => {
+    if (cashLine) focusLater(lineInputId(cashLine.id), true);
   };
 
   const submit = () => {
     if (!canConfirm) return;
-    const payments = lines
-      .map((line) => ({ method: line.method, amount: amountOf(line) }))
-      .filter((payment) => payment.amount > 0);
+    const payments = toPayments(lines);
     if (!payments.length) return;
     onConfirm(payments);
   };
@@ -171,7 +168,12 @@ export function PaymentSheet({
     <Dialog open={open} onOpenChange={(next) => (!next && pending ? undefined : onOpenChange(next))}>
       <DialogContent
         className={cn(
-          'max-w-[680px] gap-0 overflow-hidden p-0 sm:p-0',
+          // Columna: encabezado y pie fijos, el medio se achica y desplaza. Si la pantalla es tan baja que ni la
+          // parte fija entra, el diálogo entero se desplaza (overflow-y-auto del DialogContent) en vez de cortarse.
+          // El scroll-padding (un poco más que el alto del pie) hace que enfocar o mostrar una línea la deje por
+          // encima del pie pegado abajo y no debajo.
+          'flex max-w-[680px] flex-col gap-0 p-0 [scroll-padding-bottom:10rem] sm:p-0',
+          'max-sm:[scroll-padding-bottom:11.5rem]',
           'max-sm:bottom-0 max-sm:top-auto max-sm:w-full max-sm:max-w-none max-sm:translate-y-0 max-sm:rounded-b-none',
         )}
         aria-describedby={undefined}
@@ -208,180 +210,244 @@ export function PaymentSheet({
           </div>
         ) : (
           <form
-            className="flex min-h-0 flex-col"
+            className="flex min-h-0 flex-1 flex-col"
             onSubmit={(event) => {
               event.preventDefault();
               submit();
             }}
           >
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border py-4 pl-5 pr-14 sm:pl-6">
-              <div>
-                <DialogTitle>Cobrar</DialogTitle>
-                <p className="text-sm text-muted-foreground" aria-live="polite">
-                  {units} {units === 1 ? 'unidad' : 'unidades'} en el ticket
-                  {refreshing ? ' · actualizando precios…' : ''}
-                </p>
-              </div>
-              <PriceTag size="md" price={total} label="Total" />
+            {/* La etiqueta del total no baja de renglón (se comería el alto que necesita la lista de pagos): va al
+                lado del título. En la cabecera compacta es la chica y el renglón de unidades pasa abajo a todo el
+                ancho, porque en 320 px al lado de un total de seis cifras no entra ni la palabra "unidades". */}
+            <div className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 border-b border-border py-4 pl-5 pr-14 sm:gap-x-4 sm:pl-6">
+              <DialogTitle className={cn('col-start-1 row-start-1', compactHeader ? 'self-center' : 'self-end')}>
+                Cobrar
+              </DialogTitle>
+              <p
+                className={cn(
+                  'col-start-1 row-start-2 self-start text-sm text-muted-foreground',
+                  compactHeader && 'col-span-2 mt-1',
+                )}
+                aria-live="polite"
+              >
+                {units} {units === 1 ? 'unidad' : 'unidades'} en el ticket
+                {refreshing ? ' · actualizando precios…' : ''}
+              </p>
+              <PriceTag
+                size={compactHeader ? 'sm' : 'md'}
+                price={total}
+                label="Total"
+                className={cn('col-start-2 row-start-1', compactHeader ? 'row-span-1' : 'row-span-2')}
+              />
             </div>
 
-            <div className="gd-scroll grid max-h-[min(62vh,600px)] gap-5 overflow-y-auto px-5 py-5 sm:px-6">
+            <div className="shrink-0 border-b border-border px-5 py-3 sm:px-6 sm:py-4">
               <fieldset>
-                <legend className="gd-eyebrow mb-2">Medio de pago · se pueden combinar</legend>
+                <legend className="gd-eyebrow mb-2">Medios de pago · tocá uno o varios</legend>
                 <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
                   {METHOD_ORDER.map((method) => {
                     const Icon = METHOD_ICONS[method];
-                    const used = lines.some(
-                      (line) => line.method === method && (line.amount.trim() !== '' || line.id === active),
-                    );
+                    const on = hasMethod(lines, method);
                     return (
                       <button
                         key={method}
+                        id={methodButtonId(method)}
                         type="button"
-                        onClick={() => addMethod(method)}
-                        aria-pressed={used}
+                        onClick={() => toggle(method)}
+                        aria-pressed={on}
                         className={cn(
-                          'flex h-16 flex-col items-center justify-center gap-1 rounded-control border text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                          used
-                            ? 'border-primary bg-primary/[0.08] text-foreground'
+                          // Foco con contorno punteado y separado del borde: un aro lleno pegado al borde se
+                          // confundía con un medio ya elegido al abrir con F4, que deja el foco en Efectivo sin
+                          // haber tocado nada. Elegido = fondo verde, borde y tilde.
+                          'relative flex h-12 flex-col items-center justify-center gap-1 rounded-control border text-sm font-semibold transition-colors focus-visible:outline-dashed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-16',
+                          on
+                            ? 'border-primary bg-primary/[0.12] text-foreground hover:bg-primary/[0.18]'
                             : 'border-input bg-card text-foreground hover:bg-muted',
                         )}
                       >
-                        <Icon className="h-5 w-5" aria-hidden="true" />
-                        {PAYMENT_METHOD_LABELS[method]}
+                        {on ? (
+                          <Check
+                            className="absolute right-1.5 top-1.5 h-3.5 w-3.5 text-primary"
+                            strokeWidth={3}
+                            aria-hidden="true"
+                          />
+                        ) : null}
+                        <Icon className={cn('h-5 w-5 shrink-0', on && 'text-primary')} aria-hidden="true" />
+                        {/* En 320 px "Transferencia" entra justo: si no entra (otra tipografía), se corta con "…"
+                            en vez de pisar el borde. */}
+                        <span className="max-w-full truncate">{PAYMENT_METHOD_LABELS[method]}</span>
                       </button>
                     );
                   })}
                 </div>
               </fieldset>
-
-              <div className="grid gap-2">
-                {lines.map((line) => {
-                  const Icon = METHOD_ICONS[line.method];
-                  const bad = line.amount.trim() !== '' && parseArs(line.amount) === null;
-                  return (
-                    <div
-                      key={line.id}
-                      className={cn(
-                        'flex items-center gap-3 rounded-control border px-3 py-2',
-                        line.id === active ? 'border-primary/60 bg-primary/[0.04]' : 'border-border',
-                      )}
-                    >
-                      <span className="flex w-[118px] shrink-0 items-center gap-2 text-base font-semibold">
-                        <Icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                        {PAYMENT_METHOD_LABELS[line.method]}
-                      </span>
-                      <label htmlFor={`pay-${line.id}`} className="sr-only">
-                        Monto en {PAYMENT_METHOD_LABELS[line.method]}
-                      </label>
-                      <div className="relative min-w-0 flex-1">
-                        <span
-                          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                          aria-hidden="true"
-                        >
-                          $
-                        </span>
-                        <Input
-                          id={`pay-${line.id}`}
-                          inputMode="decimal"
-                          autoComplete="off"
-                          value={line.amount}
-                          invalid={bad}
-                          placeholder={line.method === 'CASH' ? 'Recibido' : '0'}
-                          onFocus={() => setActive(line.id)}
-                          onChange={(event) =>
-                            setLines(
-                              lines.map((item) =>
-                                item.id === line.id ? { ...item, amount: event.target.value } : item,
-                              ),
-                            )
-                          }
-                          className="pl-7 text-right font-semibold tabular-nums"
-                        />
-                      </div>
-                      {lines.length > 1 ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Quitar ${PAYMENT_METHOD_LABELS[line.method]}`}
-                          onClick={() => setLines(lines.filter((item) => item.id !== line.id))}
-                        >
-                          ×
-                        </Button>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div>
-                <div className="gd-eyebrow mb-2">Billetes rápidos (efectivo)</div>
-                <div className="flex flex-wrap gap-2">
-                  {QUICK_BILLS.map((bill) => (
-                    <Button
-                      key={bill}
-                      type="button"
-                      variant="outline"
-                      className="min-w-[92px] font-display text-md tabular-nums"
-                      onClick={() => addBill(bill)}
-                    >
-                      {formatMoney(bill)}
-                    </Button>
-                  ))}
-                  <Button type="button" variant="secondary" onClick={exactAmount}>
-                    Monto justo
-                  </Button>
-                </div>
-              </div>
-
-              <dl className="grid grid-cols-2 gap-y-1 border-t border-border pt-4 text-base sm:grid-cols-4 sm:gap-x-6">
-                <div>
-                  <dt className="text-sm text-muted-foreground">Total</dt>
-                  <dd className="font-semibold tabular-nums">{formatMoney(total, { decimals: 2 })}</dd>
-                </div>
-                <div>
-                  <dt className="text-sm text-muted-foreground">Pagado</dt>
-                  <dd className="font-semibold tabular-nums">{formatMoney(totals.paid, { decimals: 2 })}</dd>
-                </div>
-                <div>
-                  <dt className="text-sm text-muted-foreground">Falta</dt>
-                  <dd
-                    className={cn(
-                      'font-semibold tabular-nums',
-                      totals.remaining > 0 ? 'text-crit-ink' : 'text-muted-foreground',
-                    )}
-                  >
-                    {formatMoney(totals.remaining, { decimals: 2 })}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-sm text-muted-foreground">Vuelto</dt>
-                  <dd
-                    className="font-display text-xl font-semibold leading-8 tabular-nums text-ok-ink"
-                    aria-live="polite"
-                  >
-                    {formatMoney(totals.change, { decimals: 2 })}
-                  </dd>
-                </div>
-              </dl>
-              {totals.nonCashOver ? (
-                <p role="alert" className="flex items-start gap-2 text-sm text-crit-ink">
-                  <AlertTriangle className="mt-px h-4 w-4 shrink-0" aria-hidden="true" />
-                  El vuelto solo se da en efectivo: bajá el monto con tarjeta, transferencia o QR.
-                </p>
-              ) : null}
             </div>
 
-            <div className="flex flex-col-reverse gap-2 border-t border-border bg-muted/40 px-5 py-4 sm:flex-row sm:items-center sm:justify-end sm:px-6">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
-                Volver a la venta
-                <Kbd className="ml-2">Esc</Kbd>
-              </Button>
-              <Button type="submit" size="lg" disabled={!canConfirm} loading={pending}>
-                Confirmar cobro
-                <Kbd className="ml-2 border-primary-foreground/30 bg-transparent text-primary-foreground">Enter</Kbd>
-              </Button>
+            {/* `relative`: las etiquetas `sr-only` (absolutas) quedan dentro de la lista y no estiran el diálogo.
+                En una pantalla baja (un celular apaisado) no hay alto para una lista con su propio scroll entre el
+                encabezado y el pie: ahí crece con sus líneas y se desplaza el diálogo entero, con el pie pegado abajo. */}
+            <div className="gd-scroll relative min-h-[5.5rem] flex-1 overflow-y-auto px-5 py-4 sm:px-6 [@media(max-height:540px)]:flex-none [@media(max-height:540px)]:overflow-visible">
+              {lines.length ? (
+                <ul className="grid gap-2" aria-label="Pagos cargados">
+                  {lines.map((line) => {
+                    const Icon = METHOD_ICONS[line.method];
+                    const label = PAYMENT_METHOD_LABELS[line.method];
+                    return (
+                      <li
+                        key={line.id}
+                        className="rounded-control border border-border px-3 py-2 transition-colors focus-within:border-primary/60 focus-within:bg-primary/[0.04]"
+                      >
+                        <div className="flex items-center gap-3">
+                          {/* Ancho mínimo y no fijo: si la tipografía todavía no cargó (o el sistema la agranda),
+                              "Transferencia" empuja el input en vez de aplastar el ícono. */}
+                          <span className="flex min-w-[118px] shrink-0 items-center gap-2 text-base font-semibold">
+                            <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                            {label}
+                          </span>
+                          <label htmlFor={lineInputId(line.id)} className="sr-only">
+                            Monto en {label}
+                          </label>
+                          <div className="relative min-w-0 flex-1">
+                            <span
+                              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                              aria-hidden="true"
+                            >
+                              $
+                            </span>
+                            <Input
+                              id={lineInputId(line.id)}
+                              inputMode="decimal"
+                              autoComplete="off"
+                              value={line.amount}
+                              invalid={isInvalidAmount(line)}
+                              placeholder={line.method === 'CASH' ? 'Recibido' : '0'}
+                              onChange={(event) => setLines(setLineAmount(lines, line.id, event.target.value, total))}
+                              className="pl-7 text-right font-semibold tabular-nums"
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Quitar ${label}`}
+                            onClick={() => remove(line)}
+                          >
+                            <X aria-hidden="true" />
+                          </Button>
+                        </div>
+                        {line.method === 'CASH' ? (
+                          <div className="mt-2 border-t border-border pt-2">
+                            <div className="gd-eyebrow mb-1.5" id="pay-quick-bills">
+                              Billetes rápidos
+                            </div>
+                            <div
+                              className="grid grid-cols-3 gap-2 sm:grid-cols-5"
+                              role="group"
+                              aria-labelledby="pay-quick-bills"
+                            >
+                              {QUICK_BILLS.map((bill) => (
+                                <Button
+                                  key={bill}
+                                  type="button"
+                                  variant="outline"
+                                  className="px-2 font-display text-md tabular-nums"
+                                  onClick={() => {
+                                    setLines(addBill(lines, bill, total));
+                                    focusCash();
+                                  }}
+                                >
+                                  {formatMoney(bill)}
+                                </Button>
+                              ))}
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                className="col-span-2 sm:col-span-1"
+                                onClick={() => {
+                                  setLines(exactCash(lines, total));
+                                  focusCash();
+                                }}
+                              >
+                                Monto justo
+                              </Button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="grid min-h-[3.5rem] place-items-center rounded-control border border-dashed border-border px-4 py-3 text-center text-sm text-muted-foreground">
+                  Tocá cómo paga el cliente. Si combina medios, tocá cada uno: se suman acá abajo.
+                </p>
+              )}
+            </div>
+
+            {/* Pie fijo con el resumen y los botones. `sticky` cubre la pantalla tan baja que ni la parte fija entra:
+                ahí se desplaza el diálogo entero y el pie igual queda pegado abajo. */}
+            <div className="sticky bottom-0 z-10 shrink-0 bg-card">
+              <section aria-label="Resumen del cobro" className="border-t border-border px-5 py-2 sm:px-6 sm:py-3">
+                {totals.nonCashOver ? (
+                  <p role="alert" className="mb-2 flex items-start gap-2 text-sm text-crit-ink">
+                    <AlertTriangle className="mt-px h-4 w-4 shrink-0" aria-hidden="true" />
+                    El vuelto solo se da en efectivo: bajá el monto con tarjeta, transferencia o QR.
+                  </p>
+                ) : null}
+                {/* Los montos no se parten en dos renglones (el pie crecería y le comería alto a la lista). El vuelto
+                    tiene la columna más ancha en escritorio y va más chico en el celular: "$ 100.000,00" entra
+                    en una línea desde 320 px. */}
+                <dl className="grid grid-cols-2 gap-y-1 whitespace-nowrap text-base sm:grid-cols-[repeat(3,minmax(0,1fr))_minmax(0,1.5fr)] sm:gap-x-6">
+                  <div>
+                    <dt className="text-sm text-muted-foreground">Total</dt>
+                    <dd className="font-semibold tabular-nums">{formatMoney(total, { decimals: 2 })}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm text-muted-foreground">Pagado</dt>
+                    <dd className="font-semibold tabular-nums">{formatMoney(totals.paid, { decimals: 2 })}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm text-muted-foreground">Falta</dt>
+                    <dd
+                      className={cn(
+                        'font-semibold tabular-nums',
+                        totals.remaining > 0 ? 'text-crit-ink' : 'text-muted-foreground',
+                      )}
+                    >
+                      {formatMoney(totals.remaining, { decimals: 2 })}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm text-muted-foreground">Vuelto</dt>
+                    <dd
+                      className="font-display text-lg font-semibold tabular-nums text-ok-ink sm:text-xl sm:leading-8"
+                      aria-live="polite"
+                    >
+                      {formatMoney(totals.change, { decimals: 2 })}
+                    </dd>
+                  </div>
+                </dl>
+              </section>
+
+              {/* En el celular van en una sola fila ("Volver" corto) para dejarle el alto a la lista de pagos. */}
+              <div className="flex gap-2 border-t border-border bg-muted/40 px-5 py-3 sm:items-center sm:justify-end sm:px-6 sm:py-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="max-sm:h-11"
+                  onClick={() => onOpenChange(false)}
+                  disabled={pending}
+                >
+                  <span>
+                    Volver<span className="max-sm:hidden"> a la venta</span>
+                  </span>
+                  <Kbd className="ml-2">Esc</Kbd>
+                </Button>
+                <Button type="submit" size="lg" className="max-sm:flex-1" disabled={!canConfirm} loading={pending}>
+                  Confirmar cobro
+                  <Kbd className="ml-2 border-primary-foreground/30 bg-transparent text-primary-foreground">Enter</Kbd>
+                </Button>
+              </div>
             </div>
           </form>
         )}

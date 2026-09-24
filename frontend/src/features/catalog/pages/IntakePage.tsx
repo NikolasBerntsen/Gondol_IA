@@ -41,7 +41,14 @@ import { catalogLookupApi, lotsApi, ocrApi, productsApi, suppliersApi } from '..
 import { LotRotationList } from '../components/LotRotationList';
 import { OcrChoice } from '../components/OcrChoice';
 import { RecallPanel } from '../components/RecallPanel';
-import { normalizeBarcode, normalizeLotNumber, parseDateInput, parseDecimal, unitShort } from '../lib';
+import {
+  lookupSourceLabel,
+  normalizeBarcode,
+  normalizeLotNumber,
+  parseDateInput,
+  parseDecimal,
+  unitShort,
+} from '../lib';
 import type { BarcodeLookupResponse, LotDto, OcrLabelResponse, ProductDetail, ReceiveLotResponse } from '../types';
 
 type IntakeSource = 'MANUAL' | 'SCAN' | 'OCR';
@@ -475,10 +482,14 @@ export default function IntakePage() {
                   <p className="mt-2 text-sm text-muted-foreground">
                     Podés crear el producto con estos datos y corregirlos después.
                   </p>
+                  {lookupSourceLabel(unknown.source) && (
+                    <p className="mt-1 text-sm text-muted-foreground">Fuente: {lookupSourceLabel(unknown.source)}.</p>
+                  )}
                 </div>
               ) : (
                 <p className="text-base text-muted-foreground">
-                  No encontramos el producto en la base pública. Creálo a mano y después cargá su mercadería.
+                  No encontramos el producto en el catálogo ni en la base pública. Crealo a mano y después cargá su
+                  mercadería.
                 </p>
               )}
               <div className="flex flex-col-reverse gap-2 sm:flex-row">
@@ -491,6 +502,9 @@ export default function IntakePage() {
                     const params = new URLSearchParams({ barcode: unknown.barcode });
                     if (unknown.name) params.set('name', unknown.name);
                     if (unknown.brand) params.set('brand', unknown.brand);
+                    if (unknown.quantity) params.set('quantity', unknown.quantity);
+                    if (unknown.categoryHint) params.set('category', unknown.categoryHint);
+                    if (unknown.source) params.set('source', unknown.source);
                     navigate(`/app/products/new?${params.toString()}`);
                   }}
                 >

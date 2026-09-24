@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { ProductListItem, ProductMovement } from './types';
 import {
+  REFERENCE_CATALOG_SOURCE,
   STOCK_FILTERS,
   formatQuantity,
+  lookupSourceLabel,
   movementSign,
   movementTypeLabel,
   normalizeBarcode,
@@ -10,6 +12,7 @@ import {
   notHandledInScope,
   parseDateInput,
   parseDecimal,
+  suggestCategory,
   unitShort,
   whatsappLink,
 } from './lib';
@@ -123,6 +126,41 @@ describe('normalización (espejo del backend)', () => {
   it('normalizeLotNumber deja mayúsculas y alfanuméricos', () => {
     expect(normalizeLotNumber('l-2026/09 a')).toBe('L202609A');
     expect(normalizeLotNumber('--')).toBe('');
+  });
+});
+
+describe('autocompletado por código de barras', () => {
+  const categories = [
+    { id: 1, name: 'Almacén' },
+    { id: 2, name: 'Lácteos' },
+  ];
+
+  it('lookupSourceLabel nombra el origen de los datos', () => {
+    // Datos de Open Food Facts: la ODbL pide atribuirlos donde se muestran.
+    expect(lookupSourceLabel(REFERENCE_CATALOG_SOURCE)).toBe(
+      'catálogo de productos argentinos (datos de Open Food Facts, licencia ODbL)',
+    );
+    expect(lookupSourceLabel('OPEN_FOOD_FACTS')).toBe('Open Food Facts');
+    expect(lookupSourceLabel(null)).toBeNull();
+    expect(lookupSourceLabel('OTRA')).toBeNull();
+  });
+
+  it('suggestCategory elige la categoría existente sin importar mayúsculas ni tildes', () => {
+    expect(suggestCategory(categories, 'Almacén', REFERENCE_CATALOG_SOURCE)).toEqual({ categoryId: 1 });
+    expect(suggestCategory(categories, ' lacteos ', 'OPEN_FOOD_FACTS')).toEqual({ categoryId: 2 });
+  });
+
+  it('suggestCategory propone crear la del catálogo de referencia, no la de Open Food Facts', () => {
+    expect(suggestCategory(categories, 'Golosinas', REFERENCE_CATALOG_SOURCE)).toEqual({
+      newCategoryName: 'Golosinas',
+    });
+    expect(suggestCategory(categories, 'Mieles de flores', 'OPEN_FOOD_FACTS')).toBeNull();
+  });
+
+  it('suggestCategory sin sugerencia no propone nada', () => {
+    expect(suggestCategory(categories, null, REFERENCE_CATALOG_SOURCE)).toBeNull();
+    expect(suggestCategory(categories, '  ', REFERENCE_CATALOG_SOURCE)).toBeNull();
+    expect(suggestCategory([], 'Almacén', REFERENCE_CATALOG_SOURCE)).toEqual({ newCategoryName: 'Almacén' });
   });
 });
 

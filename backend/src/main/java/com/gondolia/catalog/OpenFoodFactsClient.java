@@ -11,7 +11,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 /**
- * Autocompletado de productos por código de barras contra Open Food Facts (SPEC §2.2, §6.3).
+ * Autocompletado de productos por código de barras contra Open Food Facts (SPEC §2.2, §6.3), para los códigos que no
+ * están en el catálogo de referencia ({@link ReferenceCatalog}).
  * <p>
  * Es una ayuda para cargar un producto nuevo, nunca un requisito: si {@code app.openfoodfacts-enabled} está en
  * {@code false}, no hay internet o el servicio tarda más de 4 segundos, la respuesta es {@code found: false} y la

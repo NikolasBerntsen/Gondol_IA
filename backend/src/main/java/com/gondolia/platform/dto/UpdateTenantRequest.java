@@ -9,9 +9,9 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 /**
- * Edición de los datos administrativos y del plan de un comercio (SPEC §6.6). Cambiar el plan registra el evento
- * {@code PLAN_CHANGED}; bajar a un plan con menos sucursales que las activas devuelve 409
- * {@code BRANCH_LIMIT_REACHED}.
+ * Edición de los datos administrativos y del plan de un comercio (SPEC §6.6). Si cambia algún dato se registra
+ * {@code DATA_UPDATED}; cambiar el plan registra {@code PLAN_CHANGED} (solo un dueño) y bajar a un plan con menos
+ * sucursales que las activas devuelve 409 {@code BRANCH_LIMIT_REACHED}.
  */
 public record UpdateTenantRequest(
         @NotBlank(message = "es obligatorio") @Size(max = 150, message = "no puede superar los 150 caracteres")
@@ -23,7 +23,11 @@ public record UpdateTenantRequest(
 
         @NotNull(message = "elegí un rubro") BusinessType businessType,
 
-        @NotNull(message = "elegí un plan") TenantPlan plan,
+        /**
+         * Plan nuevo; si es {@code null} se deja el actual. Soporte no cambia el plan y lo manda así: si un dueño lo
+         * cambió mientras editaba, guardar no lo pisa ni responde 403.
+         */
+        TenantPlan plan,
 
         @Size(max = 150, message = "no puede superar los 150 caracteres") String contactName,
 

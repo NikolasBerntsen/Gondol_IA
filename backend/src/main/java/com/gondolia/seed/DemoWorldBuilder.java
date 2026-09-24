@@ -360,7 +360,7 @@ final class DemoWorldBuilder {
 
     // ------------------------------------------------------------------ simulación
 
-    StoreSimulator.TenantRun simulationRun(TenantRecord record, Long oldRecallAnnouncementId) {
+    StoreSimulator.TenantRun simulationRun(TenantRecord record) {
         TenantSpec spec = record.spec;
         List<StoreSimulator.BranchRun> branches = new ArrayList<>();
         for (BranchSpec branch : spec.branches()) {
@@ -382,8 +382,7 @@ final class DemoWorldBuilder {
                     List.copyOf(record.usersWithAccess.get(branchId)), longShift));
         }
         return new StoreSimulator.TenantRun(spec, record.id, branches, record.products, record.admin(),
-                record.users, record.importAppliedAt, record.importJobId, oldRecallAnnouncementId,
-                DemoScenarios.forTenant(spec.key()));
+                record.users, record.importAppliedAt, record.importJobId, DemoScenarios.forTenant(spec.key()));
     }
 
     private Register register(TenantRecord record, long branchId, String name, Instant created) {

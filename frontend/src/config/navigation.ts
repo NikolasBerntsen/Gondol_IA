@@ -49,7 +49,7 @@ export interface NavSection {
 }
 
 const item = {
-  // Consola de dueños
+  // Consola de dueños (Clientes y Módulos por cliente también los usa soporte)
   metrics: { label: 'Métricas', to: '/owner', icon: BarChart3, end: true },
   tenants: { label: 'Clientes', to: '/owner/tenants', icon: Store },
   ownerModules: { label: 'Módulos por cliente', to: '/owner/modules', icon: Blocks },
@@ -99,7 +99,11 @@ export const NAVIGATION: Record<Role, NavSection[]> = {
       items: [item.metrics, item.tenants, item.ownerModules, item.ownerAnnouncements, item.platformTeam],
     },
   ],
-  SUPPORT_AGENT: [{ title: 'Soporte', items: [item.supportInbox] }],
+  // Soporte atiende la bandeja y, para resolver un ticket, abre y corrige la ficha del cliente y sus módulos.
+  SUPPORT_AGENT: [
+    { title: 'Soporte', items: [item.supportInbox] },
+    { title: 'Clientes', items: [item.tenants, item.ownerModules] },
+  ],
   // Vista resumida del jefe: lo que abre desde acá lo puede ver completo (inventario, vencimientos, ventas) y
   // decide sobre la IA y las alertas; no carga ni edita (SPEC §3.3).
   TENANT_BOSS: [

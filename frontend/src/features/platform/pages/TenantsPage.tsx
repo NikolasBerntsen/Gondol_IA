@@ -14,6 +14,7 @@ import {
   type TenantPlan,
   type TenantStatus,
 } from '@/api/types';
+import { useAccess } from '@/auth/useAccess';
 import {
   Badge,
   Button,
@@ -44,13 +45,20 @@ import {
 } from '../components/TenantStatusDialog';
 import { TENANT_MODULE_SHORT } from '../moduleMath';
 import type { TenantSummary } from '../types';
+import { useConsoleRole } from '../useConsoleRole';
 
 const PAGE_SIZE = 20;
 
 type StatusFilter = 'ALL' | TenantStatus;
 
-/** Listado de clientes de GondolIA (SPEC §6.6): filtros, estados y acciones administrativas. */
+/**
+ * Listado de clientes de GondolIA (SPEC §6.6): filtros, estados y acciones administrativas. Lo usa también soporte, que
+ * ve y edita los clientes para resolver tickets pero no los da de alta ni cambia su estado (SPEC §3.3).
+ */
 export default function TenantsPage() {
+  const { can } = useAccess();
+  const { isSupport, eyebrow } = useConsoleRole();
+  const canCreate = can('platform.tenants.create');
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState(() => params.get('q') ?? '');
   const debouncedQuery = useDebounce(query, 300);
@@ -83,7 +91,12 @@ export default function TenantsPage() {
     sort: 'name',
   };
 
-  const metrics = useQuery({ queryKey: platformKeys.metrics, queryFn: platformApi.metrics });
+  // Los contadores de las píldoras salen de las métricas, que son del dueño: soporte ve las píldoras sin contador.
+  const metrics = useQuery({
+    queryKey: platformKeys.metrics,
+    queryFn: platformApi.metrics,
+    enabled: can('platform.metrics.view'),
+  });
   const tenants = useQuery({
     queryKey: platformKeys.tenantList(listParams),
     queryFn: () => platformApi.tenants.list(listParams),
@@ -210,14 +223,20 @@ export default function TenantsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Consola de dueños"
+        eyebrow={eyebrow}
         title="Clientes"
         icon={Store}
-        description="Los comercios que usan GondolIA: alta, plan, módulos y estado de la cuenta."
+        description={
+          isSupport
+            ? 'Los comercios que usan GondolIA: sus datos, módulos y usuarios, para resolver sus tickets.'
+            : 'Los comercios que usan GondolIA: alta, plan, módulos y estado de la cuenta.'
+        }
         actions={
-          <ButtonLink to="/owner/tenants/new" leftIcon={<Plus />}>
-            Dar de alta un cliente
-          </ButtonLink>
+          canCreate ? (
+            <ButtonLink to="/owner/tenants/new" leftIcon={<Plus />}>
+              Dar de alta un cliente
+            </ButtonLink>
+          ) : undefined
         }
       >
         <div className="flex flex-col gap-3">
@@ -300,9 +319,11 @@ export default function TenantsPage() {
                 ? `${pluralize(tenants.data.totalElements, 'cliente', 'clientes')} ${hasFilters ? 'con estos filtros' : 'en total'}`
                 : 'Cargando clientes…'}
             </span>
-            <ButtonLink to="/owner/modules" variant="ghost" size="sm" leftIcon={<Blocks />}>
-              Ver la matriz de módulos
-            </ButtonLink>
+            {can('platform.modules.manage') ? (
+              <ButtonLink to="/owner/modules" variant="ghost" size="sm" leftIcon={<Blocks />}>
+                Ver la matriz de módulos
+              </ButtonLink>
+            ) : null}
           </div>
 
           <Table
@@ -320,8 +341,10 @@ export default function TenantsPage() {
               title: hasFilters ? 'Ningún cliente coincide con los filtros' : 'Todavía no hay clientes',
               description: hasFilters
                 ? 'Probá con otro texto, plan, rubro, módulo o estado.'
-                : 'Dá de alta el primer comercio para empezar.',
-              action: hasFilters ? undefined : (
+                : canCreate
+                  ? 'Dá de alta el primer comercio para empezar.'
+                  : 'Cuando un dueño dé de alta un comercio, lo vas a ver acá.',
+              action: hasFilters || !canCreate ? undefined : (
                 <ButtonLink to="/owner/tenants/new" leftIcon={<Plus />}>
                   Dar de alta un cliente
                 </ButtonLink>
@@ -349,10 +372,15 @@ export default function TenantsPage() {
   );
 }
 
-/** Acciones administrativas de una fila, según el estado del cliente. */
+/**
+ * Acciones administrativas de una fila, según el estado del cliente y quién mira: deshabilitar, dar de baja, reactivar
+ * y eliminar son decisiones comerciales del dueño, así que soporte solo ve el detalle y la edición. El menú flota sobre
+ * la página: en la última fila se abre hacia arriba en vez de estirar la tabla.
+ */
 function TenantRowMenu({ tenant, onAction }: { tenant: TenantSummary; onAction: (action: TenantAction) => void }) {
-  const dropdown = useDropdown();
+  const dropdown = useDropdown({ floating: true });
   const navigate = useNavigate();
+  const { can } = useAccess();
 
   const run = (action: TenantAction) => {
     dropdown.close();
@@ -365,7 +393,7 @@ function TenantRowMenu({ tenant, onAction }: { tenant: TenantSummary; onAction: 
   };
 
   return (
-    <div className="relative inline-block text-left">
+    <div className="inline-block text-left">
       <Button
         {...dropdown.triggerProps}
         variant="ghost"
@@ -379,34 +407,40 @@ function TenantRowMenu({ tenant, onAction }: { tenant: TenantSummary; onAction: 
           <DropdownItem icon={<Store />} onClick={() => go(`/owner/tenants/${tenant.id}`)}>
             Ver el detalle
           </DropdownItem>
-          <DropdownItem icon={<Pencil />} onClick={() => go(`/owner/tenants/${tenant.id}/edit`)}>
-            Editar los datos
-          </DropdownItem>
-          <DropdownSeparator />
-          {tenant.status === 'ACTIVE' ? (
-            <DropdownItem icon={<Ban />} tone="danger" onClick={() => run('disable')}>
-              Deshabilitar el acceso
+          {can('platform.tenants.edit') ? (
+            <DropdownItem icon={<Pencil />} onClick={() => go(`/owner/tenants/${tenant.id}/edit`)}>
+              Editar los datos
             </DropdownItem>
           ) : null}
-          {tenant.status === 'DISABLED' ? (
-            <DropdownItem icon={<RotateCcw />} onClick={() => run('enable')}>
-              Habilitar el acceso
-            </DropdownItem>
-          ) : null}
-          {tenant.status !== 'CANCELLED' ? (
-            <DropdownItem icon={<Ban />} tone="danger" onClick={() => run('cancel')}>
-              Dar de baja
-            </DropdownItem>
-          ) : (
+          {can('platform.tenants.changeStatus') ? (
             <>
-              <DropdownItem icon={<RotateCcw />} onClick={() => run('reactivate')}>
-                Reactivar
-              </DropdownItem>
-              <DropdownItem icon={<Trash2 />} tone="danger" onClick={() => run('delete')}>
-                Eliminar definitivamente
-              </DropdownItem>
+              <DropdownSeparator />
+              {tenant.status === 'ACTIVE' ? (
+                <DropdownItem icon={<Ban />} tone="danger" onClick={() => run('disable')}>
+                  Deshabilitar el acceso
+                </DropdownItem>
+              ) : null}
+              {tenant.status === 'DISABLED' ? (
+                <DropdownItem icon={<RotateCcw />} onClick={() => run('enable')}>
+                  Habilitar el acceso
+                </DropdownItem>
+              ) : null}
+              {tenant.status !== 'CANCELLED' ? (
+                <DropdownItem icon={<Ban />} tone="danger" onClick={() => run('cancel')}>
+                  Dar de baja
+                </DropdownItem>
+              ) : (
+                <>
+                  <DropdownItem icon={<RotateCcw />} onClick={() => run('reactivate')}>
+                    Reactivar
+                  </DropdownItem>
+                  <DropdownItem icon={<Trash2 />} tone="danger" onClick={() => run('delete')}>
+                    Eliminar definitivamente
+                  </DropdownItem>
+                </>
+              )}
             </>
-          )}
+          ) : null}
         </DropdownPanel>
       )}
     </div>

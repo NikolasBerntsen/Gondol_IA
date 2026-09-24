@@ -1,0 +1,651 @@
+# Catálogo de referencia de productos argentinos de GondolIA: autocompleta la carga de mercadería por código de
+# barras sin depender de internet (ver docs/datos-demo.md). Lo genera y verifica backend/scripts/catalogo_argentina.py.
+#
+# Fuente: Open Food Facts (https://world.openfoodfacts.org), y Open Products Facts / Open Beauty Facts para limpieza y
+# perfumería (columna "fuente"). Los datos se publican bajo la Open Database License (ODbL) 1.0
+# (https://opendatacommons.org/licenses/odbl/1-0/) y su contenido bajo la Database Contents License (DbCL) 1.0.
+# © colaboradores de Open Food Facts. Nombres, marcas y contenidos revisados y normalizados para GondolIA; los
+# códigos de barras son los de la base pública, sin cambios.
+#
+# Formato: separado por ";", una fila por producto y sin comillas (ningún campo lleva ";" ni comillas). codigo =
+# EAN-13/EAN-8 con dígito verificador válido.
+codigo;nombre;marca;contenido;categoria;fuente
+7798062547788;Agua mineral con gas Villavicencio 1,5 L;Villavicencio;1,5 L;Bebidas;OFF
+7792799000639;Agua mineral Eco de los Andes 1 L;Eco de los Andes;1 L;Bebidas;OFF
+7792799000011;Agua mineral Eco de los Andes 500 ml;Eco de los Andes;500 ml;Bebidas;OFF
+7792931000022;Agua mineral Glaciar 1,5 L;Glaciar;1,5 L;Bebidas;OFF
+7792931000039;Agua mineral Glaciar 2 L;Glaciar;2 L;Bebidas;OFF
+7790315000422;Agua mineral natural Villavicencio 2 L;Villavicencio;2 L;Bebidas;OFF
+7790315000446;Agua mineral natural Villavicencio 500 ml;Villavicencio;500 ml;Bebidas;OFF
+7798065733454;Agua mineral Sierra de los Padres 600 ml;Sierra de los Padres;600 ml;Bebidas;OFF
+7798062540109;Agua mineral Villa del Sur 600 ml;Villa del Sur;600 ml;Bebidas;OFF
+7790315058201;Agua mineral Villavicencio Aventura 750 ml;Villavicencio;750 ml;Bebidas;OFF
+7790895003301;Agua saborizada Aquarius manzana 2,25 L;Aquarius;2,25 L;Bebidas;OFF
+7790895641213;Agua saborizada Aquarius naranja 500 ml;Aquarius;500 ml;Bebidas;OFF
+7790895640476;Agua saborizada Aquarius pera 1,5 L;Aquarius;1,5 L;Bebidas;OFF
+7790895003295;Agua saborizada Aquarius pera 2,25 L;Aquarius;2,25 L;Bebidas;OFF
+7790895003288;Agua saborizada Aquarius pomelo 2,25 L;Aquarius;2,25 L;Bebidas;OFF
+7790895640469;Agua saborizada Aquarius pomelo 500 ml;Aquarius;500 ml;Bebidas;OFF
+7790315100948;Agua saborizada Levité Cero limón 500 ml;Levité;500 ml;Bebidas;OFF
+7790315000880;Agua saborizada Levité manzana 2,25 L;Levité;2,25 L;Bebidas;OFF
+7798062548648;Agua saborizada Levité naranja 1,5 L;Levité;1,5 L;Bebidas;OFF
+7799155000340;Agua saborizada Levité naranja 2,25 L;Levité;2,25 L;Bebidas;OFF
+7799155000432;Agua saborizada Levité pera 1,5 L;Levité;1,5 L;Bebidas;OFF
+7798062548686;Agua saborizada Levité pomelo 500 ml;Levité;500 ml;Bebidas;OFF
+7798113300058;Agua tónica Manaos 2,25 L;Manaos;2,25 L;Bebidas;OFF
+7791813222057;Agua tónica Paso de los Toros 1,5 L;Paso de los Toros;1,5 L;Bebidas;OFF
+7790950133288;Amargo Terma limón 1,35 L;Terma;1,35 L;Bebidas;OFF
+7790950133325;Amargo Terma serrano 1,35 L;Terma;1,35 L;Bebidas;OFF
+7790036001562;Bebida Baggio Fresh liviano naranja 1,5 L;Baggio;1,5 L;Bebidas;OFF
+7798119220183;Bebida energizante Speed lata 473 ml;Speed;473 ml;Bebidas;OFF
+7792170042258;Bebida isotónica Gatorade Cool Blue 500 ml;Gatorade;500 ml;Bebidas;OFF
+7792170042029;Bebida isotónica Gatorade frutas tropicales 500 ml;Gatorade;500 ml;Bebidas;OFF
+7792170110575;Bebida isotónica Gatorade manzana 1,25 L;Gatorade;1,25 L;Bebidas;OFF
+7792170111541;Bebida isotónica Gatorade naranja 1,25 L;Gatorade;1,25 L;Bebidas;OFF
+7790895640018;Bebida isotónica Powerade manzana 500 ml;Powerade;500 ml;Bebidas;OFF
+7791813969488;Gaseosa 7Up 1,5 L;7Up;1,5 L;Bebidas;OFF
+7791813900115;Gaseosa 7Up light 2,25 L;7Up;2,25 L;Bebidas;OFF
+7790895005312;Gaseosa Coca-Cola Light 2,25 L;Coca-Cola;2,25 L;Bebidas;OFF
+7790895000430;Gaseosa Coca-Cola sabor original 1,5 L;Coca-Cola;1,5 L;Bebidas;OFF
+7790895000997;Gaseosa Coca-Cola sabor original 2,25 L;Coca-Cola;2,25 L;Bebidas;OFF
+7790895000782;Gaseosa Coca-Cola sabor original 500 ml;Coca-Cola;500 ml;Bebidas;OFF
+7790895067556;Gaseosa Coca-Cola Zero 1,5 L;Coca-Cola;1,5 L;Bebidas;OFF
+7790895067570;Gaseosa Coca-Cola Zero 2,25 L;Coca-Cola;2,25 L;Bebidas;OFF
+7790895067532;Gaseosa Coca-Cola Zero 500 ml;Coca-Cola;500 ml;Bebidas;OFF
+7790639001907;Gaseosa Cunnington pomelo sin azúcar 2,25 L;Cunnington;2,25 L;Bebidas;OFF
+7790895000454;Gaseosa Fanta naranja 1,5 L;Fanta;1,5 L;Bebidas;OFF
+7790895648670;Gaseosa Fanta uva 500 ml;Fanta;500 ml;Bebidas;OFF
+7798113300010;Gaseosa Manaos cola 2,25 L;Manaos;2,25 L;Bebidas;OFF
+7798113300928;Gaseosa Manaos manzana 2,25 L;Manaos;2,25 L;Bebidas;OFF
+7798113300041;Gaseosa Manaos naranja 2,25 L;Manaos;2,25 L;Bebidas;OFF
+7798113300034;Gaseosa Manaos pomelo rosado 2,25 L;Manaos;2,25 L;Bebidas;OFF
+7791813423317;Gaseosa Mirinda manzana 2,25 L;Mirinda;2,25 L;Bebidas;OFF
+7791813421382;Gaseosa Paso de los Toros pomelo 1,5 L;Paso de los Toros;1,5 L;Bebidas;OFF
+7791813423386;Gaseosa Paso de los Toros pomelo 2,25 L;Paso de los Toros;2,25 L;Bebidas;OFF
+7791813420385;Gaseosa Paso de los Toros pomelo 500 ml;Paso de los Toros;500 ml;Bebidas;OFF
+7791813969587;Gaseosa Pepsi 1,5 L;Pepsi;1,5 L;Bebidas;OFF
+7791813555063;Gaseosa Pepsi 3 L;Pepsi;3 L;Bebidas;OFF
+7791813555032;Gaseosa Pepsi 500 ml;Pepsi;500 ml;Bebidas;OFF
+7791813050056;Gaseosa Pepsi Black lata 354 ml;Pepsi;354 ml;Bebidas;OFF
+7791813421054;Gaseosa Pepsi sin azúcar 1,5 L;Pepsi;1,5 L;Bebidas;OFF
+7790895001000;Gaseosa Sprite lima-limón 2,25 L;Sprite;2,25 L;Bebidas;OFF
+7790036000343;Jugo Baggio Pronto durazno 1 L;Baggio;1 L;Bebidas;OFF
+7790036000572;Jugo Baggio Pronto manzana 200 ml;Baggio;200 ml;Bebidas;OFF
+7790036002583;Jugo Baggio Pronto multifruta 1,5 L;Baggio;1,5 L;Bebidas;OFF
+7790036000619;Jugo Baggio Pronto multifruta 200 ml;Baggio;200 ml;Bebidas;OFF
+7790036000329;Jugo Baggio Pronto naranja 1 L;Baggio;1 L;Bebidas;OFF
+7790036000565;Jugo Baggio Pronto naranja 200 ml;Baggio;200 ml;Bebidas;OFF
+7790895641534;Jugo Cepita del Valle durazno 1,5 L;Cepita;1,5 L;Bebidas;OFF
+7790895647123;Jugo Cepita del Valle multifruta 1 L;Cepita;1 L;Bebidas;OFF
+7790895009815;Jugo Cepita del Valle naranja 1 L;Cepita;1 L;Bebidas;OFF
+7798061000345;Jugo en polvo Inca naranja 20 g;Inca;20 g;Bebidas;OFF
+7793360106040;Néctar BC manzana 1 L;BC;1 L;Bebidas;OFF
+7793360106002;Néctar BC multifruta 1 L;BC;1 L;Bebidas;OFF
+7798113301529;Soda Manaos muy bajo sodio 2 L;Manaos;2 L;Bebidas;OFF
+7790950000191;Aperitivo Gancia Americano 450 ml;Gancia;450 ml;Bebidas alcohólicas;OFF
+7792798010196;Cerveza Andes Origen Criolla lata 473 ml;Andes Origen;473 ml;Bebidas alcohólicas;OFF
+7792798992317;Cerveza Andes Origen Roja lata 473 ml;Andes Origen;473 ml;Bebidas alcohólicas;OFF
+7793147573126;Cerveza Heineken 1 L;Heineken;1 L;Bebidas alcohólicas;OFF
+7793147009199;Cerveza Heineken lata 473 ml;Heineken;473 ml;Bebidas alcohólicas;OFF
+7793147573737;Cerveza Imperial Extra Lager 1 L;Imperial;1 L;Bebidas alcohólicas;OFF
+7793147572624;Cerveza Imperial Golden 710 ml;Imperial;710 ml;Bebidas alcohólicas;OFF
+7793147570743;Cerveza Imperial IPA lata 473 ml;Imperial;473 ml;Bebidas alcohólicas;OFF
+7793147573515;Cerveza Isenbeck liviana lata 473 ml;Isenbeck;473 ml;Bebidas alcohólicas;OFF
+7792798013630;Cerveza Patagonia 24.7 botella 1 L;Patagonia;1 L;Bebidas alcohólicas;OFF
+7792798001972;Cerveza Patagonia 24.7 lata 473 ml;Patagonia;473 ml;Bebidas alcohólicas;OFF
+7792798009459;Cerveza Patagonia Sol Citra lata 473 ml;Patagonia;473 ml;Bebidas alcohólicas;OFF
+7792798009107;Cerveza Quilmes 0,0% sin alcohol lata 473 ml;Quilmes;473 ml;Bebidas alcohólicas;OFF
+7792798013999;Cerveza Quilmes Bajo Cero 1 L;Quilmes;1 L;Bebidas alcohólicas;OFF
+7792798012923;Cerveza Quilmes Clásica lata 473 ml;Quilmes;473 ml;Bebidas alcohólicas;OFF
+7792798011520;Cerveza Quilmes Doble Malta lata 473 ml;Quilmes;473 ml;Bebidas alcohólicas;OFF
+7792798007400;Cerveza Quilmes Stout 1 L;Quilmes;1 L;Bebidas alcohólicas;OFF
+7792798001255;Cerveza Quilmes Stout 340 ml;Quilmes;340 ml;Bebidas alcohólicas;OFF
+7792798001774;Cerveza Stella Artois lata 269 ml;Stella Artois;269 ml;Bebidas alcohólicas;OFF
+7792798014361;Cerveza Stella Artois lata 473 ml;Stella Artois;473 ml;Bebidas alcohólicas;OFF
+7790290101602;Fernet Branca 750 ml;Branca;750 ml;Bebidas alcohólicas;OFF
+7790119002370;Sidra 1888 750 ml;1888;750 ml;Bebidas alcohólicas;OFF
+7791200200552;Vermouth Cinzano Rosso 1 L;Cinzano;1 L;Bebidas alcohólicas;OFF
+7794450008053;Vino tinto Catena Malbec 750 ml;Catena;750 ml;Bebidas alcohólicas;OFF
+7798039590342;Vino tinto Trivento Reserve Malbec 750 ml;Trivento;750 ml;Bebidas alcohólicas;OFF
+7793913000511;Arroz con leche Tregar con canela 180 g;Tregar;180 g;Lácteos;OFF
+7790787949717;Crema de leche Ilolay 200 ml;Ilolay;200 ml;Lácteos;OFF
+7790742141606;Crema de leche La Serenísima para cocinar 200 ml;La Serenísima;200 ml;Lácteos;OFF
+7790080040302;Flan casero SanCor con caramelo 240 g;SanCor;240 g;Lácteos;OFF
+7791337003194;Flan Ser caramelo 95 g;Ser;95 g;Lácteos;OFF
+7793940198007;Leche chocolatada Cindor 250 ml;Cindor;250 ml;Lácteos;OFF
+7794820004159;Leche chocolatada Milkaut 200 ml;Milkaut;200 ml;Lácteos;OFF
+7793940306006;Leche descremada Armonía 1 L;Armonía;1 L;Lácteos;OFF
+7790742106605;Leche descremada en polvo La Serenísima 400 g;La Serenísima;400 g;Lácteos;OFF
+7790742358608;Leche descremada La Serenísima Protein 1 L;La Serenísima;1 L;Lácteos;OFF
+7793913012996;Leche descremada Tregar 1 L;Tregar;1 L;Lácteos;OFF
+7798338290103;Leche entera Apóstoles 1 L;Apóstoles;1 L;Lácteos;OFF
+7790742308801;Leche entera La Serenísima 3% 1 L;La Serenísima;1 L;Lácteos;OFF
+7790742357007;Leche entera larga vida La Serenísima 1 L;La Serenísima;1 L;Lácteos;OFF
+7794396004515;Leche entera larga vida La Suipachense 1 L;La Suipachense;1 L;Lácteos;OFF
+7790080038217;Leche entera SanCor 1 L;SanCor;1 L;Lácteos;OFF
+7794710010017;Leche entera Verónica 1 L;Verónica;1 L;Lácteos;OFF
+7790742336002;Leche La Serenísima Cardio 1 L;La Serenísima;1 L;Lácteos;OFF
+7790742016256;Leche La Serenísima fácil digestión 750 ml;La Serenísima;750 ml;Lácteos;OFF
+7790742333605;Leche La Serenísima Zero Lactosa 1 L;La Serenísima;1 L;Lácteos;OFF
+7790787949656;Leche parcialmente descremada Ilolay 1 L;Ilolay;1 L;Lácteos;OFF
+7790742357106;Leche parcialmente descremada larga vida La Serenísima 1 L;La Serenísima;1 L;Lácteos;OFF
+7791058000816;Leche parcialmente descremada Manfrey 1 L;Manfrey;1 L;Lácteos;OFF
+7790080037715;Leche parcialmente descremada SanCor 0% lactosa 1 L;SanCor;1 L;Lácteos;OFF
+7790080037180;Leche parcialmente descremada SanCor 1 L;SanCor;1 L;Lácteos;OFF
+7790787002658;Leche reducida en lactosa Ilolay 1 L;Ilolay;1 L;Lácteos;OFF
+7790742345806;Manteca La Serenísima 200 g;La Serenísima;200 g;Lácteos;OFF
+7790742034526;Manteca La Serenísima clásica 100 g;La Serenísima;100 g;Lácteos;OFF
+7794820000601;Manteca Milkaut 200 g;Milkaut;200 g;Lácteos;OFF
+7790080010879;Manteca SanCor clásica 200 g;SanCor;200 g;Lácteos;OFF
+7798060852617;Manteca Tonadita 200 g;Tonadita;200 g;Lácteos;OFF
+7791337004627;Postre Danette chocolate 95 g;Danette;95 g;Lácteos;OFF
+7791337304017;Postre Serenito con Rocklets 120 g;Serenito;120 g;Lácteos;OFF
+77974594;Postre Serenito vainilla 120 g;Serenito;120 g;Lácteos;OFF
+7790080040920;Postre Shimy dulce de leche 120 g;SanCor;120 g;Lácteos;OFF
+7790742327802;Queso azul untable Finlandia 189 g;Finlandia;189 g;Lácteos;OFF
+7791337012189;Queso blanco García 290 g;García;290 g;Lácteos;OFF
+7793913012941;Queso blanco light Tregar 300 g;Tregar;300 g;Lácteos;OFF
+7793913012934;Queso blanco Tregar 290 g;Tregar;290 g;Lácteos;OFF
+7791337011328;Queso crema Casancrem clásico 480 g;Casancrem;480 g;Lácteos;OFF
+7791337012097;Queso crema Casancrem light 290 g;Casancrem;290 g;Lácteos;OFF
+7791337011342;Queso crema Casancrem light 480 g;Casancrem;480 g;Lácteos;OFF
+7790787003518;Queso crema Ilolay Crem light 300 g;Ilolay;300 g;Lácteos;OFF
+7794990879663;Queso crema La Paulina Equilibrio 290 g;La Paulina;290 g;Lácteos;OFF
+7794990879656;Queso crema La Paulina tradicional 290 g;La Paulina;290 g;Lácteos;OFF
+7790080040142;Queso crema Mendicrim light 300 g;Mendicrim;300 g;Lácteos;OFF
+7794820901571;Queso untable Crematto clásico 290 g;Milkaut;290 g;Lácteos;OFF
+7794820901588;Queso untable Crematto light 290 g;Milkaut;290 g;Lácteos;OFF
+7790742344007;Queso untable Cremón desayuno light 300 g;La Serenísima;300 g;Lácteos;OFF
+7790742165909;Queso untable Finlandia balance 300 g;Finlandia;300 g;Lácteos;OFF
+7790742321701;Queso untable Finlandia clásico 180 g;Finlandia;180 g;Lácteos;OFF
+7790742161802;Queso untable Finlandia light 200 g;Finlandia;200 g;Lácteos;OFF
+7790742163509;Queso untable Finlandia light 300 g;Finlandia;300 g;Lácteos;OFF
+7790787004447;Queso untable Ilolay 4 quesos 190 g;Ilolay;190 g;Lácteos;OFF
+7790787004454;Queso untable Ilolay finas hierbas 190 g;Ilolay;190 g;Lácteos;OFF
+7794990878925;Queso untable La Paulina sabor jamón 190 g;La Paulina;190 g;Lácteos;OFF
+7794820000182;Queso untable Milkaut cheddar 190 g;Milkaut;190 g;Lácteos;OFF
+7793913001754;Queso untable Neufchâtel light Tregar 190 g;Tregar;190 g;Lácteos;OFF
+7798060852433;Queso untable Tonadita Patagonia 200 g;Tonadita;200 g;Lácteos;OFF
+7798060852402;Queso untable Tonadita Patagonia 300 g;Tonadita;300 g;Lácteos;OFF
+7793913013146;Ricota magra Tregar 290 g;Tregar;290 g;Lácteos;OFF
+7791337003484;Yogur batido Ser durazno 140 g;Ser;140 g;Lácteos;OFF
+7791337003477;Yogur batido Ser frutos rojos 140 g;Ser;140 g;Lácteos;OFF
+7791337003996;Yogur batido Ser mango y maracuyá 140 g;Ser;140 g;Lácteos;OFF
+7791337004207;Yogur batido Ser natural 175 g;Ser;175 g;Lácteos;OFF
+7790787000432;Yogur bebible descremado Ilolay frutilla 1 kg;Ilolay;1 kg;Lácteos;OFF
+7790787100415;Yogur bebible Ilolay vainilla 1 kg;Ilolay;1 kg;Lácteos;OFF
+7791337004030;Yogur bebible Ser vainilla 1 kg;Ser;1 kg;Lácteos;OFF
+7791337002623;Yogur bebible Yogurísimo durazno 1 kg;Yogurísimo;1 kg;Lácteos;OFF
+7791337002661;Yogur bebible Yogurísimo vainilla 1 kg;Yogurísimo;1 kg;Lácteos;OFF
+7794820902103;Yogur cremoso light Milkaut vainilla 190 g;Milkaut;190 g;Lácteos;OFF
+7793913000894;Yogur descremado Tregar frutilla 160 g;Tregar;160 g;Lácteos;OFF
+7791337004061;Yogur firme Ser frutilla 190 g;Ser;190 g;Lácteos;OFF
+7790080065145;Yogur firme Yogs natural 190 g;Yogs;190 g;Lácteos;OFF
+7791337601215;Yogur firme Yogurísimo vainilla 190 g;Yogurísimo;190 g;Lácteos;OFF
+7793913002423;Yogur natural endulzado Tregar 140 g;Tregar;140 g;Lácteos;OFF
+7791337001626;Yogur Ser Calci+ frutilla y arándanos 120 g;Ser;120 g;Lácteos;OFF
+7793913013245;Yogur Tregar con colchón de durazno 160 g;Tregar;160 g;Lácteos;OFF
+7790080065107;Yogur Yogs frutilla 180 g;Yogs;180 g;Lácteos;OFF
+7791337003934;Yogur Yogurísimo estilo griego natural 125 g;Yogurísimo;125 g;Lácteos;OFF
+7791337003118;Yogur Yogurísimo estilo griego vainilla caramel 125 g;Yogurísimo;125 g;Lácteos;OFF
+7791337006355;Yogur Yogurísimo natural 300 g;Yogurísimo;300 g;Lácteos;OFF
+7791337004290;Yogur Yogurísimo natural sin azúcar agregada 300 g;Yogurísimo;300 g;Lácteos;OFF
+7790079022623;Bondiola en fetas Paladini 120 g;Paladini;120 g;Fiambres y quesos;OFF
+7796953311111;Jamón cocido Bocatti 130 g;Bocatti;130 g;Fiambres y quesos;OFF
+7795917008470;Jamón crudo Campo Austral 150 g;Campo Austral;150 g;Fiambres y quesos;OFF
+7798060852334;Queso cheddar en fetas Tonadita 116 g;Tonadita;116 g;Fiambres y quesos;OFF
+7790742167200;Queso danbo en fetas Finlandia 150 g;Finlandia;150 g;Fiambres y quesos;OFF
+7794990879779;Queso en hebras La Paulina mediterráneo 135 g;La Paulina;135 g;Fiambres y quesos;OFF
+7794990880218;Queso mozzarella La Paulina 180 g;La Paulina;180 g;Fiambres y quesos;OFF
+7790398100118;Queso rallado La Paulina 40 g;La Paulina;40 g;Fiambres y quesos;OFF
+7790742223203;Queso rallado La Serenísima 175 g;La Serenísima;175 g;Fiambres y quesos;OFF
+7793940328008;Queso rallado La Serenísima 40 g;La Serenísima;40 g;Fiambres y quesos;OFF
+7790742223104;Queso rallado reggianito La Serenísima 130 g;La Serenísima;130 g;Fiambres y quesos;OFF
+7793940797002;Queso rallado reggianito La Serenísima 150 g;La Serenísima;150 g;Fiambres y quesos;OFF
+7790080014709;Queso rallado reggianito SanCor 40 g;SanCor;40 g;Fiambres y quesos;OFF
+7793913000146;Queso rallado Tregar 120 g;Tregar;120 g;Fiambres y quesos;OFF
+7798151770189;Queso rallado Tremblay 40 g;Tremblay;40 g;Fiambres y quesos;OFF
+7790080013610;Queso reggianito SanCor Corazón de Horma 230 g;SanCor;230 g;Fiambres y quesos;OFF
+7795917816259;Salame tipo milán La Piamontesa 150 g;La Piamontesa;150 g;Fiambres y quesos;OFF
+7790670051220;Salchichas Paty Viena Fun 190 g;Paty;190 g;Fiambres y quesos;OFF
+7790360000132;Salchichas Swift x 6 (225 g);Swift;225 g;Fiambres y quesos;OFF
+7792180001665;Aceite de girasol Cañuelas 1,5 L;Cañuelas;1,5 L;Almacén;OFF
+7790070012050;Aceite de girasol Cocinero 900 ml;Cocinero;900 ml;Almacén;OFF
+7790070231468;Aceite de girasol Lira 900 ml;Lira;900 ml;Almacén;OFF
+7790272001029;Aceite de girasol Natura 1,5 L;Natura;1,5 L;Almacén;OFF
+7790272001036;Aceite de girasol Natura 3 L;Natura;3 L;Almacén;OFF
+7790272001005;Aceite de girasol Natura 900 ml;Natura;900 ml;Almacén;OFF
+7792180137944;Aceite de girasol Pureza 1,5 L;Pureza;1,5 L;Almacén;OFF
+7790580160807;Aceite de maíz Arcor 900 ml;Arcor;900 ml;Almacén;OFF
+7790070218216;Aceite de oliva extra virgen Cocinero 500 ml;Cocinero;500 ml;Almacén;OFF
+7790272007328;Aceite de oliva extra virgen Natura 500 ml;Natura;500 ml;Almacén;OFF
+7792180005175;Aceite de oliva virgen extra Cañuelas clásico 500 ml;Cañuelas;500 ml;Almacén;OFF
+7792070001614;Aceite de oliva virgen extra Nucete clásico 500 ml;Nucete;500 ml;Almacén;OFF
+7790139003357;Aceto balsámico Casalta 400 ml;Casalta;400 ml;Almacén;OFF
+7792900000312;Aderezo César Dos Anclas 350 g;Dos Anclas;350 g;Almacén;OFF
+7798342150141;Aderezo NotMayo 200 g;NotCo;200 g;Almacén;OFF
+7794000005372;Almidón de maíz Maizena 250 g;Maizena;250 g;Almacén;OFF
+7794000599185;Almidón de maíz Maizena 520 g;Maizena;520 g;Almacén;OFF
+7790070411846;Arroz doble carolina Gallo 500 g;Gallo;500 g;Almacén;OFF
+7790503199099;Arroz Dos Hermanos no se pasa 1 kg;Dos Hermanos;1 kg;Almacén;OFF
+7790070411716;Arroz Gallo Oro 1 kg;Gallo;1 kg;Almacén;OFF
+7792710001523;Arroz largo fino Amanda 1 kg;Amanda;1 kg;Almacén;OFF
+7790070411747;Arroz largo fino Gallo 1 kg;Gallo;1 kg;Almacén;OFF
+7798138553040;Arroz largo fino Molto 500 g;Molto;500 g;Almacén;OFF
+7790070411815;Arroz parboil Lucchetti 1 kg;Lucchetti;1 kg;Almacén;OFF
+7790070413765;Arroz preparado Gallo sabor queso 240 g;Gallo;240 g;Almacén;OFF
+7790070411914;Arroz yamaní integral Gallo 500 g;Gallo;500 g;Almacén;OFF
+7791100000481;Azúcar común tipo A Chango 1 kg;Chango;1 kg;Almacén;OFF
+7792540260138;Azúcar Ledesma clásica 1 kg;Ledesma;1 kg;Almacén;OFF
+7792540250450;Azúcar superior Ledesma 1 kg;Ledesma;1 kg;Almacén;OFF
+7790070432964;Bizcochuelo Exquisita vainilla 540 g;Exquisita;540 g;Almacén;OFF
+7790580131753;Bizcochuelo Godet marmolado 500 g;Godet;500 g;Almacén;OFF
+7790150830857;Cacao en polvo Chocolino La Virginia 180 g;La Virginia;180 g;Almacén;OFF
+7790550010125;Café en saquitos Cabrales x 20;Cabrales;20 saquitos;Almacén;OFF
+7790170903227;Café en saquitos La Morenita clásico 100 g;La Morenita;100 g;Almacén;OFF
+7790070936479;Café instantáneo Arlistán 170 g;Arlistán;170 g;Almacén;OFF
+7790070936493;Café instantáneo Arlistán suave 100 g;Arlistán;100 g;Almacén;OFF
+7790150100486;Café instantáneo La Virginia clásico 170 g;La Virginia;170 g;Almacén;OFF
+7790150101490;Café instantáneo La Virginia con azúcar 170 g;La Virginia;170 g;Almacén;OFF
+7790170903937;Café torrado molido La Morenita 100 g;La Morenita;100 g;Almacén;OFF
+7790550001239;Café tostado molido Cabrales 250 g;Cabrales;250 g;Almacén;OFF
+7794000005730;Caldo de gallina Knorr x 12 cubos;Knorr;114 g;Almacén;OFF
+7794000597518;Caldo de verduras Knorr x 12 cubos;Knorr;114 g;Almacén;OFF
+7790550026416;Capuccino Cabrales estilo italiano 125 g;Cabrales;125 g;Almacén;OFF
+7790150160701;Capuccino La Virginia 125 g;La Virginia;125 g;Almacén;OFF
+7790150161203;Capuccino La Virginia dulce de leche 155 g;La Virginia;155 g;Almacén;OFF
+7790150160909;Capuccino La Virginia light 100 g;La Virginia;100 g;Almacén;OFF
+7798153810012;Chocolate en polvo Toddy 180 g;Toddy;180 g;Almacén;OFF
+7790580504809;Dulce de batata con chocolate Arcor 500 g;Arcor;500 g;Almacén;OFF
+7798128001902;Dulce de leche Cachafaz 450 g;Cachafaz;450 g;Almacén;OFF
+7791875005353;Dulce de leche Havanna 450 g;Havanna;450 g;Almacén;OFF
+7790787949823;Dulce de leche Ilolay 405 g;Ilolay;405 g;Almacén;OFF
+7794990878581;Dulce de leche La Paulina 400 g;La Paulina;400 g;Almacén;OFF
+7790742625304;Dulce de leche La Serenísima clásico 400 g;La Serenísima;400 g;Almacén;OFF
+7790742625205;Dulce de leche La Serenísima estilo colonial 400 g;La Serenísima;400 g;Almacén;OFF
+7794820014608;Dulce de leche Milkaut clásico 400 g;Milkaut;400 g;Almacén;OFF
+7790742067005;Dulce de leche repostero La Serenísima 400 g;La Serenísima;400 g;Almacén;OFF
+7790080031904;Dulce de leche repostero SanCor 400 g;SanCor;400 g;Almacén;OFF
+7790244000401;Dulce de leche San Ignacio 450 g;San Ignacio;450 g;Almacén;OFF
+7790080031867;Dulce de leche SanCor 400 g;SanCor;400 g;Almacén;OFF
+7798054490603;Dulce de leche sin azúcar con stevia Doña Magdalena 400 g;Doña Magdalena;400 g;Almacén;OFF
+7790616000411;Dulce de leche Vacalin 400 g;Vacalin;400 g;Almacén;OFF
+7790150610305;Esencia de vainilla Alicante 100 ml;Alicante;100 ml;Almacén;OFF
+7790070318305;Fideos bucatini Lucchetti 500 g;Lucchetti;500 g;Almacén;OFF
+7790070320155;Fideos cabello de ángel Lucchetti 500 g;Lucchetti;500 g;Almacén;OFF
+7798138552517;Fideos codos Molto 500 g;Molto;500 g;Almacén;OFF
+7790070321664;Fideos fettuccini espinaca Don Vicente 500 g;Don Vicente;500 g;Almacén;OFF
+7790070318336;Fideos mostachol Lucchetti 500 g;Lucchetti;500 g;Almacén;OFF
+7790070318596;Fideos mostachol Matarazzo 500 g;Matarazzo;500 g;Almacén;OFF
+7797470196090;Fideos nido al huevo Marolio 500 g;Marolio;500 g;Almacén;OFF
+7790070318671;Fideos nidos fettuccine Matarazzo 500 g;Matarazzo;500 g;Almacén;OFF
+7790070336361;Fideos penne rigate Lucchetti 500 g;Lucchetti;500 g;Almacén;OFF
+7790070318633;Fideos penne rigate Matarazzo 500 g;Matarazzo;500 g;Almacén;OFF
+7790070318282;Fideos spaghetti Lucchetti 500 g;Lucchetti;500 g;Almacén;OFF
+7790070318640;Fideos spaghetti Matarazzo 500 g;Matarazzo;500 g;Almacén;OFF
+7790070336576;Fideos tallarín al huevo Don Vicente 500 g;Don Vicente;500 g;Almacén;OFF
+7790070336316;Fideos tallarín N°5 Matarazzo 500 g;Matarazzo;500 g;Almacén;OFF
+7790070321244;Fideos tirabuzón 3 vegetales Lucchetti 500 g;Lucchetti;500 g;Almacén;OFF
+7790070320841;Fideos tirabuzón integral Matarazzo 500 g;Matarazzo;500 g;Almacén;OFF
+7790070318329;Fideos tirabuzón Lucchetti 500 g;Lucchetti;500 g;Almacén;OFF
+7790070318602;Fideos tirabuzón Matarazzo 500 g;Matarazzo;500 g;Almacén;OFF
+7790070412355;Flan Exquisita dulce de leche 60 g;Exquisita;60 g;Almacén;OFF
+7790070412348;Flan Exquisita vainilla 60 g;Exquisita;60 g;Almacén;OFF
+7790070410634;Gelatina Exquisita frutilla 50 g;Exquisita;50 g;Almacén;OFF
+7790199000013;Harina 000 Morixe 1 kg;Morixe;1 kg;Almacén;OFF
+7790199000020;Harina 0000 Morixe 1 kg;Morixe;1 kg;Almacén;OFF
+7792180004871;Harina 0000 Pureza 1 kg;Pureza;1 kg;Almacén;OFF
+7790070507228;Harina leudante Blancaflor 1 kg;Blancaflor;1 kg;Almacén;OFF
+7790199000051;Harina leudante Morixe 1 kg;Morixe;1 kg;Almacén;OFF
+7790070507341;Jugo de limón Minerva 500 ml;Minerva;500 ml;Almacén;OFF
+7798138554016;Jugo de limón Molto 1 L;Molto;1 L;Almacén;OFF
+7791620187242;Ketchup Dánica 220 g;Dánica;220 g;Almacén;OFF
+7794000006188;Ketchup Hellmann's 250 g;Hellmann's;250 g;Almacén;OFF
+7794000006164;Ketchup Hellmann's 500 g;Hellmann's;500 g;Almacén;OFF
+7790070317476;Lasagna Matarazzo 500 g;Matarazzo;500 g;Almacén;OFF
+7791118000503;Malta El Pocillo 170 g;El Pocillo;170 g;Almacén;OFF
+7790387000849;Mate cocido Taragüí x 25 saquitos;Taragüí;25 saquitos;Almacén;OFF
+7790387010589;Mate cocido Unión x 25 saquitos;Unión;25 saquitos;Almacén;OFF
+7794000959903;Mayonesa Fanacoa 475 g;Fanacoa;475 g;Almacén;OFF
+7794000960091;Mayonesa Hellmann's clásica 475 g;Hellmann's;475 g;Almacén;OFF
+7794000960077;Mayonesa Hellmann's clásica 950 g;Hellmann's;950 g;Almacén;OFF
+7794000960206;Mayonesa Hellmann's con aceite de oliva 475 g;Hellmann's;475 g;Almacén;OFF
+7794000960169;Mayonesa Hellmann's light 332 g;Hellmann's;332 g;Almacén;OFF
+7791866001364;Mayonesa Natura 475 g;Natura;475 g;Almacén;OFF
+7791866001357;Mayonesa Natura 950 g;Natura;950 g;Almacén;OFF
+7790580509309;Mermelada de ciruela Arcor 454 g;Arcor;454 g;Almacén;OFF
+7792260000052;Mermelada de ciruela Orieta 500 g;Orieta;500 g;Almacén;OFF
+7790580509408;Mermelada de damasco Arcor 454 g;Arcor;454 g;Almacén;OFF
+7790580511302;Mermelada de durazno light Arcor 390 g;Arcor;390 g;Almacén;OFF
+7795184119756;Mermelada de durazno Noel 454 g;Noel;454 g;Almacén;OFF
+7790580509606;Mermelada de frutilla Arcor 454 g;Arcor;454 g;Almacén;OFF
+7793360811401;Mermelada light de durazno BC 390 g;BC;390 g;Almacén;OFF
+7793360835803;Mermelada light de frambuesa BC 390 g;BC;390 g;Almacén;OFF
+7793360812101;Mermelada light de frutilla BC 390 g;BC;390 g;Almacén;OFF
+7793046007791;Mermelada light de frutilla Dulcor 390 g;Dulcor;390 g;Almacén;OFF
+7791620187280;Mostaza Dánica 220 g;Dánica;220 g;Almacén;OFF
+7790130001635;Mostaza Menoyo 250 g;Menoyo;250 g;Almacén;OFF
+7791866004211;Mostaza Natura 250 g;Natura;250 g;Almacén;OFF
+7794000006478;Mostaza Savora 250 g;Savora;250 g;Almacén;OFF
+7794000006485;Mostaza Savora 500 g;Savora;500 g;Almacén;OFF
+7794000006492;Mostaza Savora original 200 g;Savora;200 g;Almacén;OFF
+7790199603207;Polenta instantánea Morixe 500 g;Morixe;500 g;Almacén;OFF
+7790580660000;Polenta instantánea Presto Pronta 500 g;Presto Pronta;500 g;Almacén;OFF
+7790971001962;Postre Ravana vainilla 120 g;Ravana;120 g;Almacén;OFF
+7794000006379;Puré de papas instantáneo Knorr 125 g;Knorr;125 g;Almacén;OFF
+7794000004153;Puré de papas instantáneo Knorr 200 g;Knorr;200 g;Almacén;OFF
+7790199603177;Puré de papas instantáneo Morixe 125 g;Morixe;125 g;Almacén;OFF
+7790070414694;Risotto Gallo a la española 240 g;Gallo;240 g;Almacén;OFF
+7790070228666;Rocío vegetal Fritolim Cocinero 120 g;Cocinero;120 g;Almacén;OFF
+7790272000831;Rocío vegetal Natura 120 g;Natura;120 g;Almacén;OFF
+77956262;Sal fina Celusal 250 g;Celusal;250 g;Almacén;OFF
+7790072002080;Sal fina Celusal 500 g;Celusal;500 g;Almacén;OFF
+7792900634227;Sal fina Dos Anclas 250 g;Dos Anclas;250 g;Almacén;OFF
+7792900000206;Sal fina Dos Anclas 500 g;Dos Anclas;500 g;Almacén;OFF
+7791004000082;Sal gruesa Celusal 1 kg;Celusal;1 kg;Almacén;OFF
+7794000003583;Salsa barbacoa Hellmann's 250 g;Hellmann's;250 g;Almacén;OFF
+7790150250136;Té con canela La Virginia x 20 saquitos;La Virginia;20 saquitos;Almacén;OFF
+7790150350133;Té de cedrón La Virginia x 25 saquitos;La Virginia;25 saquitos;Almacén;OFF
+7790150330135;Té de manzanilla La Virginia x 25 saquitos;La Virginia;25 saquitos;Almacén;OFF
+7790387711820;Té de manzanilla Taragüí x 25 saquitos;Taragüí;25 saquitos;Almacén;OFF
+7790150396162;Té frutilla La Virginia x 20 saquitos;La Virginia;20 saquitos;Almacén;OFF
+7790150211625;Té negro La Virginia x 25 saquitos;La Virginia;25 saquitos;Almacén;OFF
+7790150355244;Té verde citrus La Virginia x 20 saquitos;La Virginia;20 saquitos;Almacén;OFF
+7790150355077;Té verde La Virginia x 20 saquitos;La Virginia;20 saquitos;Almacén;OFF
+7792900093246;Vinagre de alcohol Dos Anclas 1 L;Dos Anclas;1 L;Almacén;OFF
+7790130000034;Vinagre de alcohol Menoyo 500 ml;Menoyo;500 ml;Almacén;OFF
+7790130000065;Vinagre de vino Menoyo 500 ml;Menoyo;500 ml;Almacén;OFF
+7792710000175;Yerba mate Amanda con palo 1 kg;Amanda;1 kg;Almacén;OFF
+7792710000090;Yerba mate Amanda especial 500 g;Amanda;500 g;Almacén;OFF
+7792710000182;Yerba mate Amanda tradicional 500 g;Amanda;500 g;Almacén;OFF
+7790710334702;Yerba mate CBSé frutos del bosque 500 g;CBSé;500 g;Almacén;OFF
+7790710000256;Yerba mate CBSé frutos del valle 500 g;CBSé;500 g;Almacén;OFF
+7790710000331;Yerba mate CBSé guaraná 500 g;CBSé;500 g;Almacén;OFF
+7790710334535;Yerba mate CBSé hierbas serranas 500 g;CBSé;500 g;Almacén;OFF
+7790710000164;Yerba mate CBSé pomelo 500 g;CBSé;500 g;Almacén;OFF
+7790710000133;Yerba mate CBSé Silueta naranja 500 g;CBSé;500 g;Almacén;OFF
+7790070507105;Yerba mate Cruz de Malta con palo 1 kg;Cruz de Malta;1 kg;Almacén;OFF
+7790387015522;Yerba mate La Merced barbacuá 500 g;La Merced;500 g;Almacén;OFF
+7797470000090;Yerba mate Marolio 500 g;Marolio;500 g;Almacén;OFF
+7790070507129;Yerba mate Nobleza Gaucha molienda equilibrada 1 kg;Nobleza Gaucha;1 kg;Almacén;OFF
+7790512000072;Yerba mate Núñez 500 g;Núñez;500 g;Almacén;OFF
+7793750000057;Yerba mate Piporé 250 g;Piporé;250 g;Almacén;OFF
+7793704000225;Yerba mate Playadito 1 kg;Playadito;1 kg;Almacén;OFF
+7793704000911;Yerba mate Playadito 500 g;Playadito;500 g;Almacén;OFF
+7790411000050;Yerba mate Rosamonte 500 g;Rosamonte;500 g;Almacén;OFF
+7790387110159;Yerba mate Taragüí 1 kg;Taragüí;1 kg;Almacén;OFF
+7790387100310;Yerba mate Taragüí 250 g;Taragüí;250 g;Almacén;OFF
+7790387110234;Yerba mate Taragüí 500 g;Taragüí;500 g;Almacén;OFF
+7790387014419;Yerba mate Unión hierbas serranas 500 g;Unión;500 g;Almacén;OFF
+7790387014624;Yerba mate Unión original 500 g;Unión;500 g;Almacén;OFF
+7791675908458;Aceitunas verdes Castell 290 g;Castell;290 g;Conservas;OFF
+7792070004523;Aceitunas verdes en salmuera Nucete 200 g;Nucete;200 g;Conservas;OFF
+7790199603092;Aceitunas verdes rellenas Morixe 300 g;Morixe;300 g;Conservas;OFF
+7791273000707;Ananá en almíbar Golden Smile 565 g;Golden Smile;565 g;Conservas;OFF
+7798138552838;Arvejas Molto 340 g;Molto;340 g;Conservas;OFF
+7793360982309;Arvejas secas remojadas La Campagnola 300 g;La Campagnola;300 g;Conservas;OFF
+7793360005084;Atún al natural La Campagnola 120 g;La Campagnola;120 g;Conservas;OFF
+7793360005060;Atún en aceite La Campagnola 170 g;La Campagnola;170 g;Conservas;OFF
+7790580980009;Choclo amarillo en granos Arcor 300 g;Arcor;300 g;Conservas;OFF
+7793360984907;Choclo cremoso La Campagnola 300 g;La Campagnola;300 g;Conservas;OFF
+7797470000854;Duraznos amarillos en almíbar Marolio 480 g;Marolio;480 g;Conservas;OFF
+7798138552951;Garbanzos Molto 340 g;Molto;340 g;Conservas;OFF
+7797470007921;Lentejas Marolio 340 g;Marolio;340 g;Conservas;OFF
+7790360720382;Paté de foie Swift 90 g;Swift;90 g;Conservas;OFF
+7790360720115;Picadillo de carne Swift 90 g;Swift;90 g;Conservas;OFF
+7790580221904;Puré de tomate Arcor 520 g;Arcor;520 g;Conservas;OFF
+7790036567440;Puré de tomate Baggio 530 g;Baggio;530 g;Conservas;OFF
+7793360000485;Puré de tomate La Campagnola 520 g;La Campagnola;520 g;Conservas;OFF
+7797470000588;Puré de tomate Marolio 520 g;Marolio;520 g;Conservas;OFF
+7791579001132;Puré de tomate Molto 520 g;Molto;520 g;Conservas;OFF
+7795184001907;Puré de tomate Noel 520 g;Noel;520 g;Conservas;OFF
+7793360927508;Salsa lista pomarola La Campagnola 340 g;La Campagnola;340 g;Conservas;OFF
+7790580969400;Salsa lista tuco Arcor 340 g;Arcor;340 g;Conservas;OFF
+7790580567903;Tomates perita pelados Arcor 400 g;Arcor;400 g;Conservas;OFF
+7797470124574;Tomates perita pelados Marolio 400 g;Marolio;400 g;Conservas;OFF
+7798049540559;Lentejas Doroteo 400 g;Doroteo;400 g;Legumbres;OFF
+7790790124293;Lentejas Inca 350 g;Inca;350 g;Legumbres;OFF
+7798048720396;Lentejas Olinto 400 g;Olinto;400 g;Legumbres;OFF
+7790206509027;Barra de cereal Cereal Fort chocolate 19 g;Felfort;19 g;Galletitas y snacks;OFF
+77915818;Barra de cereal Cereal Mix light manzana y avena 23 g;Cereal Mix;23 g;Galletitas y snacks;OFF
+77916501;Barra de cereal Cereal Mix original 23 g;Cereal Mix;23 g;Galletitas y snacks;OFF
+77965370;Barra de cereal Cereal Mix yogur y frutilla 26 g;Cereal Mix;26 g;Galletitas y snacks;OFF
+7790380020028;Barra de cereal Flow frutos del bosque 23 g;Georgalos;23 g;Galletitas y snacks;OFF
+7792200000128;Bizcochos 9 de Oro agridulces 200 g;9 de Oro;200 g;Galletitas y snacks;OFF
+7792200001125;Bizcochos 9 de Oro agridulces 420 g;9 de Oro;420 g;Galletitas y snacks;OFF
+7795735000335;Bizcochos Don Satur dulces 200 g;Don Satur;200 g;Galletitas y snacks;OFF
+7795735000328;Bizcochos Don Satur salados 200 g;Don Satur;200 g;Galletitas y snacks;OFF
+7798179490212;Galletas marineras NS 400 g;NS;400 g;Galletitas y snacks;OFF
+7792180137135;Galletitas Brigitte 9 de Oro 120 g;9 de Oro;120 g;Galletitas y snacks;OFF
+7790040424845;Galletitas Chocolinas 150 g;Bagley;150 g;Galletitas y snacks;OFF
+7790040139404;Galletitas Chocolinas 262 g;Bagley;262 g;Galletitas y snacks;OFF
+7790040929807;Galletitas Coquitas 170 g;Bagley;170 g;Galletitas y snacks;OFF
+7798082744518;Galletitas crackers de agua Tía Maruca 318 g;Tía Maruca;318 g;Galletitas y snacks;OFF
+7790045000174;Galletitas crackers Granix con salvado 270 g;Granix;270 g;Galletitas y snacks;OFF
+7790040377707;Galletitas Criollitas 100 g;Bagley;100 g;Galletitas y snacks;OFF
+7790040377806;Galletitas Criollitas x 3 (300 g);Bagley;300 g;Galletitas y snacks;OFF
+7790040872103;Galletitas de agua Traviata 101 g;Bagley;101 g;Galletitas y snacks;OFF
+7790040872202;Galletitas de agua Traviata x 3 (303 g);Bagley;303 g;Galletitas y snacks;OFF
+7791875000334;Galletitas de limón Havanna 300 g;Havanna;300 g;Galletitas y snacks;OFF
+7790045001188;Galletitas Frutigran avena y pasas 250 g;Granix;250 g;Galletitas y snacks;OFF
+7790045825395;Galletitas Frutigran avena, chía y lino 240 g;Granix;240 g;Galletitas y snacks;OFF
+7790045001195;Galletitas Frutigran salvado 250 g;Granix;250 g;Galletitas y snacks;OFF
+7790045823889;Galletitas Granix lino 185 g;Granix;185 g;Galletitas y snacks;OFF
+7790045826200;Galletitas Granix salvado 240 g;Granix;240 g;Galletitas y snacks;OFF
+7790045001089;Galletitas Granix sin sal agregada 185 g;Granix;185 g;Galletitas y snacks;OFF
+7790040136069;Galletitas Hogareñas 7 semillas 189 g;Arcor;189 g;Galletitas y snacks;OFF
+7790040136090;Galletitas Hogareñas mix de cereales 185 g;Arcor;185 g;Galletitas y snacks;OFF
+7790040132962;Galletitas Hogareñas salvado 200 g;Arcor;200 g;Galletitas y snacks;OFF
+7790040882102;Galletitas Hogareñas sésamo 167 g;Arcor;167 g;Galletitas y snacks;OFF
+7798128000691;Galletitas integrales Cachafaz avena y chips de chocolate 225 g;Cachafaz;225 g;Galletitas y snacks;OFF
+7798128000707;Galletitas integrales Cachafaz granola 225 g;Cachafaz;225 g;Galletitas y snacks;OFF
+7790040003606;Galletitas Kesitas 75 g;Bagley;75 g;Galletitas y snacks;OFF
+7790040133495;Galletitas Macucas 110 g;Arcor;110 g;Galletitas y snacks;OFF
+7790040720107;Galletitas Maná livianas vainilla 145 g;Arcor;145 g;Galletitas y snacks;OFF
+7790040720800;Galletitas Maná livianas vainilla 393 g;Arcor;393 g;Galletitas y snacks;OFF
+7790040133242;Galletitas Maná rellenas chocolate 152 g;Arcor;152 g;Galletitas y snacks;OFF
+7790040133266;Galletitas Maná rellenas frutilla 152 g;Arcor;152 g;Galletitas y snacks;OFF
+7790040133259;Galletitas Maná rellenas limón 152 g;Arcor;152 g;Galletitas y snacks;OFF
+7790040133235;Galletitas Maná rellenas vainilla 152 g;Arcor;152 g;Galletitas y snacks;OFF
+7790040133693;Galletitas Mediatarde clásicas x 3 (315 g);Lía;315 g;Galletitas y snacks;OFF
+7790040932708;Galletitas Merengadas 93 g;Bagley;93 g;Galletitas y snacks;OFF
+7790263119634;Galletitas Okebon avena y cacao 240 g;Okebon;240 g;Galletitas y snacks;OFF
+7790040719804;Galletitas Rex original 125 g;Bagley;125 g;Galletitas y snacks;OFF
+7790040100336;Galletitas Rex original 75 g;Bagley;75 g;Galletitas y snacks;OFF
+7790040139268;Galletitas Rumba 108 g;Bagley;108 g;Galletitas y snacks;OFF
+7790580717407;Galletitas Saladix sabor parmesano 100 g;Saladix;100 g;Galletitas y snacks;OFF
+7790580387006;Galletitas Saladix sabor pizza 30 g;Saladix;30 g;Galletitas y snacks;OFF
+7790040704800;Galletitas Serranas sándwich 112 g;Arcor;112 g;Galletitas y snacks;OFF
+7790040725003;Galletitas Serranitas 105 g;Arcor;105 g;Galletitas y snacks;OFF
+7790040725102;Galletitas Serranitas 315 g;Arcor;315 g;Galletitas y snacks;OFF
+7790040931206;Galletitas Sonrisas frambuesa 118 g;Bagley;118 g;Galletitas y snacks;OFF
+7790040138896;Galletitas surtidas Bagley 398 g;Bagley;398 g;Galletitas y snacks;OFF
+7790040711105;Galletitas surtidas Diversión 400 g;Arcor;400 g;Galletitas y snacks;OFF
+7790310982846;Galletitas Toddy clásicas 126 g;Toddy;126 g;Galletitas y snacks;OFF
+7790040676800;Galletitas Tortitas Black 125 g;Arcor;125 g;Galletitas y snacks;OFF
+7790040677005;Galletitas Tortitas chocolate 125 g;Arcor;125 g;Galletitas y snacks;OFF
+7790040117747;Galletitas Vainitas 165 g;Bagley;165 g;Galletitas y snacks;OFF
+7794520412216;Maní pelado salado Krachitos 120 g;Krachitos;120 g;Galletitas y snacks;OFF
+7798151953124;Maní sabor crema y cebolla Maní King 80 g;Maní King;80 g;Galletitas y snacks;OFF
+7790310983911;Maní salado Pehuamar 85 g;Pehuamar;85 g;Galletitas y snacks;OFF
+7790040008175;Obleas Opera 220 g;Bagley;220 g;Galletitas y snacks;OFF
+7790310984390;Palitos Pehuamar sabor queso 90 g;Pehuamar;90 g;Galletitas y snacks;OFF
+7794520868815;Papas fritas Krachitos corte americano 115 g;Krachitos;115 g;Galletitas y snacks;OFF
+7794520868242;Papas fritas Krachitos corte tradicional 110 g;Krachitos;110 g;Galletitas y snacks;OFF
+7790310984017;Papas fritas Lay's clásicas 249 g;Lay's;249 g;Galletitas y snacks;OFF
+7790310985236;Papas fritas Lay's clásicas 40 g;Lay's;40 g;Galletitas y snacks;OFF
+7790310986059;Papas fritas Lay's mayonesa ahumada 77 g;Lay's;77 g;Galletitas y snacks;OFF
+7790310983966;Papas fritas Lay's sabor asado 85 g;Lay's;85 g;Galletitas y snacks;OFF
+7790310982440;Papas fritas Lay's sabor queso crema 86 g;Lay's;86 g;Galletitas y snacks;OFF
+7790040125025;Papas fritas Saladix sabor barbacoa 95 g;Saladix;95 g;Galletitas y snacks;OFF
+7792180009487;Pepas 9 de Oro con membrillo 200 g;9 de Oro;200 g;Galletitas y snacks;OFF
+7795735600924;Pepas Don Satur 300 g;Don Satur;300 g;Galletitas y snacks;OFF
+7791787000040;Pepas Trío 500 g;Trío;500 g;Galletitas y snacks;OFF
+7790310984499;Snack Cheetos 94 g;Cheetos;94 g;Galletitas y snacks;OFF
+7790310982419;Snack Doritos 95 g;Doritos;95 g;Galletitas y snacks;OFF
+7790310006795;Snack Doritos sabor queso 250 g;Doritos;250 g;Galletitas y snacks;OFF
+7790310984437;Snack Twistos horneados de queso 100 g;Twistos;100 g;Galletitas y snacks;OFF
+7790628102646;Vainillas Mauri 320 g;Mauri;320 g;Galletitas y snacks;OFF
+7790077000104;Vainillas Pozo 320 g;Pozo;320 g;Galletitas y snacks;OFF
+7790040133570;Alfajor Águila minitorta blanca 69 g;Águila;69 g;Golosinas;OFF
+7790040133587;Alfajor Águila minitorta clásica 69 g;Águila;69 g;Golosinas;OFF
+7790040613706;Alfajor Bon o Bon 40 g;Bon o Bon;40 g;Golosinas;OFF
+7790040614000;Alfajor Bon o Bon triple 60 g;Bon o Bon;60 g;Golosinas;OFF
+77930057;Alfajor Cachafaz mousse 50 g;Cachafaz;50 g;Golosinas;OFF
+7798039910041;Alfajor Capitán del Espacio blanco 40 g;Capitán del Espacio;40 g;Golosinas;OFF
+7798039910027;Alfajor Capitán del Espacio negro 40 g;Capitán del Espacio;40 g;Golosinas;OFF
+7790040659605;Alfajor Cofler Block 60 g;Cofler;60 g;Golosinas;OFF
+7790070416315;Alfajor de arroz Chocoarroz dulce de leche 25 g;Gallo;25 g;Golosinas;OFF
+7790380024620;Alfajor Full Maní 45 g;Georgalos;45 g;Golosinas;OFF
+77980212;Alfajor Guaymallén blanco de dulce de leche 38 g;Guaymallén;38 g;Golosinas;OFF
+77980229;Alfajor Guaymallén de dulce de leche 38 g;Guaymallén;38 g;Golosinas;OFF
+77980236;Alfajor Guaymallén de membrillo 38 g;Guaymallén;38 g;Golosinas;OFF
+77905758;Alfajor Jorgito blanco 50 g;Jorgito;50 g;Golosinas;OFF
+77905741;Alfajor Jorgito de chocolate 55 g;Jorgito;55 g;Golosinas;OFF
+77976307;Alfajor Oreo 56 g;Oreo;56 g;Golosinas;OFF
+77939234;Alfajor Terrabusi clásico 50 g;Terrabusi;50 g;Golosinas;OFF
+7790040116610;Alfajor Tofi negro 46 g;Tofi;46 g;Golosinas;OFF
+77980267;Alfajor triple Guaymallén blanco 70 g;Guaymallén;70 g;Golosinas;OFF
+77980274;Alfajor triple Guaymallén de chocolate 70 g;Guaymallén;70 g;Golosinas;OFF
+77903778;Alfajor triple Milka dulce de leche 70 g;Milka;70 g;Golosinas;OFF
+77903792;Alfajor triple Terrabusi 70 g;Terrabusi;70 g;Golosinas;OFF
+7798128000493;Alfajores Cachafaz de chocolate blanco 360 g;Cachafaz;360 g;Golosinas;OFF
+7798128000462;Alfajores Cachafaz de chocolate negro 720 g;Cachafaz;720 g;Golosinas;OFF
+7791875003465;Alfajores Havanna de chocolate blanco 330 g;Havanna;330 g;Golosinas;OFF
+7791875000440;Alfajores Havanna de chocolate x 12 (660 g);Havanna;660 g;Golosinas;OFF
+7791875006138;Alfajores Havanna de nuez 330 g;Havanna;330 g;Golosinas;OFF
+7791875000013;Alfajores Havanna mixtos x 6 (306 g);Havanna;306 g;Golosinas;OFF
+77955838;Barra Bon o Bon 35 g;Bon o Bon;35 g;Golosinas;OFF
+77961815;Bombón Bon o Bon blanco 15 g;Bon o Bon;15 g;Golosinas;OFF
+77907509;Bombón Dos Corazones 26 g;Felfort;26 g;Golosinas;OFF
+7790580106959;Bombones Bon o Bon leche x 30 (480 g);Bon o Bon;480 g;Golosinas;OFF
+7790580134235;Caramelos duros rellenos frutales Arcor 140 g;Arcor;140 g;Golosinas;OFF
+7790380029083;Caramelos Flynn Paff surtidos 503 g;Georgalos;503 g;Golosinas;OFF
+7792860009073;Caramelos Palito de la Selva 500 g;Lheritier;500 g;Golosinas;OFF
+77969118;Chicles Beldent frutilla 10 g;Beldent;10 g;Golosinas;OFF
+77969071;Chicles Beldent menta 10 g;Beldent;10 g;Golosinas;OFF
+77959508;Chicles Topline menta 11 g;Topline;11 g;Golosinas;OFF
+7790580109882;Chocolate Águila extra fino 60% cacao 150 g;Águila;150 g;Golosinas;OFF
+7790580124397;Chocolate amargo 70% Águila 150 g;Águila;150 g;Golosinas;OFF
+7790580103538;Chocolate blanco Cofler con Chocolinas 55 g;Cofler;55 g;Golosinas;OFF
+7790580131319;Chocolate Cofler 50% cacao 55 g;Cofler;55 g;Golosinas;OFF
+7790580103484;Chocolate con leche Cofler 55 g;Cofler;55 g;Golosinas;OFF
+77922120;Chocolate con maní Cofler Block 110 g;Cofler;110 g;Golosinas;OFF
+7790580105013;Chocolate con maní Cofler Block 170 g;Cofler;170 g;Golosinas;OFF
+7790580103743;Chocolate con maní Cofler Block 300 g;Cofler;300 g;Golosinas;OFF
+77953124;Chocolate con maní Cofler Block 38 g;Cofler;38 g;Golosinas;OFF
+7792360094678;Chocolate Mecano dulce de leche 100 g;Bonafide;100 g;Golosinas;OFF
+7790407031013;Chocolate semiamargo Águila 100 g;Águila;100 g;Golosinas;OFF
+7791249451656;Chocolate Shot con maní 90 g;Shot;90 g;Golosinas;OFF
+7790580106560;Chocolate Tres Placeres 55 g;Cofler;55 g;Golosinas;OFF
+77995681;Galletita Rhodesia Terrabusi 22 g;Terrabusi;22 g;Golosinas;OFF
+77976291;Galletita Tita Terrabusi 19 g;Terrabusi;19 g;Golosinas;OFF
+7790580169312;Gomitas Mogul cerebritos 30 g;Mogul;30 g;Golosinas;OFF
+7790580116958;Gomitas Mogul dinos 30 g;Mogul;30 g;Golosinas;OFF
+7790580117054;Gomitas Mogul frutales 60 g;Mogul;60 g;Golosinas;OFF
+7790580259402;Gomitas Mogul moras 150 g;Mogul;150 g;Golosinas;OFF
+7790580200114;Gomitas Mogul tiburoncitos 30 g;Mogul;30 g;Golosinas;OFF
+7791249451472;Mantecol 110 g;Mantecol;110 g;Golosinas;OFF
+7792360072485;Oblea Nugatón black 27 g;Bonafide;27 g;Golosinas;OFF
+7792360072447;Oblea Nugatón chocolate 27 g;Bonafide;27 g;Golosinas;OFF
+77940131;Turrón de maní Arcor 25 g;Arcor;25 g;Golosinas;OFF
+7790040127135;Budín Águila Black 215 g;Águila;215 g;Panificados;OFF
+7793890256543;Magdalenas Bimbo de chocolate con dulce de leche 180 g;Bimbo;180 g;Panificados;OFF
+7795735601198;Magdalenas Don Satur con chips de chocolate 200 g;Don Satur;200 g;Panificados;OFF
+7793890251081;Pan con salvado Lactal 350 g;Lactal;350 g;Panificados;OFF
+7790040127272;Pan dulce con frutas Arcor 400 g;Arcor;400 g;Panificados;OFF
+7793890259193;Pan integral Bimbo Cero Cero 350 g;Bimbo;350 g;Panificados;OFF
+7793890257946;Pan integral grano entero Fargo 420 g;Fargo;420 g;Panificados;OFF
+7796989007620;Pan lactal blanco Bimbo 400 g;Bimbo;400 g;Panificados;OFF
+7793890258417;Pan lactal con lino Bimbo 400 g;Bimbo;400 g;Panificados;OFF
+7793890258752;Pan lactal familiar Lactal 460 g;Lactal;460 g;Panificados;OFF
+7796989075803;Pan lactal integral Bimbo chico 350 g;Bimbo;350 g;Panificados;OFF
+7793890259377;Pan lactal integral Fargo 350 g;Fargo;350 g;Panificados;OFF
+7793890258820;Pan lacteado Fargo 380 g;Fargo;380 g;Panificados;OFF
+7796989009983;Pan Oroweat Whole Grains semillas 600 g;Oroweat;600 g;Panificados;OFF
+7796989007699;Pan para hamburguesas Bimbo x 4 (210 g);Bimbo;210 g;Panificados;OFF
+7790070622044;Tapa para pascualina hojaldrada La Salteña 400 g;La Salteña;400 g;Panificados;OFF
+7798042002559;Tapas para empanadas Ariana 400 g;Ariana;400 g;Panificados;OFF
+7790070622013;Tapas para empanadas La Salteña x 12 (330 g);La Salteña;330 g;Panificados;OFF
+7793890258264;Tortillas Rapiditas clásicas 275 g;Bimbo;275 g;Panificados;OFF
+7793890258288;Tortillas Rapiditas integrales 275 g;Bimbo;275 g;Panificados;OFF
+7798142880026;Tostadas de arroz sin sal Cariló 150 g;Cariló;150 g;Panificados;OFF
+7790071090316;Tostadas integrales Riera 200 g;Riera;200 g;Panificados;OFF
+7790503000326;Tostaditas de arroz sin sal Dos Hermanos 120 g;Dos Hermanos;120 g;Panificados;OFF
+7790045823575;Avena instantánea Granix 400 g;Granix;400 g;Cereales y harinas;OFF
+7790199603337;Avena instantánea Morixe 600 g;Morixe;600 g;Cereales y harinas;OFF
+7792170000647;Avena instantánea Quaker 400 g;Quaker;400 g;Cereales y harinas;OFF
+7792170555314;Avena integral extrafina Quaker 470 g;Quaker;470 g;Cereales y harinas;OFF
+7792170555352;Avena integral tradicional Quaker 470 g;Quaker;470 g;Cereales y harinas;OFF
+7790199603306;Avena tradicional Morixe 300 g;Morixe;300 g;Cereales y harinas;OFF
+7793306000401;Cereal Froot Loops 195 g;Kellogg's;195 g;Cereales y harinas;OFF
+7790045001034;Cereal Granix Fibra Total con pasas 200 g;Granix;200 g;Cereales y harinas;OFF
+7792170555376;Cereal Quaker Honey Nut Oats 190 g;Quaker;190 g;Cereales y harinas;OFF
+7790045001584;Copos de maíz Granix 160 g;Granix;160 g;Cereales y harinas;OFF
+7790045001591;Copos de maíz Granix tradicionales 400 g;Granix;400 g;Cereales y harinas;OFF
+7790045826637;Granola crocante Granix coco y miel 350 g;Granix;350 g;Cereales y harinas;OFF
+7790045825746;Granola crocante Granix frutos rojos 350 g;Granix;350 g;Cereales y harinas;OFF
+7794000003378;Granola Maizena con arándanos y almendras 250 g;Maizena;250 g;Cereales y harinas;OFF
+7790199603856;Harina integral Morixe 1 kg;Morixe;1 kg;Cereales y harinas;OFF
+7798031470031;Fideos multicereal con quinoa Wakas 250 g;Wakas;250 g;Sin TACC;OFF
+7790070321800;Fideos spaghetti libres de gluten Matarazzo 500 g;Matarazzo;500 g;Sin TACC;OFF
+7790070321817;Fideos tirabuzón libres de gluten Matarazzo 500 g;Matarazzo;500 g;Sin TACC;OFF
+7790538009516;Galletas de arroz Arrocitas 3 cereales 101 g;Arrocitas;101 g;Sin TACC;OFF
+7790538009561;Galletas de arroz Arrocitas con sal, sésamo y lino 101 g;Arrocitas;101 g;Sin TACC;OFF
+7790538009578;Galletas de arroz Arrocitas sin sal 101 g;Arrocitas;101 g;Sin TACC;OFF
+7790503198696;Galletas de arroz saladas Dos Hermanos 100 g;Dos Hermanos;100 g;Sin TACC;OFF
+7790503198689;Galletas de arroz sin sal Dos Hermanos 100 g;Dos Hermanos;100 g;Sin TACC;OFF
+7792540294607;Azúcar mascabo Ledesma 800 g;Ledesma;800 g;Endulzantes;OFF
+7790490998286;Edulcorante Hileret con zinc 400 ml;Hileret;400 ml;Endulzantes;OFF
+7794940000116;Edulcorante Hileret en sobres 80 g;Hileret;80 g;Endulzantes;OFF
+7790490998224;Edulcorante Hileret Stevia 200 ml;Hileret;200 ml;Endulzantes;OFF
+7792129004504;Edulcorante líquido Chuker 400 ml;Chuker;400 ml;Endulzantes;OFF
+7792129004009;Edulcorante líquido Chuker stevia 250 ml;Chuker;250 ml;Endulzantes;OFF
+7794940000826;Edulcorante líquido Hileret clásico 500 ml;Hileret;500 ml;Endulzantes;OFF
+7790490998231;Edulcorante líquido Hileret clásico forte 250 ml;Hileret;250 ml;Endulzantes;OFF
+7790036020235;Edulcorante líquido Si Diet 600 ml;Si Diet;600 ml;Endulzantes;OFF
+7792129003521;Edulcorante Sucaryl sucralosa x 50 sobres;Sucaryl;40 g;Endulzantes;OFF
+7798083731098;Miel Cuarto Creciente 330 g;Cuarto Creciente;330 g;Endulzantes;OFF
+7790895647550;Bebida de almendras Ades 1 L;Ades;1 L;Bebidas vegetales;OFF
+7790742340108;Bebida de almendras La Serenísima 1 L;La Serenísima;1 L;Bebidas vegetales;OFF
+7790742340306;Bebida de almendras La Serenísima sin endulzar 1 L;La Serenísima;1 L;Bebidas vegetales;OFF
+7791337003392;Bebida de almendras Silk sin azúcar 1 L;Silk;1 L;Bebidas vegetales;OFF
+7798336290044;Bebida de almendras Vrink original 1 L;Vrink;1 L;Bebidas vegetales;OFF
+7791337004955;Bebida de coco Silk sin azúcar 1 L;Silk;1 L;Bebidas vegetales;OFF
+7790895643521;Bebida de soja Ades chocolatada 1 L;Ades;1 L;Bebidas vegetales;OFF
+7790895643828;Bebida de soja Ades durazno 1 L;Ades;1 L;Bebidas vegetales;OFF
+7790895643866;Bebida de soja Ades frutas tropicales 1 L;Ades;1 L;Bebidas vegetales;OFF
+7790895643835;Bebida de soja Ades manzana 1 L;Ades;1 L;Bebidas vegetales;OFF
+7790895643873;Bebida de soja Ades vainilla 1 L;Ades;1 L;Bebidas vegetales;OFF
+7798165593347;Mantequilla de maní Beepure 400 g;Beepure;400 g;Untables;OFF
+7798151953254;Pasta de maní Maní King 350 g;Maní King;350 g;Untables;OFF
+7798151952332;Pasta de maní Maní King 485 g;Maní King;485 g;Untables;OFF
+7798151952615;Maní tostado sin piel Maní King 120 g;Maní King;120 g;Frutos secos;OFF
+7790150435335;Canela molida Alicante 25 g;Alicante;25 g;Especias;OFF
+7790147005374;Condimento para chimichurri Vea 50 g;Vea;50 g;Especias;OFF
+7790150497241;Condimento para empanadas Alicante 25 g;Alicante;25 g;Especias;OFF
+7790150540152;Orégano Alicante 25 g;Alicante;25 g;Especias;OFF
+7798085681476;Jugo de naranja exprimido Citric con pulpa 1 L;Citric;1 L;Refrigerados;OFF
+7790070032706;Brócoli congelado Granja del Sol 400 g;Granja del Sol;400 g;Congelados;OFF
+7798313700634;Filet de merluza rebozado Ocean Blue 450 g;Ocean Blue;450 g;Congelados;OFF
+7798147780055;Frambuesas bañadas en chocolate Franui 150 g;Rapanui;150 g;Congelados;OFF
+7790670052289;Hamburguesas light de carne vacuna Paty sin TACC 320 g;Paty;320 g;Congelados;OFF
+7790670050766;Hamburguesas Paty Express 276 g;Paty;276 g;Congelados;OFF
+7790070033864;Milanesas 4 vegetales Granja del Sol 320 g;Granja del Sol;320 g;Congelados;OFF
+7790070034328;Nuggets de pollo Granja del Sol 900 g;Granja del Sol;900 g;Congelados;OFF
+7790174001295;Nuggets vegetales Vegetalex 300 g;Vegetalex;300 g;Congelados;OFF
+7797906054819;Papas fritas congeladas McCain corte tradicional XL 1,4 kg;McCain;1,4 kg;Congelados;OFF
+7797906000380;Papas fritas congeladas McCain tradicionales 720 g;McCain;720 g;Congelados;OFF
+7797906054857;Papas horneables McCain estilo artesanal 700 g;McCain;700 g;Congelados;OFF
+7790070031563;Rebozado de pollo tipo suprema Granja del Sol 360 g;Granja del Sol;360 g;Congelados;OFF
+7790813130126;Levadura de cerveza NutriLeva 200 g;Calsa;200 g;Suplementos;OFF
+7795422000051;Alcohol etílico 96% Frau 1 L;Frau;1 L;Limpieza;OPF
+7790139000462;Alcohol Porta bialcohol 250 ml;Porta;250 ml;Limpieza;OPF
+7790990500033;Desengrasante Zorro Ultra 500 ml;Zorro;500 ml;Limpieza;OFF
+7791290795785;Desinfectante en aerosol Cif lavanda 360 ml;Cif;360 ml;Limpieza;OPF
+7793253002176;Desodorante de ambientes Poett suavidad de algodón 360 ml;Poett;360 ml;Limpieza;OPF
+7791290794078;Detergente Cif 750 ml;Cif;750 ml;Limpieza;OPF
+7791293047058;Acondicionador Dove 200 ml;Dove;200 ml;Higiene y perfumería;OPF
+7793100120282;Pasta dental Kolynos 180 g;Kolynos;180 g;Higiene y perfumería;OFF
+7791001000276;Shampoo Biferdil 200 ml;Biferdil;200 ml;Higiene y perfumería;OBF
+7792640000320;Shampoo Capilatis ortiga 410 ml;Capilatis;410 ml;Higiene y perfumería;OBF

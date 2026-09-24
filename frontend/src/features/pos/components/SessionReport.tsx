@@ -33,9 +33,13 @@ function Line({ label, value, strong, tone }: { label: string; value: string; st
   );
 }
 
-/** Reporte Z de un turno (SPEC §15.2): arqueo, medios de pago, movimientos de efectivo y top de productos. */
+/**
+ * Reporte Z de un turno (SPEC §15.2): arqueo, medios de pago, movimientos de efectivo y top de productos.
+ * Un turno que se cerró sin ventas lo dice en el estado y en la línea del cierre.
+ */
 export function SessionReport({ session, className }: SessionReportProps) {
   const closed = session.status === 'CLOSED';
+  const withoutSales = closed && session.closedWithoutSales;
   const difference = session.difference;
 
   return (
@@ -49,8 +53,8 @@ export function SessionReport({ session, className }: SessionReportProps) {
               {session.openedByName ?? 'Cajero'}
             </p>
           </div>
-          <StatusPill tone={closed ? 'neutral' : 'ok'} solid={closed}>
-            {closed ? 'Cerrado' : 'Abierto'}
+          <StatusPill tone={withoutSales ? 'warn' : closed ? 'neutral' : 'ok'} solid={closed}>
+            {withoutSales ? 'Cerrado sin ventas' : closed ? 'Cerrado' : 'Abierto'}
           </StatusPill>
         </div>
 
@@ -91,7 +95,7 @@ export function SessionReport({ session, className }: SessionReportProps) {
 
         {closed && session.closedAt ? (
           <p className="mt-3 border-t border-border pt-2 text-sm text-muted-foreground">
-            Cerrado el {formatDateTime(session.closedAt)}
+            {withoutSales ? 'Cerrado sin ventas' : 'Cerrado'} el {formatDateTime(session.closedAt)}
             {session.closedByName ? ` por ${session.closedByName}` : ''}.
             {session.closingNote ? ` «${session.closingNote}»` : ''}
           </p>

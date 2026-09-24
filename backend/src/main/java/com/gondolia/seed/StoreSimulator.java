@@ -1,6 +1,5 @@
 package com.gondolia.seed;
 
-import com.gondolia.domain.announcement.RecallResolution;
 import com.gondolia.domain.inventory.MovementSource;
 import com.gondolia.domain.inventory.MovementType;
 import com.gondolia.domain.pos.CashMovementType;
@@ -112,12 +111,11 @@ final class StoreSimulator {
         final Map<String, Long> userIds;
         final Instant importAppliedAt;
         final Long importJobId;
-        final Long oldRecallAnnouncementId;
         final Scenario scenario;
 
         TenantRun(DemoWorld.TenantSpec spec, long tenantId, List<BranchRun> branches, List<Product> products,
                   long adminId, Map<String, Long> userIds, Instant importAppliedAt, Long importJobId,
-                  Long oldRecallAnnouncementId, Scenario scenario) {
+                  Scenario scenario) {
             this.spec = spec;
             this.tenantId = tenantId;
             this.branches = branches;
@@ -126,7 +124,6 @@ final class StoreSimulator {
             this.userIds = userIds;
             this.importAppliedAt = importAppliedAt;
             this.importJobId = importJobId;
-            this.oldRecallAnnouncementId = oldRecallAnnouncementId;
             this.scenario = scenario;
         }
 
@@ -310,16 +307,10 @@ final class StoreSimulator {
                 events.add(new Timed(when, 1, () -> receiveScripted(stock, scripted, day, when)));
             }
         }
-        // Recall histórico: coincidencia y resolución.
+        // Recall pendiente: la coincidencia pone el lote en cuarentena (nadie la resuelve).
         for (DemoScenarios.RecallCase recall : run.scenario.recalls()) {
-            if (!recall.branch().equals(branch.spec.key())) {
-                continue;
-            }
-            if (today.minusDays(recall.daysAgo()).equals(day)) {
+            if (recall.branch().equals(branch.spec.key()) && today.minusDays(recall.daysAgo()).equals(day)) {
                 events.add(new Timed(at(day, recall.matchedAt()), 0, () -> matchRecall(branch, recall, day)));
-            }
-            if (today.minusDays(recall.resolvedDaysAgo()).equals(day)) {
-                events.add(new Timed(at(day, recall.resolvedAt()), 0, () -> resolveRecall(branch, recall, day)));
             }
         }
         // Descarte de vencidos a primera hora.
@@ -655,6 +646,16 @@ final class StoreSimulator {
 
     private void prune(Stock stock) {
         stock.live.removeIf(lot -> lot.quantity == 0);
+    }
+
+    /** Si la sucursal tiene unidades del producto en cuarentena (lote de un recall con remanente). */
+    private static boolean quarantined(Stock stock) {
+        for (Lot lot : stock.live) {
+            if (lot.recalled && lot.quantity > 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ------------------------------------------------------------------ ingresos
@@ -1009,6 +1010,11 @@ final class StoreSimulator {
         List<SaleItem> items = new ArrayList<>();
         Map<Stock, List<Take>> takesByStock = new LinkedHashMap<>();
         for (Line line : lines) {
+            // Como PosSaleService: con unidades en cuarentena por un recall, el POS no vende el producto (de ningún
+            // lote) hasta que se resuelva el retiro.
+            if (quarantined(line.stock())) {
+                continue;
+            }
             int available = sellableQuantity(line.stock(), day, moment);
             int quantity = Math.min(line.quantity(), available);
             if (quantity <= 0) {
@@ -1365,38 +1371,20 @@ final class StoreSimulator {
 
     // ------------------------------------------------------------------ escenarios: recall y decisiones
 
+    /**
+     * Como {@code RecallMatchingService}: el lote con remanente queda en cuarentena ({@code RECALLED}) desde la
+     * coincidencia. No se resuelve: el retiro lo hace el comercio en vivo durante la demo.
+     */
     private void matchRecall(BranchRun branch, DemoScenarios.RecallCase recall, LocalDate day) {
         Lot lot = tagged.get(branch.spec.key() + ":" + recall.lotTag());
         if (lot == null || lot.quantity <= 0) {
             return;
         }
-        lot.recalled = true;
-        lot.updatedAt = at(day, recall.matchedAt());
         Instant matchedAt = at(day, recall.matchedAt());
+        lot.recalled = true;
+        lot.updatedAt = matchedAt;
         out.recalls.add(new SimOutput.RecallOutcome(run.tenantId, branch.id, branch.spec.name(), lot.product, lot,
-                lot.quantity, matchedAt, at(day, recall.acknowledgedAt()), run.user(recall.acknowledgedBy()),
-                at(today.minusDays(recall.resolvedDaysAgo()), recall.resolvedAt()), run.user(recall.resolvedBy()),
-                recall.resolution(), recall.note(), branch.usersWithAccess));
-    }
-
-    private void resolveRecall(BranchRun branch, DemoScenarios.RecallCase recall, LocalDate day) {
-        Lot lot = tagged.get(branch.spec.key() + ":" + recall.lotTag());
-        if (lot == null || !lot.recalled || lot.quantity <= 0) {
-            return;
-        }
-        Instant moment = at(day, recall.resolvedAt());
-        int quantity = lot.quantity;
-        MovementType type = recall.resolution() == RecallResolution.REMOVED_FROM_STOCK
-                ? MovementType.RECALL_REMOVAL : MovementType.ADJUSTMENT_OUT;
-        String base = recall.resolution() == RecallResolution.REMOVED_FROM_STOCK
-                ? "Retiro por recall #" + run.oldRecallAnnouncementId
-                : "Devolución al proveedor por recall #" + run.oldRecallAnnouncementId;
-        lot.quantity = 0;
-        lot.lastMovementType = type;
-        lot.updatedAt = moment;
-        addCostMovement(lot, type, quantity, MovementSource.MANUAL, ref("A", moment),
-                recall.note() == null ? base : base + " · " + recall.note(), run.user(recall.resolvedBy()), moment);
-        prune(stock(branch, lot.product.template.key()));
+                lot.quantity, matchedAt, branch.usersWithAccess));
     }
 
     private void applyDiscountDecisions(BranchRun branch, LocalDate day) {

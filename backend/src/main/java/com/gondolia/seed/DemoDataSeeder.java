@@ -8,6 +8,7 @@ import com.gondolia.storage.AttachmentStorageService;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -27,9 +28,11 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Todo se escribe en <strong>una sola transacción</strong> (si algo falla no queda un mundo a medias) y con escritura en
  * bloque ({@code COPY}), así los 180 días de historia de los comercios ricos entran en segundos, muy por debajo de la
  * ventana de salud del contenedor. Las alertas y las recomendaciones pendientes <em>no</em> se siembran: las generan
- * el motor de alertas y la IA al arrancar (módulo B) sobre estos datos.
+ * el motor de alertas y la IA al arrancar (módulo B) sobre estos datos. La excepción son las alertas del recall
+ * pendiente del dulce de leche, que el motor no administra: las deja abiertas la coincidencia, como en vivo.
  * <p>
- * El mundo (quién es quién, qué mostrar y el recall en vivo) está documentado en {@code docs/datos-demo.md}.
+ * El mundo (quién es quién, qué mostrar, el recall pendiente y el recall en vivo) está documentado en
+ * {@code docs/datos-demo.md}.
  */
 @Slf4j
 @Order(30)
@@ -115,17 +118,16 @@ public class DemoDataSeeder implements ApplicationRunner {
             if (tenant.spec.historyDays() <= 0) {
                 continue;
             }
-            simulator.simulate(world.simulationRun(tenant, announcements.oldRecallId()),
-                    StoreSimulator.seedOf(tenant.spec.key(), world.today()));
+            simulator.simulate(world.simulationRun(tenant), StoreSimulator.seedOf(tenant.spec.key(), world.today()));
         }
         world.writeSimulation(out);
 
         stories.recommendations(out);
-        stories.recallMatches(tenants, out, announcements);
+        Set<Long> recallAlerted = stories.recallMatches(out, announcements);
         for (TenantRecord tenant : tenants) {
             stories.importJob(tenant, out);
         }
-        stories.announcementNotifications(tenants, announcements);
+        stories.announcementNotifications(tenants, announcements, recallAlerted);
         stories.support(tenants, platform);
 
         return new Summary(tenants.size(), out.lots.size(), out.movements.size(), out.sales.size(),

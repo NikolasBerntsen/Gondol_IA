@@ -1,6 +1,6 @@
 // Helpers del módulo A1 — Catálogo y carga de mercadería.
 import { MOVEMENT_TYPE_LABELS, type ProductUnit } from '@/api/types';
-import type { ProductListItem, ProductMovement, ProductStockFilter } from './types';
+import type { CategoryDto, ProductListItem, ProductMovement, ProductStockFilter } from './types';
 
 /** Etiquetas de los tipos que el núcleo todavía no lista (A2 los agrega al historial completo). */
 const EXTRA_TYPE_LABELS: Record<string, string> = {
@@ -90,6 +90,47 @@ export function whatsappLink(phone: string | null | undefined): string | null {
 /** Código de barras tal como lo normaliza el backend (`Barcodes.normalize`). */
 export function normalizeBarcode(raw: string): string {
   return raw.replace(/\s+/g, '').trim();
+}
+
+/** Origen del autocompletado por código de barras: el catálogo de productos argentinos que trae el sistema. */
+export const REFERENCE_CATALOG_SOURCE = 'REFERENCE_CATALOG';
+
+/**
+ * De dónde salieron los datos del autocompletado (`BarcodeLookupResponse.source`), para mostrarlo al cargar. Los del
+ * catálogo de referencia son de Open Food Facts: la licencia ODbL pide decirlo donde se muestran.
+ */
+export function lookupSourceLabel(source: string | null | undefined): string | null {
+  switch (source) {
+    case REFERENCE_CATALOG_SOURCE:
+      return 'catálogo de productos argentinos (datos de Open Food Facts, licencia ODbL)';
+    case 'OPEN_FOOD_FACTS':
+      return 'Open Food Facts';
+    default:
+      return null;
+  }
+}
+
+export type CategorySuggestion = { categoryId: number } | { newCategoryName: string } | null;
+
+/**
+ * Categoría para un producto autocompletado por su código: la del comercio que se llama igual (sin importar
+ * mayúsculas ni tildes) o, si el dato viene del catálogo de referencia, una nueva con ese nombre (son las categorías
+ * del mundo demo). Open Food Facts trae categorías en crudo ("Mieles de flores"): de ahí solo se toma una existente.
+ */
+export function suggestCategory(
+  categories: ReadonlyArray<Pick<CategoryDto, 'id' | 'name'>>,
+  hint: string | null | undefined,
+  source: string | null | undefined,
+): CategorySuggestion {
+  const name = hint?.trim();
+  if (!name) return null;
+  const existing = categories.find((category) => categoryKey(category.name) === categoryKey(name));
+  if (existing) return { categoryId: existing.id };
+  return source === REFERENCE_CATALOG_SOURCE ? { newCategoryName: name } : null;
+}
+
+function categoryKey(name: string): string {
+  return name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
 }
 
 /** Número de lote tal como lo normaliza el backend (`LotNumbers.normalize`). */

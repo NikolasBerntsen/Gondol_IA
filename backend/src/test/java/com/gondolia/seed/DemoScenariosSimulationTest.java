@@ -10,7 +10,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -79,14 +81,46 @@ class DemoScenariosSimulationTest {
         }
     }
 
-    /** Los lotes de los recalls armados no se transfieren: el recall en vivo alcanza solo a Don Pepe y Fisherton. */
+    /**
+     * Los lotes de los recalls armados no se transfieren: el recall en vivo alcanza solo a Don Pepe y Fisherton, y el
+     * pendiente del dulce de leche, a Don Pepe y Centro, siempre con el lote entero en cuarentena y sin retirar.
+     */
     private static void recallLotsStayWhereTheScenarioPutThem(SimulationFixture.Simulation simulation,
                                                               LocalDate today) {
         long donPepe = simulation.branch(DemoWorld.DON_PEPE, "PRI").id;
+        long centro = simulation.branch(DemoWorld.EL_SOL, "CEN").id;
         assertThat(branchesWithLot(simulation, DemoScenarios.LIVE_RECALL_LOT)).as("L2409A (%s)", today)
                 .containsExactlyInAnyOrder(donPepe, simulation.branch(DemoWorld.EL_SOL, "FIS").id);
-        assertThat(branchesWithLot(simulation, DemoScenarios.OLD_RECALL_LOT)).as("DV2603B (%s)", today)
-                .containsExactlyInAnyOrder(donPepe, simulation.branch(DemoWorld.EL_SOL, "CEN").id);
+        assertThat(branchesWithLot(simulation, DemoScenarios.PENDING_RECALL_LOT)).as("DV2603B (%s)", today)
+                .containsExactlyInAnyOrder(donPepe, centro);
+        assertThat(simulation.out().recalls).as("coincidencias del recall pendiente (%s)", today)
+                .extracting(SimOutput.RecallOutcome::branchId).containsExactlyInAnyOrder(donPepe, centro);
+        // datos-demo §5.1 cuenta "24 u." en Don Pepe y "30 u." en Centro ("Retirar 24 u."): el lote entra a la
+        // mañana y la cuarentena lo agarra entero, sin ninguna venta antes de la coincidencia.
+        Map<Long, Integer> scripted = pendingRecallScriptedQuantities(simulation);
+        assertThat(scripted).as("lotes armados del recall pendiente")
+                .containsExactlyInAnyOrderEntriesOf(Map.of(donPepe, 24, centro, 30));
+        for (SimOutput.RecallOutcome recall : simulation.out().recalls) {
+            assertThat(recall.lot().recalled).isTrue();
+            assertThat(recall.lot().expiryDate).as("DV2603B vigente (%s)", today).isAfter(today);
+            assertThat(recall.quantityAtMatch()).as("stock al detectarlo (%s)", today)
+                    .isEqualTo(scripted.get(recall.branchId()));
+            assertThat(recall.lot().quantity).as("stock en cuarentena (%s)", today)
+                    .isEqualTo(recall.quantityAtMatch());
+        }
+    }
+
+    /** Cantidad de cada lote armado del recall pendiente, por sucursal. */
+    private static Map<Long, Integer> pendingRecallScriptedQuantities(SimulationFixture.Simulation simulation) {
+        Map<Long, Integer> quantities = new HashMap<>();
+        for (StoreSimulator.TenantRun run : simulation.runs().values()) {
+            for (DemoScenarios.ScriptedLot lot : run.scenario.lots()) {
+                if (DemoScenarios.PENDING_RECALL_LOT.equals(lot.lotNumber())) {
+                    quantities.put(simulation.branch(run.spec.key(), lot.branch()).id, lot.quantity());
+                }
+            }
+        }
+        return quantities;
     }
 
     /** El Sol vende también por la fuente manual (datos-demo §4): los pedidos quincenales que carga la administradora. */

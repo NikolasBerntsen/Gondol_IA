@@ -116,6 +116,13 @@ usuario pueda operar (propio, o cualquiera del alcance si es ADMIN).
 ```
 Devuelve el reporte Z con `expectedCash`, `countedCash` y `difference` ya guardados en el turno.
 
+**No exige ventas.** Un turno sin ninguna venta vigente (nunca se cobró nada, o se anularon todas) se
+cierra igual —el cajero abrió la caja por error o no vendió nada en el día— y libera la caja y al
+usuario como cualquier otro cierre. Queda registrado en el turno con `closedWithoutSales:true`
+(columna `pos_sessions.closed_without_sales`, V500). El aviso previo ("Estás a punto de cerrar la caja
+sin ventas") lo muestra el mostrador; el backend no pide un campo de confirmación, así ningún cliente
+queda sin poder cerrar.
+
 **Fórmula del arqueo (SPEC §15.2), implementada en `PosSessionService.arqueo`:**
 
 ```
@@ -133,12 +140,14 @@ depender del orden en que se anuló. `changeGiven` del reporte informa solo el v
 
 Una vez cerrado, el turno conserva el `expectedCash` del momento del cierre: si después se anula una
 venta, el reporte sigue mostrando el arqueo con el que se cerró la caja (`difference` no se reescribe
-sola).
+sola). Lo mismo `closedWithoutSales`: un turno que cerró con ventas no pasa a "sin ventas" si el
+administrador las anula después.
 
 ### `GET /sessions?status=&from=&to=&mine=&page=&size=`
 `PageResponse<PosSessionSummaryDto>` ordenado por apertura descendente. El ADMIN ve todos los del
 alcance (o solo los suyos con `mine=true`); el empleado y el cajero, **siempre** los propios.
-`from`/`to` son fechas inclusive sobre `openedAt` en hora de negocio.
+`from`/`to` son fechas inclusive sobre `openedAt` en hora de negocio. Cada fila trae
+`closedWithoutSales` para marcar en el historial los cierres sin ventas.
 
 ### `GET /sessions/{id}` · reporte Z
 
@@ -153,10 +162,11 @@ alcance (o solo los suyos con `mine=true`); el empleado y el cajero, **siempre**
  "topProducts":[{"productId":11,"productName":"Leche entera La Pradera 1 L","units":24,"total":33600.00}],
  "cashMovements":[{"id":3,"type":"CASH_OUT","amount":15000.00,"reason":"Pago a proveedor",
                    "userName":"Carla Gómez","createdAt":"2026-09-17T18:40:00Z"}],
- "mine":true,"closingNote":null}
+ "mine":true,"closingNote":null,"closedWithoutSales":false}
 ```
 
 `mine` le sirve al frontend para marcar "(vos)" y habilitar la anulación sin repetir la regla de permisos.
+`closedWithoutSales` es `true` solo en un turno `CLOSED` que cerró sin ventas vigentes.
 
 ---
 
@@ -313,6 +323,16 @@ Sobre el alcance de sucursales y **descontando las ventas anuladas** (SPEC §4.2
 | `/app/pos/registers` | `PosRegistersPage` | CRUD de cajas (solo ADMIN). |
 | `/app/pos/sales/:id/ticket` | `PosTicketPage` | Fuera del AppShell: `Ticket80mm` + `window.print()`. Con `?print=1` imprime al abrir. |
 
+Cierre de caja (`CloseSessionDialog`): el cajero escribe el efectivo contado ("Cerrar caja" nunca
+queda gris: con el campo vacío pide el importe, y la ayuda del campo aclara "Si el cajón quedó vacío,
+escribí 0"). Si el turno no tiene ventas vigentes (`salesCount === 0`, también cuando se anularon
+todas), el último paso es un aviso "Estás a punto de cerrar la caja sin ventas" con "Volver" (foco
+inicial) y "Cerrar sin ventas". El reporte Z y el listado de turnos muestran esos turnos como
+**Cerrado sin ventas**. Al abrir el cierre, el mostrador vuelve a traer el turno (`GET /sessions/current`)
+para que el aviso y el efectivo esperado sean los del turno real, por ejemplo si un administrador anuló
+la única venta desde otro equipo; si el turno ya se cerró en otro lado, vuelve a la apertura. Igual la
+marca `closedWithoutSales` la fija el backend con el arqueo del cierre, no el aviso.
+
 Atajos del mostrador: **F2** buscar · **F4** cobrar · **F8** quitar ítem · **Esc** limpiar ·
 **Enter** agrega el primer resultado (y confirma el cobro dentro de la hoja). Todo se puede hacer
 también con el dedo: los mosaicos, el `QtyStepper` de 44 px y la barra fija de mobile con el total y
@@ -347,6 +367,11 @@ sucursal (cajas, búsqueda, categorías, turnos, ventas). Después de cobrar o a
    siga publicado, tampoco se vende con faltante: la unidad sin lote registrado no se puede verificar.
 7. **`allowShortage` es explícito.** El cajero tiene que confirmar "vender igual" en el aviso; el
    frontend nunca lo manda solo.
+8. **Cerrar sin ventas está permitido y queda marcado.** Un turno abierto por error ocupa la caja (y al
+   cajero) hasta cerrarlo, así que el cierre no puede depender de haber vendido. El aviso es del
+   mostrador; el registro es del turno: `closedWithoutSales` se fija al cerrar (con quién y cuándo en
+   `closedBy`/`closedAt`), igual que el arqueo, en lugar de deducirlo después de `salesCount`, que
+   cambia si el administrador anula ventas de un turno cerrado.
 
 ---
 
@@ -359,6 +384,24 @@ sucursal (cajas, búsqueda, categorías, turnos, ventas). Después de cobrar o a
   cobro consumiendo primero el lote en liquidación y numeración por sucursal; rechazo por falta de
   stock con `details`; bloqueo por recall y validación de pagos; anulación que devuelve el stock y
   ajusta los contadores; solo el admin anula ventas de otro cajero; la fórmula del arqueo de §15.2;
-  409 `REGISTER_BUSY` / `SESSION_ALREADY_OPEN`; **aislamiento entre comercios y sucursales** (el cajero
-  no abre la caja de una sucursal no asignada, y otro comercio recibe 404 en caja, turno, venta y
-  ticket, con listados vacíos); y que el lookup solo ve el stock de su propia sucursal.
+  409 `REGISTER_BUSY` / `SESSION_ALREADY_OPEN`; el **cierre sin ventas** (en $ 0, con la única venta
+  anulada y cerrado por el administrador), que libera la caja y al cajero y queda marcado en el turno
+  (y un turno que cerró con ventas no cambia si después se anulan); **aislamiento entre comercios y
+  sucursales** (el cajero no abre la caja de una sucursal no asignada, y otro comercio recibe 404 en
+  caja, turno, venta y ticket, con listados vacíos); y que el lookup solo ve el stock de su propia
+  sucursal.
+
+`frontend/src/features/pos/components/`:
+
+- `CloseSessionDialog.test.tsx` — "Cerrar caja" con el efectivo contado vacío explica qué escribir en
+  lugar de quedar gris; con 0 ventas (o todas anuladas) el aviso aparece como último paso, "Volver" no
+  cierra nada y "Cerrar sin ventas" cierra; con ventas no hay aviso.
+- `SessionReport.test.tsx` — el reporte Z muestra "Cerrado sin ventas" solo en esos turnos.
+
+`frontend/src/features/pos/pages/`:
+
+- `PosSessionsPage.test.tsx` — el historial muestra la píldora «Cerrado sin ventas» solo en los turnos
+  con `closedWithoutSales`, «Cerrado» en los demás cerrados y «Abierto» en el abierto.
+- `PosTerminalPage.test.tsx` — al abrir el cierre se vuelve a traer el turno (si le anularon la única
+  venta, avisa del cierre sin ventas), el toast dice "Cerraste la caja sin ventas" o dónde quedó el
+  reporte Z (Mis turnos de caja), y un turno cerrado en otro equipo no deja el diálogo pendiente.

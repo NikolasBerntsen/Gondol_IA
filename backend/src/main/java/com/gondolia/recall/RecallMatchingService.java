@@ -95,6 +95,34 @@ public class RecallMatchingService {
         return matchId == null ? RECALLS_LINK : RECALLS_LINK + "?match=" + matchId;
     }
 
+    /** Título de la alerta {@code RECALL_MATCH} de un lote alcanzado. */
+    public static String alertTitle(String productName, String lotNumber) {
+        return "Recall: " + productName + " (lote " + lotLabel(lotNumber) + ")";
+    }
+
+    /** Título de la notificación {@code RECALL_ALERT}. */
+    public static String notificationTitle(String productName) {
+        return "Alerta de recall: " + productName;
+    }
+
+    /**
+     * Texto de la alerta y de la notificación de una coincidencia: sucursal, lote, vencimiento, recall, motivo y qué
+     * hacer. Público para que la siembra de datos demo escriba exactamente lo mismo que el barrido en vivo.
+     */
+    public static String alertMessage(String branchName, String productName, String lotNumber, LocalDate expiryDate,
+                                      String recallTitle, String reason, String instructions) {
+        StringBuilder text = new StringBuilder()
+                .append(branchName).append(": el lote ").append(lotLabel(lotNumber)).append(" de ").append(productName);
+        if (expiryDate != null) {
+            text.append(" (vence ").append(DATE_FORMAT.format(expiryDate)).append(')');
+        }
+        text.append(" está alcanzado por el recall \"").append(recallTitle)
+                .append("\". Quedó en cuarentena y no se puede vender.");
+        appendSentence(text, "Motivo", reason);
+        appendSentence(text, "Qué hacer", instructions);
+        return text.toString();
+    }
+
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final Set<LotStatus> CANDIDATE_STATUSES = EnumSet.of(LotStatus.ACTIVE, LotStatus.RECALLED);
     private static final String INSERT_MATCH_SQL = """
@@ -295,7 +323,8 @@ public class RecallMatchingService {
         String branchName = run.branchNames.computeIfAbsent(lot.getBranchId(),
                 id -> branchRepository.findById(id).map(Branch::getName).orElse("Sucursal"));
         String productName = product != null ? product.getName() : "Producto";
-        String message = describe(announcement, lot, productName, branchName);
+        String message = alertMessage(branchName, productName, lot.getLotNumber(), lot.getExpiryDate(),
+                announcement.getTitle(), announcement.getRecallReason(), announcement.getRecallInstructions());
 
         Alert alert = new Alert();
         alert.setTenantId(lot.getTenantId());
@@ -305,7 +334,7 @@ public class RecallMatchingService {
         alert.setProductId(lot.getProductId());
         alert.setLotId(lot.getId());
         alert.setAnnouncementId(announcement.getId());
-        alert.setTitle("Recall: " + productName + " (lote " + lotLabel(lot) + ")");
+        alert.setTitle(alertTitle(productName, lot.getLotNumber()));
         alert.setMessage(message);
         alert.setDedupeKey(ALERT_DEDUPE_PREFIX + announcement.getId() + ":" + lot.getId());
         openAlertWriter.openIfAbsent(alert);
@@ -313,7 +342,7 @@ public class RecallMatchingService {
         List<Long> recipients = run.recipients.computeIfAbsent(lot.getBranchId(),
                 branchId -> notificationService.branchRecipients(lot.getTenantId(), branchId, null));
         notificationService.notifyUsers(recipients, new NotificationDraft(NotificationType.RECALL_ALERT,
-                Severity.CRITICAL, "Alerta de recall: " + productName, message, recallMatchLink(match.getId()),
+                Severity.CRITICAL, notificationTitle(productName), message, recallMatchLink(match.getId()),
                 REFERENCE_TYPE, match.getId()));
         realtimePublisher.toUsers(recipients, Destinations.QUEUE_SECURITY_ALERTS, new RecallAlertMessage(
                 match.getId(), announcement.getId(), lot.getBranchId(), branchName, announcement.getTitle(),
@@ -438,21 +467,8 @@ public class RecallMatchingService {
                 announcement.getRecallInstructions(), announcement.isRecallAllLots());
     }
 
-    private static String lotLabel(Lot lot) {
-        return lot.getLotNumber() != null ? lot.getLotNumber() : "sin número";
-    }
-
-    private static String describe(Announcement announcement, Lot lot, String productName, String branchName) {
-        StringBuilder text = new StringBuilder()
-                .append(branchName).append(": el lote ").append(lotLabel(lot)).append(" de ").append(productName);
-        if (lot.getExpiryDate() != null) {
-            text.append(" (vence ").append(DATE_FORMAT.format(lot.getExpiryDate())).append(')');
-        }
-        text.append(" está alcanzado por el recall \"").append(announcement.getTitle())
-                .append("\". Quedó en cuarentena y no se puede vender.");
-        appendSentence(text, "Motivo", announcement.getRecallReason());
-        appendSentence(text, "Qué hacer", announcement.getRecallInstructions());
-        return text.toString();
+    private static String lotLabel(String lotNumber) {
+        return lotNumber != null ? lotNumber : "sin número";
     }
 
     private static void appendSentence(StringBuilder text, String label, String value) {

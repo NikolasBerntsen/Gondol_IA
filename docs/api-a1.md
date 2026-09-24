@@ -217,13 +217,25 @@ Lotes del producto **en el alcance**, por sucursal y en orden de rotación. `inc
 ## 6. Ayudas de la carga
 
 ### `GET /api/tenant/catalog/lookup/{barcode}` — autocompletar un producto nuevo
-Consulta **Open Food Facts** (`app.openfoodfacts-enabled`, por defecto `true`; timeout **4 s**).
-**Nunca falla el request**: si está deshabilitado, no hay internet, tarda de más o el código no existe,
+Busca primero en el **catálogo de referencia de productos argentinos** que viene con el backend
+(`ReferenceCatalog`, recurso `catalog/productos-argentina.csv`: más de 600 productos reales de supermercado, almacén y
+kiosco sacados de Open Food Facts y revisados a mano). Responde al instante, **sin internet** y aunque
+`app.openfoodfacts-enabled` esté en `false`; el nombre ya trae el contenido y `categoryHint` es una de las categorías
+del mundo demo. El código se acepta con espacios y en UPC-A o EAN-13 indistintamente.
+```json
+{"found":true,"source":"REFERENCE_CATALOG","barcode":"7793704000911","name":"Yerba mate Playadito 500 g",
+ "brand":"Playadito","quantity":"500 g","categoryHint":"Almacén","imageUrl":null}
+```
+Si el catálogo no lo tiene, consulta **Open Food Facts** (`app.openfoodfacts-enabled`, por defecto `true`; timeout
+**4 s**). **Nunca falla el request**: si está deshabilitado, no hay internet, tarda de más o el código no existe,
 devuelve `found: false` y la pantalla ofrece cargar los datos a mano.
 ```json
 {"found":true,"source":"OPEN_FOOD_FACTS","barcode":"3017620422003","name":"Nutella","brand":"Nutella",
  "quantity":"400 g e","categoryHint":"Nuttela","imageUrl":"https://images.openfoodfacts.org/..."}
 ```
+El catálogo se regenera y verifica con `backend/scripts/catalogo_argentina.py` (candidatos de Open Food Facts →
+revisión a mano → `verificar --online`); sus datos son de Open Food Facts bajo licencia ODbL (atribución en la
+cabecera del CSV y en [`datos-demo.md`](datos-demo.md#6-códigos-de-barras-para-probar-la-carga-de-mercadería)).
 
 ### `GET /api/tenant/recalls/check?barcode=&lotNumber=&expiryDate=`
 Chequeo **previo** a la carga, sin efectos: `RecallMatchingService.findActiveRecalls`. El número de lote se
@@ -258,8 +270,8 @@ La pantalla lo muestra como aviso y deja seguir a mano: **la cámara nunca es un
 |---|---|---|
 | `/app/inventory` | `InventoryPage` | Búsqueda (lee `?q=` del buscador de la barra superior), filtro por categoría y segmentado de estado de stock. Con "Todas las sucursales" agrega **una columna por sucursal**. Acciones rápidas por fila (cargar mercadería, editar), link "Importar Excel/CSV" (solo admin) y estado vacío de comercio nuevo. |
 | `/app/products/:id` | `ProductDetailPage` | KPI (vendible, próximo vencimiento, vencido pendiente, precio), **lotes en orden de salida** con `LotRankChip` + `ExpiryChip` (los no vendibles muestran su estado en vez del orden; sin lotes a la vista pero con movimientos dice "Sin lotes con stock", no "no tiene lotes cargados"; si el alcance no trabaja el producto dice "Esta sucursal no trabaja este producto" y el KPI de stock muestra "—"), datos, stock por sucursal (solo las que manejan el producto), movimientos recientes y "Lo que ve la IA" (jefe y admin): una fila por sucursal del alcance leída de `GET /tenant/insights/products` (patrón, clase ABC, venta diaria, fecha estimada de quiebre). Avisos de cuarentena y de producto dado de baja. |
-| `/app/products/new` · `/:id/edit` | `ProductFormPage` | Alta y edición con campo de código de barras + botón de escáner, autocompletado con la base pública, **creación de categoría inline**, precios, stock mínimo y "tiene vencimiento". |
-| `/app/intake` | `IntakePage` | La pantalla móvil de carga: `BarcodeScanner`, código a mano y lector USB (`useBarcodeWedge`); producto encontrado → tarjeta, desconocido → datos de Open Food Facts y "Crear el producto"; "Leer vencimiento y lote con la cámara" → `CameraCapture` → chips de OCR con su confianza; stepper de cantidad, costo, proveedor, `BranchPicker` cuando el alcance es "todas"; lotes existentes en orden de salida con el lote nuevo resaltado; **panel rojo que bloquea si hay recall** y aviso de FIFO que no bloquea; **vencimiento ya pasado**: aviso rojo, el lote figura "Vencido" (sin orden de salida) y "Registrar ingreso" pide confirmación; toast de éxito y lista "Cargaste hoy". El origen del lote sigue a cómo llegó el código (cámara o lector → `SCAN`, tipeado → `MANUAL`, lectura de etiqueta → `OCR`). Después de registrar, la tarjeta suma el lote nuevo (con `existingLots` de la respuesta) y relee el producto, así el aviso de FIFO de la próxima caja sale antes de guardar. |
+| `/app/products/new` · `/:id/edit` | `ProductFormPage` | Alta y edición con campo de código de barras + botón de escáner, autocompletado con la base pública (nombre, marca, "Contenido: …" en la descripción y la categoría: la existente con ese nombre o, si el dato viene del catálogo de referencia, una nueva), **creación de categoría inline**, precios, stock mínimo y "tiene vencimiento". Desde la carga de mercadería llega con `?barcode=&name=&brand=&quantity=&category=&source=`. |
+| `/app/intake` | `IntakePage` | La pantalla móvil de carga: `BarcodeScanner`, código a mano y lector USB (`useBarcodeWedge`); producto encontrado → tarjeta, desconocido → datos del catálogo de referencia o de Open Food Facts (con la fuente) y "Crear el producto"; "Leer vencimiento y lote con la cámara" → `CameraCapture` → chips de OCR con su confianza; stepper de cantidad, costo, proveedor, `BranchPicker` cuando el alcance es "todas"; lotes existentes en orden de salida con el lote nuevo resaltado; **panel rojo que bloquea si hay recall** y aviso de FIFO que no bloquea; **vencimiento ya pasado**: aviso rojo, el lote figura "Vencido" (sin orden de salida) y "Registrar ingreso" pide confirmación; toast de éxito y lista "Cargaste hoy". El origen del lote sigue a cómo llegó el código (cámara o lector → `SCAN`, tipeado → `MANUAL`, lectura de etiqueta → `OCR`). Después de registrar, la tarjeta suma el lote nuevo (con `existingLots` de la respuesta) y relee el producto, así el aviso de FIFO de la próxima caja sale antes de guardar. |
 | `/app/categories` | `CategoriesPage` | ABM con diálogo; el borrado avisa cuando la categoría tiene productos. |
 | `/app/suppliers` | `SuppliersPage` | ABM con diálogo y **link de WhatsApp** armado desde el teléfono (`wa.me`, agrega el código de país argentino si falta). |
 

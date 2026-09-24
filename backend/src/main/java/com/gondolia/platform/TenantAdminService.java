@@ -4,6 +4,7 @@ import com.gondolia.common.PageResponse;
 import com.gondolia.common.error.BadRequestException;
 import com.gondolia.common.error.ConflictException;
 import com.gondolia.common.error.ErrorCodes;
+import com.gondolia.common.error.ForbiddenException;
 import com.gondolia.common.error.NotFoundException;
 import com.gondolia.common.events.TenantStatusChangedEvent;
 import com.gondolia.common.util.Emails;
@@ -48,6 +49,7 @@ import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -76,6 +78,8 @@ public class TenantAdminService {
     static final String MSG_NOT_FOUND = "El comercio no existe";
     static final String MSG_DISABLED = "El acceso de tu comercio está deshabilitado. Comunicate con GondolIA.";
     static final String MSG_CANCELLED = "Tu comercio fue dado de baja del servicio. Comunicate con GondolIA.";
+    /** Motivo guardado de {@code ADMIN_PASSWORD_RESET}: sin el email, que se resuelve al mostrar el historial. */
+    static final String PASSWORD_RESET_REASON = "Contraseña temporal para el administrador";
     static final String CODE_EMAIL_TAKEN = "EMAIL_TAKEN";
     static final String CODE_NAME_TAKEN = "NAME_TAKEN";
     static final String CODE_NO_ADMIN = "NO_ADMIN";
@@ -194,7 +198,12 @@ public class TenantAdminService {
         return detail(tenant.getId());
     }
 
-    /** Edición de datos administrativos y del plan. Cambiar el plan registra {@code PLAN_CHANGED}. */
+    /**
+     * Edición de datos administrativos y del plan. Si cambia algún dato se registra {@code DATA_UPDATED} con cuáles
+     * (el historial muestra quién, sea dueño o soporte). Cambiar el plan registra {@code PLAN_CHANGED} y es una
+     * decisión comercial: solo la toma un dueño. Sin plan ({@code null}, lo que manda soporte) se deja el actual;
+     * un plan distinto del actual pedido por quien no es dueño responde 403.
+     */
     @Transactional
     public TenantDetail update(Long tenantId, UpdateTenantRequest request, Long actorUserId) {
         Tenant tenant = requireTenant(tenantId);
@@ -203,32 +212,46 @@ public class TenantAdminService {
             throw new ConflictException(CODE_NAME_TAKEN, "Ya hay un comercio registrado con el nombre «" + name + "»");
         }
         TenantPlan previousPlan = tenant.getPlan();
-        if (previousPlan != request.plan()) {
+        TenantPlan plan = request.plan() == null ? previousPlan : request.plan();
+        if (previousPlan != plan) {
+            if (!isOwner(actorUserId)) {
+                throw new ForbiddenException(ErrorCodes.FORBIDDEN, "El plan de un cliente lo cambia un dueño de "
+                        + "GondolIA: pedíselo y guardá el resto de los datos");
+            }
             long activeBranches = branchRepository.countByTenantIdAndActiveTrue(tenantId);
-            if (activeBranches > request.plan().maxBranches()) {
+            if (activeBranches > plan.maxBranches()) {
                 throw new ConflictException(ErrorCodes.BRANCH_LIMIT_REACHED, "El plan "
-                        + planLabel(request.plan()) + " permite " + request.plan().maxBranches()
-                        + (request.plan().maxBranches() == 1 ? " sucursal activa" : " sucursales activas")
+                        + planLabel(plan) + " permite " + plan.maxBranches()
+                        + (plan.maxBranches() == 1 ? " sucursal activa" : " sucursales activas")
                         + " y el comercio tiene " + activeBranches
                         + ": desactivá las sucursales que sobran antes de bajar el plan");
             }
         }
+        Map<String, Object> before = adminData(tenant);
         applyAdminData(tenant, name, request.legalName(), request.taxId(), request.businessType(),
                 request.contactName(), request.contactEmail(), request.contactPhone(), request.address(),
                 request.city(), request.province(), request.notes());
-        tenant.setPlan(request.plan());
+        List<String> changed = changedFields(before, adminData(tenant));
+        tenant.setPlan(plan);
         tenantRepository.saveAndFlush(tenant);
 
         if (request.stockRotation() != null) {
             TenantSettings settings = settingsRepository.findById(tenantId)
                     .orElseGet(() -> TenantSettings.defaultsFor(tenantId));
+            if (settings.getStockRotation() != request.stockRotation()) {
+                changed.add("rotación de stock");
+            }
             settings.setStockRotation(request.stockRotation());
             settingsRepository.save(settings);
         }
-        if (previousPlan != request.plan()) {
-            record(tenantId, TenantEventType.PLAN_CHANGED, previousPlan.name(), request.plan().name(),
+        if (!changed.isEmpty()) {
+            record(tenantId, TenantEventType.DATA_UPDATED, null, null, "Cambios: " + joinFields(changed),
+                    actorUserId);
+        }
+        if (previousPlan != plan) {
+            record(tenantId, TenantEventType.PLAN_CHANGED, previousPlan.name(), plan.name(),
                     request.planChangeReason(), actorUserId);
-            log.info("El comercio {} pasó del plan {} al plan {}", tenantId, previousPlan, request.plan());
+            log.info("El comercio {} pasó del plan {} al plan {}", tenantId, previousPlan, plan);
         }
         return detail(tenantId);
     }
@@ -310,10 +333,16 @@ public class TenantAdminService {
         admin.setMustChangePassword(true);
         admin.incrementTokenVersion();
         userRepository.saveAndFlush(admin);
+        // Con la temporal se puede entrar a la cuenta del admin: queda en el historial a nombre de quien la generó.
+        // Se guarda el id de la cuenta y no su email: el historial sobrevive a la eliminación del comercio (métricas)
+        // y no tiene que quedar ahí un dato personal de un usuario borrado. El email se resuelve al mostrarlo.
+        record(tenantId, TenantEventType.ADMIN_PASSWORD_RESET, null, String.valueOf(admin.getId()),
+                PASSWORD_RESET_REASON, actorUserId);
+        // Lo hace un dueño o soporte (el "no puedo entrar" de un ticket): el mensaje no nombra a ninguno.
         sessionTermination.forceLogoutUser(admin.getId(), "PASSWORD_RESET",
-                "Un dueño de GondolIA restableció tu contraseña. Volvé a iniciar sesión.");
-        log.info("Contraseña temporal generada para el administrador {} del comercio {} (dueño {})", admin.getId(),
-                tenantId, actorUserId);
+                "El equipo de GondolIA restableció tu contraseña. Volvé a iniciar sesión.");
+        log.info("Contraseña temporal generada para el administrador {} del comercio {} (usuario de plataforma {})",
+                admin.getId(), tenantId, actorUserId);
         return new TemporaryPasswordResponse(admin.getEmail(), admin.getFullName(), temporary);
     }
 
@@ -354,6 +383,41 @@ public class TenantAdminService {
         tenant.setCity(trimToNull(city));
         tenant.setProvince(trimToNull(province));
         tenant.setNotes(trimToNull(notes));
+    }
+
+    /** Datos administrativos del comercio, en el orden del formulario, para ver qué cambió una edición. */
+    private static Map<String, Object> adminData(Tenant tenant) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("nombre", tenant.getName());
+        data.put("razón social", tenant.getLegalName());
+        data.put("CUIT", tenant.getTaxId());
+        data.put("rubro", tenant.getBusinessType());
+        data.put("dirección", tenant.getAddress());
+        data.put("ciudad", tenant.getCity());
+        data.put("provincia", tenant.getProvince());
+        data.put("notas internas", tenant.getNotes());
+        data.put("contacto", tenant.getContactName());
+        data.put("email de contacto", tenant.getContactEmail());
+        data.put("teléfono", tenant.getContactPhone());
+        return data;
+    }
+
+    private static List<String> changedFields(Map<String, Object> before, Map<String, Object> after) {
+        List<String> changed = new ArrayList<>();
+        before.forEach((field, value) -> {
+            if (!Objects.equals(value, after.get(field))) {
+                changed.add(field);
+            }
+        });
+        return changed;
+    }
+
+    /** ["teléfono", "CUIT", "notas internas"] → "teléfono, CUIT y notas internas". */
+    private static String joinFields(List<String> fields) {
+        if (fields.size() == 1) {
+            return fields.getFirst();
+        }
+        return String.join(", ", fields.subList(0, fields.size() - 1)) + " y " + fields.getLast();
     }
 
     private Branch createFirstBranch(Tenant tenant, CreateTenantRequest.BranchRequest request) {
@@ -406,27 +470,53 @@ public class TenantAdminService {
         }
     }
 
-    /** Historial del comercio, del más nuevo al más viejo (a igual instante, el último registrado primero). */
+    /**
+     * Historial del comercio, del más nuevo al más viejo (a igual instante, el último registrado primero). En
+     * {@code ADMIN_PASSWORD_RESET} el motivo nombra el email actual de la cuenta, si todavía es de este comercio.
+     */
     private List<TenantEventDto> eventsOf(Long tenantId) {
         List<TenantEvent> all = new ArrayList<>(eventRepository.findByTenantIdOrderByCreatedAtDesc(tenantId));
         all.sort(Comparator.comparing(TenantEvent::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(TenantEvent::getId, Comparator.nullsLast(Comparator.reverseOrder())));
-        Set<Long> actorIds = new HashSet<>();
+        Set<Long> userIds = new HashSet<>();
         all.forEach(event -> {
             if (event.getActorUserId() != null) {
-                actorIds.add(event.getActorUserId());
+                userIds.add(event.getActorUserId());
+            }
+            Long resetUserId = passwordResetUserId(event);
+            if (resetUserId != null) {
+                userIds.add(resetUserId);
             }
         });
-        Map<Long, String> actorNames = new HashMap<>();
-        if (!actorIds.isEmpty()) {
-            userRepository.findAllById(actorIds).forEach(user -> actorNames.put(user.getId(), user.getFullName()));
+        Map<Long, User> users = new HashMap<>();
+        if (!userIds.isEmpty()) {
+            userRepository.findAllById(userIds).forEach(user -> users.put(user.getId(), user));
         }
         List<TenantEventDto> dtos = new ArrayList<>(all.size());
         for (TenantEvent event : all) {
+            User actor = event.getActorUserId() == null ? null : users.get(event.getActorUserId());
+            String reason = event.getReason();
+            Long resetUserId = passwordResetUserId(event);
+            User resetUser = resetUserId == null ? null : users.get(resetUserId);
+            if (resetUser != null && tenantId.equals(resetUser.getTenantId())) {
+                reason = "Contraseña temporal para " + resetUser.getEmail();
+            }
             dtos.add(new TenantEventDto(event.getId(), event.getType(), event.getFromValue(), event.getToValue(),
-                    event.getReason(), actorNames.get(event.getActorUserId()), event.getCreatedAt()));
+                    reason, actor == null ? null : actor.getFullName(), event.getCreatedAt()));
         }
         return dtos;
+    }
+
+    /** Id de la cuenta a la que se le generó la temporal ({@code to_value} de {@code ADMIN_PASSWORD_RESET}). */
+    private static Long passwordResetUserId(TenantEvent event) {
+        if (event.getType() != TenantEventType.ADMIN_PASSWORD_RESET || event.getToValue() == null) {
+            return null;
+        }
+        try {
+            return Long.valueOf(event.getToValue());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private void record(Long tenantId, TenantEventType type, String fromValue, String toValue, String reason,
@@ -458,6 +548,13 @@ public class TenantAdminService {
             throw new NotFoundException(MSG_NOT_FOUND);
         }
         return row;
+    }
+
+    /** {@code true} si quien hace el cambio es un dueño de GondolIA (no soporte ni el sistema). */
+    private boolean isOwner(Long actorUserId) {
+        return actorUserId != null && userRepository.findById(actorUserId)
+                .map(user -> user.getRole() == Role.PLATFORM_OWNER)
+                .orElse(false);
     }
 
     Tenant requireTenant(Long tenantId) {

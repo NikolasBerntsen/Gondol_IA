@@ -263,7 +263,9 @@ const { can, canOpen } = useAccess();
 Fuera de componentes: `can(role, permiso)`, `canAccessPath(role, ruta)` y `linkTargetFor(role, link)` (lo usa la
 campana para no mandar a nadie a "Acceso denegado"). El jefe tiene la vista resumida pero **ve** inventario, ficha
 de producto, vencimientos, ventas, movimientos y transferencias (sin botones de carga ni edición) y **decide** sobre
-recomendaciones y alertas. El cajero solo ve POS + Avisos/Seguridad alimentaria/Soporte. El backend igual valida.
+recomendaciones y alertas. El cajero solo ve POS + Avisos/Seguridad alimentaria/Soporte. Soporte, además de su bandeja,
+abre Clientes y Módulos por cliente con los permisos `platform.*` (ve y edita; el alta, el plan, el estado y las
+métricas son del dueño). El backend igual valida.
 
 ### 5.2 Módulos por tenant (SPEC §14)
 
@@ -451,7 +453,7 @@ papel claro con tinta oscura (§9.1). No hace falta nada en la página.
 | `Tooltip` + `TooltipProvider/Trigger/Content` | Requiere un `TooltipProvider` arriba. |
 | `Truncate` (`useTruncationTitle`) | Texto de una línea (`lines={2}` o `3` para `line-clamp`) que, **solo si queda cortado**, expone el valor completo en el `title` (docs/design-system.md §3). `as` (`span` por defecto; sirve `p`, `div`, `dd`, `Link`…), `fullText` (cuando los hijos no son texto plano), `className`. Usalo en vez de `className="truncate"` para todo dato del comercio: nombres, marcas, correos, asuntos, notas, archivos. `useTruncationTitle(texto)` hace lo mismo desde un componente propio (así lo usa el rótulo de `StatCard`). |
 | `Popover`, `DropdownMenu*`, `Sheet*`, `Separator`, `Label` | Primitivas de Radix ya adaptadas a los tokens. |
-| `useDropdown`, `DropdownPanel`, `DropdownItem`, `DropdownSeparator`, `DropdownLabel` | Desplegable propio (click afuera, ESC, flechas) para paneles con contenido libre. El panel se corre solo para quedar dentro de la pantalla con 16 px de margen. Al abrir enfoca el ítem marcado (`aria-checked`); `useDropdown({ initialFocus: 'first' })` enfoca siempre el primero (menús de acciones con una opción marcada adentro, como el tema del menú de usuario). |
+| `useDropdown`, `DropdownPanel`, `DropdownItem`, `DropdownSeparator`, `DropdownLabel` | Desplegable propio (click afuera, ESC, flechas) para paneles con contenido libre. El panel se corre solo para quedar dentro de la pantalla con 16 px de margen. Al abrir enfoca el ítem marcado (`aria-checked`); `useDropdown({ initialFocus: 'first' })` enfoca siempre el primero (menús de acciones con una opción marcada adentro, como el tema del menú de usuario). Dentro de una tabla o de un contenedor con `overflow` (el menú de tres puntos de una fila) usá `useDropdown({ floating: true })`: el panel va en un portal con `position: fixed`, no estira ni lo recorta el contenedor, abre hacia arriba si abajo no hay lugar y sigue al botón con el scroll; si el scroll deja el botón fuera de la pantalla o tapado por la barra superior, se cierra (el foco vuelve al botón). |
 | `AuthImage` | `src` (ruta `/api/...` protegida), `alt`, `fallback`, `placeholderClassName`. |
 | `Avatar` | `name`, `size: sm \| md \| lg \| xl`. |
 | `SecureContextWarning` | Aviso de cámara en HTTP (ver §11). |

@@ -114,7 +114,9 @@ export type TenantEventType =
   | 'REACTIVATED'
   | 'DELETED'
   | 'MODULE_ENABLED'
-  | 'MODULE_DISABLED';
+  | 'MODULE_DISABLED'
+  | 'DATA_UPDATED'
+  | 'ADMIN_PASSWORD_RESET';
 
 export const TENANT_EVENT_LABELS: Record<TenantEventType, string> = {
   CREATED: 'Alta del cliente',
@@ -126,6 +128,8 @@ export const TENANT_EVENT_LABELS: Record<TenantEventType, string> = {
   DELETED: 'Eliminación definitiva',
   MODULE_ENABLED: 'Módulo habilitado',
   MODULE_DISABLED: 'Módulo deshabilitado',
+  DATA_UPDATED: 'Datos editados',
+  ADMIN_PASSWORD_RESET: 'Contraseña del administrador restablecida',
 };
 
 export interface TenantEventDto {
@@ -194,7 +198,8 @@ export interface UpdateTenantRequest {
   legalName?: string;
   taxId?: string;
   businessType: BusinessType;
-  plan: TenantPlan;
+  /** Sin plan el backend deja el actual: lo manda así soporte, que no cambia el plan. */
+  plan?: TenantPlan;
   contactName?: string;
   contactEmail?: string;
   contactPhone?: string;

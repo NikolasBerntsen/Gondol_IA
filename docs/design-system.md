@@ -390,7 +390,17 @@ ejemplos reales, validación al salir del campo y al enviar, botón principal co
 - Franja superior: sucursal, caja, cajero, "Turno abierto 08:02", "Retiro de efectivo", "Cerrar caja", atajos.
 - **Hoja de cobro:** medios combinables (Efectivo, Débito, Crédito, Transferencia, QR), billetes rápidos
   ($ 1.000 / $ 2.000 / $ 10.000 / $ 20.000), "Monto justo", Total/Pagado/Falta/**Vuelto** (el vuelto solo sale del
-  efectivo), Confirmar con Enter → ticket 80 mm con "Imprimir" y "Nueva venta".
+  efectivo), Confirmar con Enter → ticket 80 mm con "Imprimir" y "Nueva venta". Arranca sin medios: cada medio que se
+  toca queda iluminado (`aria-pressed`) y suma una línea con lo que falta; tocarlo de nuevo (o la X de la línea) la
+  quita. Los montos que el cajero no escribió se acomodan solos: lo que falta después de los que sí escribió lo toma
+  la primera línea sugerida (con un total de $ 3.450, Débito + Crédito y $ 1.000 escritos en Crédito → Débito pasa a
+  $ 2.450), y siguen al total si el mostrador lo actualiza. Los billetes rápidos van dentro de la línea de efectivo y
+  solo aparecen con ella (el primero reemplaza el monto sugerido, los siguientes suman). El resumen y los botones
+  quedan fijos abajo; lo que se desplaza es la lista (en una pantalla baja, como un celular apaisado, se desplaza la
+  hoja entera con el pie pegado abajo, y la línea que se agrega queda a la vista por encima del pie). Los montos del
+  resumen no se parten en dos renglones (el vuelto va más chico en el celular). Por debajo de 360 px la etiqueta del
+  total es la chica y "N unidades en el ticket" pasa abajo. El foco en los medios es un contorno punteado separado
+  del botón, para no confundirlo con un medio elegido (fondo verde, borde y tilde) al abrir con F4.
 - Atajos: **F2** buscar · **F4** cobrar · **F8** quitar ítem · **Esc** limpiar/cerrar · **Enter** agrega el primer
   resultado / confirma.
 - Móvil: paneles apilados + barra fija inferior con total y "Cobrar"; la hoja de cobro se ancla abajo.

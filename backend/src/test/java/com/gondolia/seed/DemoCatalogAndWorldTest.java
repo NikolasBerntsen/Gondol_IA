@@ -3,6 +3,7 @@ package com.gondolia.seed;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.gondolia.catalog.ReferenceCatalog;
 import com.gondolia.domain.tenant.StockRotation;
 import com.gondolia.domain.tenant.TenantModule;
 import com.gondolia.domain.tenant.TenantPlan;
@@ -58,6 +59,16 @@ class DemoCatalogAndWorldTest {
     }
 
     @Test
+    void fictitiousBarcodesAreNotRealProductsOfTheReferenceCatalog() {
+        // Así los productos reales del catálogo de referencia entran por "producto nuevo" en la carga de mercadería
+        // de cualquier comercio demo (docs/datos-demo.md) y se autocompletan.
+        ReferenceCatalog reference = new ReferenceCatalog();
+        for (DemoCatalog.Template template : DemoCatalog.ALL) {
+            assertThat(reference.find(template.barcode())).as(template.name()).isEmpty();
+        }
+    }
+
+    @Test
     void richTenantsCatalogsHaveAboutSixtyProductsWithEveryPattern() {
         for (String key : List.of(DemoWorld.DON_PEPE, DemoWorld.VIDA_SANA, DemoWorld.EL_SOL)) {
             List<DemoCatalog.Template> templates = DemoWorldBuilder.templatesFor(tenant(key));
@@ -68,16 +79,18 @@ class DemoCatalogAndWorldTest {
                     DemoCatalog.Pattern.INTERMITTENT, DemoCatalog.Pattern.GROWING, DemoCatalog.Pattern.DECLINING,
                     DemoCatalog.Pattern.NONE);
         }
-        // El producto del recall en vivo está en Don Pepe y El Sol, no en Vida Sana ni en los livianos.
-        assertThat(DemoWorldBuilder.templatesFor(tenant(DemoWorld.DON_PEPE)))
-                .anyMatch(t -> t.key().equals(DemoScenarios.LIVE_RECALL_PRODUCT));
-        assertThat(DemoWorldBuilder.templatesFor(tenant(DemoWorld.EL_SOL)))
-                .anyMatch(t -> t.key().equals(DemoScenarios.LIVE_RECALL_PRODUCT));
+        // Los productos de los recalls (en vivo y pendiente) están en Don Pepe y El Sol, no en Vida Sana ni en los
+        // livianos.
+        for (String key : List.of(DemoWorld.DON_PEPE, DemoWorld.EL_SOL)) {
+            assertThat(DemoWorldBuilder.templatesFor(tenant(key)))
+                    .anyMatch(t -> t.key().equals(DemoScenarios.LIVE_RECALL_PRODUCT))
+                    .anyMatch(t -> t.key().equals(DemoScenarios.PENDING_RECALL_PRODUCT));
+        }
         for (TenantSpec spec : tenants) {
             if (!spec.key().equals(DemoWorld.DON_PEPE) && !spec.key().equals(DemoWorld.EL_SOL)) {
                 assertThat(DemoWorldBuilder.templatesFor(spec))
                         .noneMatch(t -> t.key().equals(DemoScenarios.LIVE_RECALL_PRODUCT)
-                                || t.key().equals(DemoScenarios.OLD_RECALL_PRODUCT));
+                                || t.key().equals(DemoScenarios.PENDING_RECALL_PRODUCT));
             }
         }
     }

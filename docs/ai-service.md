@@ -479,9 +479,8 @@ llenar el log con los healthchecks. El nivel se cambia con `LOG_LEVEL`.
   chorro de tinta** (típicas de los vencimientos), superficies curvas o brillantes y fotos movidas. Por eso la
   respuesta trae **candidatos con confianza** y la pantalla de carga los muestra para que el empleado confirme o corrija.
 - **Códigos de barras**: la lectura desde foto depende del foco; en el celular conviene el escáner en vivo del
-  frontend (`@zxing/browser`) y dejar `/v1/barcode` como alternativa. Nota: el EAN del escenario de recall de la demo
-  (`7791234500012`) tiene dígito verificador inválido (el válido sería `7791234500017`), así que ningún lector lo puede
-  generar desde barras reales; para la demo conviene cargarlo a mano o como texto impreso (el OCR sí lo acepta).
+  frontend (`@zxing/browser`) y dejar `/v1/barcode` como alternativa. El EAN del escenario de recall de la demo
+  (`7791234500017`) tiene dígito verificador válido, así que se lee igual desde las barras, tipeado o como texto impreso.
 - **Sin estado**: cada análisis parte de cero; el aprendizaje depende de que el backend envíe el feedback.
 
 ## 8. Preguntas frecuentes para la defensa

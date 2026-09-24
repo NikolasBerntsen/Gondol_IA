@@ -26,6 +26,7 @@ import {
   type Role,
   type TenantModule,
 } from '@/api/types';
+import { useAccess } from '@/auth/useAccess';
 import { StatusPill } from '@/components/gondola';
 import {
   Alert,
@@ -54,11 +55,17 @@ import {
 } from '../components/TenantStatusDialog';
 import { useModuleToggle } from '../hooks/useModuleToggle';
 import { TENANT_EVENT_LABELS, type TenantBranchDto, type TenantEventDto, type TenantUserDto } from '../types';
+import { useConsoleRole } from '../useConsoleRole';
 
 const ROLE_ORDER: Role[] = ['TENANT_BOSS', 'TENANT_ADMIN', 'TENANT_EMPLOYEE', 'TENANT_CASHIER'];
 
-/** Detalle administrativo de un cliente (SPEC §6.6 y §14.3). */
+/**
+ * Detalle administrativo de un cliente (SPEC §6.6 y §14.3). Soporte también lo abre para resolver tickets: edita los
+ * datos, los módulos y la contraseña del administrador, pero no cambia el estado de la cuenta (SPEC §3.3).
+ */
 export default function TenantDetailPage() {
+  const { can } = useAccess();
+  const { eyebrow } = useConsoleRole();
   const { id } = useParams<{ id: string }>();
   const tenantId = Number(id);
   const queryClient = useQueryClient();
@@ -190,7 +197,7 @@ export default function TenantDetailPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Consola de dueños"
+        eyebrow={eyebrow}
         title={tenant.name}
         icon={Store}
         back={{ to: '/owner/tenants', label: 'Volver a clientes' }}
@@ -207,33 +214,40 @@ export default function TenantDetailPage() {
         }
         actions={
           <div className="flex flex-wrap gap-2">
-            <ButtonLink to={`/owner/tenants/${tenant.id}/edit`} variant="outline" leftIcon={<Pencil />}>
-              Editar
-            </ButtonLink>
-            {tenant.status === 'ACTIVE' ? (
-              <Button variant="danger-outline" leftIcon={<Ban />} onClick={() => setAction('disable')}>
-                Deshabilitar acceso
-              </Button>
+            {can('platform.tenants.edit') ? (
+              <ButtonLink to={`/owner/tenants/${tenant.id}/edit`} variant="outline" leftIcon={<Pencil />}>
+                Editar
+              </ButtonLink>
             ) : null}
-            {tenant.status === 'DISABLED' ? (
-              <Button leftIcon={<RotateCcw />} onClick={() => setAction('enable')}>
-                Habilitar acceso
-              </Button>
-            ) : null}
-            {tenant.status === 'CANCELLED' ? (
+            {/* Bloquear, dar de baja, reactivar y eliminar: decisiones comerciales del dueño. */}
+            {can('platform.tenants.changeStatus') ? (
               <>
-                <Button leftIcon={<RotateCcw />} onClick={() => setAction('reactivate')}>
-                  Reactivar
-                </Button>
-                <Button variant="destructive" leftIcon={<Trash2 />} onClick={() => setAction('delete')}>
-                  Eliminar
-                </Button>
+                {tenant.status === 'ACTIVE' ? (
+                  <Button variant="danger-outline" leftIcon={<Ban />} onClick={() => setAction('disable')}>
+                    Deshabilitar acceso
+                  </Button>
+                ) : null}
+                {tenant.status === 'DISABLED' ? (
+                  <Button leftIcon={<RotateCcw />} onClick={() => setAction('enable')}>
+                    Habilitar acceso
+                  </Button>
+                ) : null}
+                {tenant.status === 'CANCELLED' ? (
+                  <>
+                    <Button leftIcon={<RotateCcw />} onClick={() => setAction('reactivate')}>
+                      Reactivar
+                    </Button>
+                    <Button variant="destructive" leftIcon={<Trash2 />} onClick={() => setAction('delete')}>
+                      Eliminar
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="danger-outline" leftIcon={<Ban />} onClick={() => setAction('cancel')}>
+                    Dar de baja
+                  </Button>
+                )}
               </>
-            ) : (
-              <Button variant="danger-outline" leftIcon={<Ban />} onClick={() => setAction('cancel')}>
-                Dar de baja
-              </Button>
-            )}
+            ) : null}
           </div>
         }
       />
@@ -361,7 +375,9 @@ export default function TenantDetailPage() {
           </div>
           {tenant.status === 'CANCELLED' ? (
             <p className="border-t border-border px-4 py-3 text-sm text-muted-foreground sm:px-5">
-              El cliente está dado de baja: reactivalo para poder cambiar sus módulos.
+              {can('platform.tenants.changeStatus')
+                ? 'El cliente está dado de baja: reactivalo para poder cambiar sus módulos.'
+                : 'El cliente está dado de baja: para cambiar sus módulos, un dueño de GondolIA tiene que reactivarlo.'}
             </p>
           ) : null}
         </Card>
@@ -393,9 +409,11 @@ export default function TenantDetailPage() {
               .map((role) => `${tenant.usersByRole[role]} ${ROLE_LABELS[role].toLowerCase()}`)
               .join(' · ')}
             actions={
-              <Button variant="outline" size="sm" leftIcon={<KeyRound />} onClick={() => setResetOpen(true)}>
-                Restablecer contraseña del admin
-              </Button>
+              can('platform.tenants.resetAdminPassword') ? (
+                <Button variant="outline" size="sm" leftIcon={<KeyRound />} onClick={() => setResetOpen(true)}>
+                  Restablecer contraseña del admin
+                </Button>
+              ) : undefined
             }
           />
           <Table
@@ -414,7 +432,7 @@ export default function TenantDetailPage() {
             className="p-4 sm:p-5"
             title="Historial"
             icon={History}
-            description="Altas, cambios de plan, bloqueos y módulos."
+            description="Altas, ediciones de datos, cambios de plan, bloqueos, módulos y contraseñas del administrador."
           />
           {tenant.events.length === 0 ? (
             <p className="border-t border-border p-4 text-base text-muted-foreground sm:p-5">

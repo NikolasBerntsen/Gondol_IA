@@ -62,6 +62,9 @@ import org.springframework.transaction.annotation.Transactional;
  * Arqueo: {@code expectedCash = openingCash + Σ pagos CASH − Σ vuelto + CASH_IN − CASH_OUT − efectivo neto de
  * ventas anuladas}. Al cerrar, el valor calculado y la diferencia quedan guardados en el turno; el reporte de un
  * turno cerrado muestra ese arqueo aunque después se anule una venta.
+ * <p>
+ * Un turno sin ventas también se cierra (el cajero abrió la caja por error o no vendió nada): el cierre libera la
+ * caja igual que cualquier otro y queda marcado con {@code closedWithoutSales}.
  */
 @Service
 @RequiredArgsConstructor
@@ -140,6 +143,10 @@ public class PosSessionService {
 
     // ------------------------------------------------------------------ cierre
 
+    /**
+     * Cierra el turno con arqueo y libera la caja. No exige ventas: un turno sin ninguna venta vigente (o con todas
+     * anuladas) se cierra igual y queda marcado como cerrado sin ventas; el aviso previo lo muestra el mostrador.
+     */
     @Transactional
     public PosSessionReportDto close(AuthUser user, Long sessionId, CloseSessionRequest request) {
         PosSession session = requireOpen(user, sessionId);
@@ -148,6 +155,7 @@ public class PosSessionService {
         session.setExpectedCash(arqueo.expectedCash());
         session.setCountedCash(counted);
         session.setCashDifference(PosMoney.scale(counted.subtract(arqueo.expectedCash())));
+        session.setClosedWithoutSales(arqueo.salesCount() == 0);
         session.setStatus(PosSessionStatus.CLOSED);
         session.setClosedBy(user.id());
         session.setClosedAt(Timestamps.now());
@@ -206,7 +214,7 @@ public class PosSessionService {
                 PosMoney.orZero(session.getOpeningCash()), session.getExpectedCash(), session.getCountedCash(),
                 session.getCashDifference(), session.getSalesCount(), PosMoney.orZero(session.getSalesTotal()),
                 session.getVoidedCount(), PosMoney.orZero(session.getVoidedTotal()),
-                PosAccess.owns(user, session)));
+                PosAccess.owns(user, session), session.isClosedWithoutSales()));
     }
 
     /** Reporte Z de un turno. */
@@ -360,7 +368,7 @@ public class PosSessionService {
                 PosMoney.orZero(session.getOpeningCash()), arqueo.totalsByMethod(), arqueo.cashIn(), arqueo.cashOut(),
                 arqueo.changeGiven(), expected, counted, difference, arqueo.salesCount(), arqueo.salesTotal(),
                 arqueo.units(), arqueo.voidedCount(), arqueo.voidedTotal(), arqueo.topProducts(), movementDtos,
-                PosAccess.owns(user, session), session.getClosingNote());
+                PosAccess.owns(user, session), session.getClosingNote(), session.isClosedWithoutSales());
     }
 
     /** Sincroniza los contadores del turno después de una venta o de una anulación. */

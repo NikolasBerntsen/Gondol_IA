@@ -1,6 +1,5 @@
 package com.gondolia.seed;
 
-import com.gondolia.domain.announcement.RecallResolution;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -8,9 +7,9 @@ import java.util.List;
 
 /**
  * Escenarios armados a mano sobre la simulación de cada comercio rico (SPEC §11): el lote del recall en vivo, el
- * recall histórico resuelto, el caso "lote nuevo que vence antes que uno viejo", sobrestock por vencer con descuento
- * aceptado (con resultado medido para el feedback de la IA), productos bajo mínimo, picos anómalos, vencidos
- * pendientes, decisiones sobre recomendaciones de reposición y ventas manuales periódicas.
+ * recall pendiente del dulce de leche, el caso "lote nuevo que vence antes que uno viejo", sobrestock por vencer
+ * con descuento aceptado (con resultado medido para el feedback de la IA), productos bajo mínimo, picos anómalos,
+ * vencidos pendientes, decisiones sobre recomendaciones de reposición y ventas manuales periódicas.
  */
 final class DemoScenarios {
 
@@ -19,13 +18,20 @@ final class DemoScenarios {
     static final String LIVE_RECALL_PRODUCT = "sopa-tomate";
     static final LocalDate LIVE_RECALL_EXPIRY = LocalDate.of(2027, 9, 30);
 
-    /** Recall histórico ya resuelto: Dulce de leche Dulce Valle 400 g, lote DV2603B. */
-    static final String OLD_RECALL_LOT = "DV2603B";
-    static final String OLD_RECALL_PRODUCT = "dulce-leche";
-    static final int OLD_RECALL_DAYS_AGO = 52;
+    /**
+     * Recall pendiente para mostrar en la demo: Dulce de leche Dulce Valle 400 g, lote DV2603B. Se publicó ayer a la
+     * tarde; GondolIA lo detectó en el acto en Don Pepe y en El Sol Centro (lote en cuarentena, alerta abierta y
+     * notificaciones sin leer) y nadie lo atendió todavía: se resuelve en vivo desde Seguridad alimentaria.
+     */
+    static final String PENDING_RECALL_LOT = "DV2603B";
+    static final String PENDING_RECALL_PRODUCT = "dulce-leche";
+    static final int PENDING_RECALL_DAYS_AGO = 1;
+    static final LocalTime PENDING_RECALL_PUBLISHED_AT = LocalTime.of(18, 40);
+    /** El barrido de lotes corre en la misma transacción que la publicación: la coincidencia queda en el acto. */
+    static final LocalTime PENDING_RECALL_MATCHED_AT = PENDING_RECALL_PUBLISHED_AT.plusSeconds(1);
 
     /** Números de lote que el generador nunca produce (para que los recalls solo alcancen a los lotes armados). */
-    static final List<String> RESERVED_LOT_NUMBERS = List.of(LIVE_RECALL_LOT, OLD_RECALL_LOT);
+    static final List<String> RESERVED_LOT_NUMBERS = List.of(LIVE_RECALL_LOT, PENDING_RECALL_LOT);
 
     /**
      * Lote cargado a mano en un día y hora dados. {@code expiryDaysFromToday} es relativo a hoy (negativo = ya
@@ -64,10 +70,11 @@ final class DemoScenarios {
                         int maxUnits) {
     }
 
-    /** Coincidencia histórica con el recall, reconocida y resuelta. */
-    record RecallCase(String branch, String lotTag, int daysAgo, LocalTime matchedAt, LocalTime acknowledgedAt,
-                      String acknowledgedBy, int resolvedDaysAgo, LocalTime resolvedAt, String resolvedBy,
-                      RecallResolution resolution, String note) {
+    /**
+     * Coincidencia del recall pendiente con el lote de tag {@code lotTag}: desde ese momento el lote queda en
+     * cuarentena y nadie la confirmó ni la resolvió.
+     */
+    record RecallCase(String branch, String lotTag, int daysAgo, LocalTime matchedAt) {
     }
 
     record Scenario(List<ScriptedLot> lots, List<DiscountDecision> discounts, List<DiscardedDiscount> discarded,
@@ -97,8 +104,10 @@ final class DemoScenarios {
                 List.of(
                         new ScriptedLot("PRI", LIVE_RECALL_PRODUCT, 34, 10, 36, 0, LIVE_RECALL_EXPIRY,
                                 LIVE_RECALL_LOT, false, "recall-live"),
-                        new ScriptedLot("PRI", OLD_RECALL_PRODUCT, 56, 10, 24, 0, LocalDate.of(2026, 11, 30),
-                                OLD_RECALL_LOT, false, "recall-old"),
+                        // Lote del recall pendiente: entró a la mañana y a la tarde salió el recall. Con FIFO se
+                        // venden antes los lotes más viejos, así la cuarentena lo agarra entero (datos-demo §5.1).
+                        new ScriptedLot("PRI", PENDING_RECALL_PRODUCT, PENDING_RECALL_DAYS_AGO, 10, 24, 67, null,
+                                PENDING_RECALL_LOT, false, "recall-pending"),
                         // Caso FIFO: el lote más nuevo vence antes que el que entró antes.
                         new ScriptedLot("PRI", "crema", 12, 9, 36, 20, null, null, false, "fifo-old"),
                         new ScriptedLot("PRI", "crema", 2, 10, 12, 8, null, null, false, "fifo-new"),
@@ -121,10 +130,7 @@ final class DemoScenarios {
                         new SupplyStop("PRI", "galletitas-agua", 15), new SupplyStop("PRI", "lavandina", 19),
                         new SupplyStop("PRI", LIVE_RECALL_PRODUCT, 40), new SupplyStop("PRI", "crema", 12)),
                 List.of(new Spike("PRI", "cola", 38, 4.0), new Spike("PRI", "papas", 3, 5.0)),
-                List.of(new RecallCase("PRI", "recall-old", OLD_RECALL_DAYS_AGO, LocalTime.of(10, 5),
-                        LocalTime.of(10, 40), "empleado@donpepe.com", OLD_RECALL_DAYS_AGO, LocalTime.of(11, 20),
-                        "admin@donpepe.com", RecallResolution.RETURNED_TO_SUPPLIER,
-                        "Separamos las unidades y el distribuidor las retiró el mismo día.")),
+                List.of(new RecallCase("PRI", "recall-pending", PENDING_RECALL_DAYS_AGO, PENDING_RECALL_MATCHED_AT)),
                 List.of());
     }
 
@@ -133,8 +139,8 @@ final class DemoScenarios {
                 List.of(
                         new ScriptedLot("FIS", LIVE_RECALL_PRODUCT, 21, 10, 30, 0, LIVE_RECALL_EXPIRY,
                                 LIVE_RECALL_LOT, false, "recall-live"),
-                        new ScriptedLot("CEN", OLD_RECALL_PRODUCT, 55, 10, 30, 0, LocalDate.of(2026, 11, 30),
-                                OLD_RECALL_LOT, false, "recall-old"),
+                        new ScriptedLot("CEN", PENDING_RECALL_PRODUCT, PENDING_RECALL_DAYS_AGO, 10, 30, 67, null,
+                                PENDING_RECALL_LOT, false, "recall-pending"),
                         // Casos FIFO por sucursal.
                         new ScriptedLot("CEN", "queso-untable", 10, 9, 48, 22, null, null, false, "fifo-old"),
                         new ScriptedLot("CEN", "queso-untable", 2, 10, 12, 6, null, null, false, "fifo-new"),
@@ -176,10 +182,7 @@ final class DemoScenarios {
                         new SupplyStop("ECH", "queso-untable", 9)),
                 List.of(new Spike("CEN", "papas", 4, 5.0), new Spike("FIS", "cerveza", 45, 3.5),
                         new Spike("ECH", "alfajor", 2, 4.5)),
-                List.of(new RecallCase("CEN", "recall-old", OLD_RECALL_DAYS_AGO, LocalTime.of(10, 7),
-                        LocalTime.of(10, 30), "empleado@elsol.com", OLD_RECALL_DAYS_AGO - 1, LocalTime.of(9, 15),
-                        "empleado@elsol.com", RecallResolution.REMOVED_FROM_STOCK,
-                        "Retiramos las unidades de la góndola y quedaron separadas en el depósito para devolver.")),
+                List.of(new RecallCase("CEN", "recall-pending", PENDING_RECALL_DAYS_AGO, PENDING_RECALL_MATCHED_AT)),
                 // Pedido del club del barrio para el fin de semana: lo cobran por transferencia y la administradora
                 // lo carga a mano (datos-demo §4: ventas de las cuatro fuentes).
                 List.of(new ManualOrders("CEN", DayOfWeek.FRIDAY, LocalTime.of(18, 40),
