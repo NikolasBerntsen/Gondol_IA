@@ -81,7 +81,7 @@ gondolia/
 | `APP_SEED_DEMO` | true | Carga datos demo si no hay tenants |
 | `APP_DEV_FIXTURE` | false | Fixture mínimo para desarrollo local |
 | `APP_BOOTSTRAP_OWNER_EMAIL` / `..._PASSWORD` | dueno@gondolia.app / Gondolia2026! | Dueño inicial |
-| `APP_OPENFOODFACTS_ENABLED` | true | Autocompletar productos por código de barras (internet) |
+| `APP_OPENFOODFACTS_ENABLED` | true | Autocompletar por código de barras con Open Food Facts (internet) los productos que no están en el catálogo de referencia |
 | `APP_TIMEZONE` | America/Argentina/Buenos_Aires | Zona de negocio |
 | `LAN_IPS` | (start.sh detecta) | IPs para el certificado y URLs impresas |
 | `CERT_HOSTNAMES` | (vacío) | Hostnames extra para el certificado |
@@ -475,7 +475,7 @@ Dinero y decimales → número JSON. En cada módulo documentá los endpoints fi
   - `GET /api/tenant/products/by-barcode/{barcode}` → `ProductDetail` | 404
   - `POST /api/tenant/products` `{barcode,name,brand,description,categoryId,categoryName? (crea si no existe),supplierId,unit,costPrice,salePrice,minStock,perishable}` → `ProductDetail` (409 `DUPLICATE_BARCODE`)
   - `PUT /api/tenant/products/{id}` (mismo body) · `DELETE /api/tenant/products/{id}` (ADMIN; si tiene movimientos → `active=false`)
-- `GET /api/tenant/catalog/lookup/{barcode}` → `{"found":true,"source":"OPEN_FOOD_FACTS","barcode":"...","name":"...","brand":"...","quantity":"340 g","categoryHint":"Sopas","imageUrl":"..."}` (timeout 4s; `found:false` si falla o está deshabilitado)
+- `GET /api/tenant/catalog/lookup/{barcode}` → `{"found":true,"source":"REFERENCE_CATALOG|OPEN_FOOD_FACTS","barcode":"...","name":"...","brand":"...","quantity":"340 g","categoryHint":"Sopas","imageUrl":"..."}`: primero el catálogo de referencia de productos argentinos del backend (`catalog/productos-argentina.csv`, sin internet), después Open Food Facts (timeout 4s); `found:false` si ninguno lo conoce, falla o está deshabilitado
 - Lotes (carga de mercadería):
   - `POST /api/tenant/lots` `{branchId?,productId,lotNumber,expiryDate,quantity,costPrice,supplierId,source:"MANUAL|SCAN|OCR"}`
     → `{"lot":LotDto,"quarantined":false,"recalls":[RecallInfo],"rotationWarning":null,"existingLots":[LotDto]}` (usa `StockService.receiveLot`;

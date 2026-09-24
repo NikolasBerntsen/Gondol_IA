@@ -3,6 +3,7 @@ package com.gondolia.seed;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.gondolia.catalog.ReferenceCatalog;
 import com.gondolia.domain.tenant.StockRotation;
 import com.gondolia.domain.tenant.TenantModule;
 import com.gondolia.domain.tenant.TenantPlan;
@@ -55,6 +56,16 @@ class DemoCatalogAndWorldTest {
         assertThat(DemoCatalog.byKey(DemoScenarios.LIVE_RECALL_PRODUCT).barcode()).isEqualTo("7791234500017");
         assertThat(DemoCatalog.byKey(DemoScenarios.LIVE_RECALL_PRODUCT).name())
                 .isEqualTo("Sopa de tomate en lata La Huerta 340 g");
+    }
+
+    @Test
+    void fictitiousBarcodesAreNotRealProductsOfTheReferenceCatalog() {
+        // Así los productos reales del catálogo de referencia entran por "producto nuevo" en la carga de mercadería
+        // de cualquier comercio demo (docs/datos-demo.md) y se autocompletan.
+        ReferenceCatalog reference = new ReferenceCatalog();
+        for (DemoCatalog.Template template : DemoCatalog.ALL) {
+            assertThat(reference.find(template.barcode())).as(template.name()).isEmpty();
+        }
     }
 
     @Test

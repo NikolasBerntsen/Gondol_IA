@@ -22,7 +22,7 @@ import {
 import { formatMoney } from '@/lib/format';
 import { catalogLookupApi, categoriesApi, productsApi, suppliersApi } from '../api';
 import { BarcodeField } from '../components/BarcodeField';
-import { parseDecimal } from '../lib';
+import { lookupSourceLabel, parseDecimal, suggestCategory } from '../lib';
 import type { ProductRequest } from '../types';
 
 interface FormState {
@@ -65,13 +65,20 @@ export default function ProductFormPage() {
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
 
+  // Llegada desde la carga de mercadería con los datos del autocompletado: /app/products/new?barcode=…&name=…
   const [form, setForm] = useState<FormState>(() => ({
     ...EMPTY_FORM,
     barcode: searchParams.get('barcode') ?? '',
     name: searchParams.get('name') ?? '',
     brand: searchParams.get('brand') ?? '',
+    description: searchParams.get('quantity') ? `Contenido: ${searchParams.get('quantity')}` : '',
   }));
   const [creatingCategory, setCreatingCategory] = useState(false);
+  // Categoría sugerida por el autocompletado: se aplica cuando llegan las categorías del comercio.
+  const [categoryHint, setCategoryHint] = useState<{ name: string; source: string | null } | null>(() => {
+    const name = searchParams.get('category');
+    return name ? { name, source: searchParams.get('source') } : null;
+  });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -88,6 +95,23 @@ export default function ProductFormPage() {
 
   const categoriesQuery = useQuery({ queryKey: ['categories'], queryFn: () => categoriesApi.list() });
   const suppliersQuery = useQuery({ queryKey: ['suppliers'], queryFn: () => suppliersApi.list() });
+
+  // Aplica la categoría sugerida solo si todavía no se eligió ninguna: la existente con ese nombre o, si viene del
+  // catálogo de referencia, una nueva que se crea junto con el producto.
+  const categories = categoriesQuery.data;
+  useEffect(() => {
+    if (!categoryHint || !categories) return;
+    setCategoryHint(null);
+    if (form.categoryId || creatingCategory) return;
+    const suggestion = suggestCategory(categories, categoryHint.name, categoryHint.source);
+    if (suggestion && 'categoryId' in suggestion) {
+      set('categoryId', String(suggestion.categoryId));
+    } else if (suggestion) {
+      setCreatingCategory(true);
+      set('newCategoryName', suggestion.newCategoryName);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoryHint, categories]);
 
   // Carga los datos del producto una vez que llegan.
   const loaded = productQuery.data;
@@ -126,7 +150,11 @@ export default function ProductFormPage() {
         brand: current.brand || data.brand || '',
         description: current.description || (data.quantity ? `Contenido: ${data.quantity}` : ''),
       }));
-      toast.success('Datos traídos de la base pública', { description: 'Revisalos antes de guardar.' });
+      if (data.categoryHint) setCategoryHint({ name: data.categoryHint, source: data.source });
+      const origin = lookupSourceLabel(data.source);
+      toast.success('Datos traídos de la base pública', {
+        description: origin ? `Fuente: ${origin}. Revisalos antes de guardar.` : 'Revisalos antes de guardar.',
+      });
     },
     onError: () => {
       toast('No pudimos consultar la base pública', { description: 'Completá los datos a mano.' });

@@ -58,7 +58,7 @@ falten.
 | `APP_TIMEZONE` | `America/Argentina/Buenos_Aires` | Se usa esa zona. Define qué es “hoy” para vencimientos y ventas. |
 | `APP_BOOTSTRAP_OWNER_EMAIL` | `dueno@gondolia.app` | Se usa ese email. Es el dueño de GondolIA que se crea si todavía no hay ninguno. |
 | `APP_BOOTSTRAP_OWNER_PASSWORD` | `Gondolia2026!` | **El backend no arranca.** ⚠ Cambiala apenas el sitio deje de ser una demo. |
-| `APP_OPENFOODFACTS_ENABLED` | `true` | Se usa `true` (autocompletar productos por código de barras; necesita internet). |
+| `APP_OPENFOODFACTS_ENABLED` | `true` | Se usa `true` (autocompletar por código de barras los productos que no están en el catálogo de referencia incluido; necesita internet). |
 | `APP_CORS_ALLOWED_ORIGINS` | `https://gondolia.144-22-138-149.sslip.io` | Se usa la URL pública. Es la lista de orígenes que el backend acepta; si no incluye el dominio del sitio y el header `Origin` llega al backend, **el login responde 403 y no se puede entrar** (ver §2.1). |
 | `APP_SEED_DEMO` | `true` | Se usa `true`. La variable `SEED_DEMO_DATA` del repositorio la pisa en cada despliegue. |
 | `JAVA_OPTS` | `-XX:MaxRAMPercentage=40.0 -XX:+ExitOnOutOfMemoryError` | Se usa ese valor. |

@@ -36,7 +36,8 @@ los comercios sin ver sus datos, publican avisos y **alertas de recall**, y un e
 ## Qué incluye
 
 - **Inventario y catálogo**: productos con código de barras, categorías, proveedores, precios y stock mínimo.
-  Autocompletado por código de barras con Open Food Facts.
+  Autocompletado por código de barras: un catálogo incluido de productos argentinos reales (funciona sin internet) y
+  Open Food Facts para el resto.
 - **Carga de mercadería desde el celular**: escáner de códigos, lectura de vencimiento y número de lote por foto (OCR).
 - **Varios lotes por producto**: cada ingreso es un lote con su vencimiento; las ventas descuentan por **FIFO** o **FEFO**.
 - **Multi-sucursal**: catálogo compartido, stock por sucursal, vista consolidada y transferencias entre sucursales.
@@ -54,7 +55,7 @@ los comercios sin ver sus datos, publican avisos y **alertas de recall**, y un e
 |---|---|
 | **Docker** | [Docker Desktop](https://www.docker.com/products/docker-desktop/) en Windows o macOS; en Linux, Docker Engine + plugin Compose v2 (`docker compose`). Asignale **al menos 4 GB de RAM** (recomendado 6 GB) y dejá ~8 GB de disco libres. |
 | **Windows** | [Git para Windows](https://git-scm.com/download/win), que incluye **Git Bash**. Los comandos se ejecutan desde Git Bash (o con `.\start.ps1` desde PowerShell). |
-| **Internet** | En el primer arranque (descarga imágenes y dependencias) y para autocompletar productos con Open Food Facts. |
+| **Internet** | En el primer arranque (descarga imágenes y dependencias) y para autocompletar con Open Food Facts los productos que no están en el catálogo incluido. |
 | **Celular** (opcional) | En la misma red WiFi que la PC, para usar la cámara. |
 
 No hace falta instalar Java, Node ni Python: todo se compila dentro de Docker. Solo los necesitás para
@@ -395,7 +396,10 @@ y un celular en la misma red WiFi.
 2. **Carga con el celular y rotación** — En el celular entrá con `empleado@elsol.com` (Centro y Fisherton). En *Carga de
    mercadería* elegí la sucursal, escaneá un código de barras y sacale una foto a la etiqueta para leer vencimiento y lote.
    Cargá un lote que venza **antes** que el stock existente: aparece el aviso de FIFO y la lista "ya tenés X u. con
-   vencimiento…". En el detalle del producto se ven todos los lotes y cuál "Se vende primero".
+   vencimiento…". En el detalle del producto se ven todos los lotes y cuál "Se vende primero". Para mostrar el alta de
+   un producto nuevo, escaneá o tipeá uno de los productos reales de
+   [`docs/datos-demo.md` §6](docs/datos-demo.md#6-códigos-de-barras-para-probar-la-carga-de-mercadería) (una yerba, una
+   gaseosa, unas galletitas): nombre, marca, contenido y categoría se completan solos, aun sin internet.
 3. **Recall en vivo** — Dejá abiertas las sesiones de `admin@elsol.com` (incógnito) y `empleado@elsol.com` (celular). Con
    `dueno@gondolia.app`, en *Avisos y recalls*, creá un recall de "Sopa de tomate en lata La Huerta 340 g", EAN
    `7791234500012`, lote `L2409A`. La vista previa informa **2 comercios afectados** (sin decir cuáles). Al publicar, el
@@ -484,7 +488,7 @@ aplicá los cambios con `./start.sh restart`.
 | `APP_SEED_DEMO` | `true` | Carga los datos demo si no hay comercios |
 | `APP_DEV_FIXTURE` | `false` | Comercio mínimo para desarrollo |
 | `APP_BOOTSTRAP_OWNER_EMAIL` / `APP_BOOTSTRAP_OWNER_PASSWORD` | `dueno@gondolia.app` / `Gondolia2026!` | Dueño inicial de la plataforma |
-| `APP_OPENFOODFACTS_ENABLED` | `true` | Autocompletar productos por código de barras (usa internet) |
+| `APP_OPENFOODFACTS_ENABLED` | `true` | Autocompletar por código de barras con Open Food Facts (usa internet) lo que no está en el catálogo incluido |
 | `APP_TIMEZONE` | `America/Argentina/Buenos_Aires` | Zona horaria del negocio (qué es "hoy") |
 | `LAN_IPS` | detectadas por start.sh | IPs para el certificado y las URLs del celular (separadas por coma) |
 | `CERT_HOSTNAMES` | vacío | Hostnames extra para el certificado (ej.: `mi-pc.local`) |

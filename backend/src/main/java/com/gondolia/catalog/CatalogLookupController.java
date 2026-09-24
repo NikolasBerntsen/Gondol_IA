@@ -26,12 +26,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class CatalogLookupController {
 
+    private final ReferenceCatalog referenceCatalog;
     private final OpenFoodFactsClient openFoodFactsClient;
     private final RecallMatchingService recallMatchingService;
 
     /**
-     * Datos públicos del producto (Open Food Facts). Nunca falla: si está deshabilitado, no hay internet o el código
-     * no existe, devuelve {@code found: false}.
+     * Datos públicos del producto: primero el catálogo de referencia de productos argentinos (instantáneo y sin
+     * internet) y, si no lo tiene, Open Food Facts. Nunca falla: si ninguno lo conoce, Open Food Facts está
+     * deshabilitado o no hay internet, devuelve {@code found: false}.
      */
     @GetMapping("/api/tenant/catalog/lookup/{barcode}")
     @PreAuthorize(Roles.TENANT_INVENTORY)
@@ -40,7 +42,7 @@ public class CatalogLookupController {
         if (normalized == null) {
             return BarcodeLookupResponse.notFound(barcode);
         }
-        return openFoodFactsClient.lookup(normalized);
+        return referenceCatalog.find(normalized).orElseGet(() -> openFoodFactsClient.lookup(normalized));
     }
 
     /** Chequeo previo de recall: no modifica nada, solo avisa. */
