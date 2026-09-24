@@ -179,6 +179,45 @@ class TenantAdminServiceIntegrationTest extends PostgresIntegrationTest {
         assertThat(after.events()).extracting(TenantEventDto::type).doesNotContain(TenantEventType.PLAN_CHANGED);
     }
 
+    @Test
+    void editingTheDataRecordsWhatChangedAndWho() {
+        AuthUser support = data.user(null, Role.SUPPORT_AGENT, true);
+        TenantDetail detail = service.create(request(TenantPlan.BASICO, null), owner.id());
+
+        // Guardar sin cambios no deja nada en el historial.
+        service.update(detail.id(), edit(detail.name(), "11-5555-1234", "Cliente de prueba", null, null),
+                support.id());
+        assertThat(service.detail(detail.id()).events()).extracting(TenantEventDto::type)
+                .doesNotContain(TenantEventType.DATA_UPDATED);
+
+        // Soporte corrige el teléfono, las notas y la rotación: queda a su nombre, con qué cambió (no los valores).
+        TenantDetail updated = service.update(detail.id(),
+                edit(detail.name(), "11-4000-0000", "Llamar a la tarde", null, StockRotation.FEFO), support.id());
+        TenantEventDto event = updated.events().getFirst();
+        assertThat(event.type()).isEqualTo(TenantEventType.DATA_UPDATED);
+        assertThat(event.reason()).isEqualTo("Cambios: notas internas, teléfono y rotación de stock");
+        assertThat(event.actorName()).isEqualTo(support.fullName());
+        assertThat(updated.stockRotation()).isEqualTo(StockRotation.FEFO);
+    }
+
+    @Test
+    void supportSavingWithoutAPlanKeepsTheCurrentOne() {
+        AuthUser support = data.user(null, Role.SUPPORT_AGENT, true);
+        TenantDetail detail = service.create(request(TenantPlan.BASICO, null), owner.id());
+
+        // Un dueño cambia el plan mientras soporte tiene abierta la edición...
+        service.update(detail.id(), edit(detail.name(), "11-5555-1234", "Cliente de prueba", TenantPlan.PROFESIONAL,
+                null), owner.id());
+        // ...y soporte guarda sin plan (su formulario no lo manda): no pisa el cambio ni recibe 403.
+        TenantDetail saved = service.update(detail.id(),
+                edit(detail.name(), "11-4000-0000", "Cliente de prueba", null, null), support.id());
+
+        assertThat(saved.plan()).isEqualTo(TenantPlan.PROFESIONAL);
+        assertThat(saved.contactPhone()).isEqualTo("11-4000-0000");
+        assertThat(saved.events()).extracting(TenantEventDto::type)
+                .containsOnlyOnce(TenantEventType.PLAN_CHANGED);
+    }
+
     // ------------------------------------------------------------------ estado
 
     @Test
@@ -249,6 +288,11 @@ class TenantAdminServiceIntegrationTest extends PostgresIntegrationTest {
         assertThat(passwordEncoder.matches(response.temporaryPassword(), after.getPasswordHash())).isTrue();
         assertThat(after.isMustChangePassword()).isTrue();
         assertThat(after.getTokenVersion()).isEqualTo(tokenVersion + 1);
+        // Queda en el historial: quién generó la temporal y para qué cuenta.
+        TenantEventDto event = service.detail(detail.id()).events().getFirst();
+        assertThat(event.type()).isEqualTo(TenantEventType.ADMIN_PASSWORD_RESET);
+        assertThat(event.reason()).isEqualTo("Contraseña temporal para " + before.getEmail());
+        assertThat(event.actorName()).isEqualTo(owner.fullName());
     }
 
     @Test
@@ -322,6 +366,13 @@ class TenantAdminServiceIntegrationTest extends PostgresIntegrationTest {
         return new UpdateTenantRequest(name, null, null, BusinessType.ALMACEN, plan, "José Pérez",
                 "contacto." + suffix + "@donpepe.com", null, null, "CABA", "Buenos Aires", null, "Ajuste de plan",
                 null);
+    }
+
+    /** Los datos de {@link #request} con otro teléfono, otras notas y, si no son nulos, otro plan y otra rotación. */
+    private UpdateTenantRequest edit(String name, String phone, String notes, TenantPlan plan, StockRotation rotation) {
+        return new UpdateTenantRequest(name, "Almacén SRL", "30-1234-9", BusinessType.ALMACEN, plan, "José Pérez",
+                "contacto." + suffix + "@donpepe.com", phone, "Av. Rivadavia 4321", "CABA", "Buenos Aires", notes,
+                null, rotation);
     }
 
     private NewUserRequest user(String prefix) {

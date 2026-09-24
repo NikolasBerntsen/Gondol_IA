@@ -375,7 +375,9 @@ export default function TenantDetailPage() {
           </div>
           {tenant.status === 'CANCELLED' ? (
             <p className="border-t border-border px-4 py-3 text-sm text-muted-foreground sm:px-5">
-              El cliente está dado de baja: reactivalo para poder cambiar sus módulos.
+              {can('platform.tenants.changeStatus')
+                ? 'El cliente está dado de baja: reactivalo para poder cambiar sus módulos.'
+                : 'El cliente está dado de baja: para cambiar sus módulos, un dueño de GondolIA tiene que reactivarlo.'}
             </p>
           ) : null}
         </Card>
@@ -430,7 +432,7 @@ export default function TenantDetailPage() {
             className="p-4 sm:p-5"
             title="Historial"
             icon={History}
-            description="Altas, cambios de plan, bloqueos y módulos."
+            description="Altas, ediciones de datos, cambios de plan, bloqueos, módulos y contraseñas del administrador."
           />
           {tenant.events.length === 0 ? (
             <p className="border-t border-border p-4 text-base text-muted-foreground sm:p-5">

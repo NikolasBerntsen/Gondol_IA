@@ -49,6 +49,7 @@ import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -196,8 +197,10 @@ public class TenantAdminService {
     }
 
     /**
-     * Edición de datos administrativos y del plan. Cambiar el plan registra {@code PLAN_CHANGED} y es una decisión
-     * comercial: solo la toma un dueño. Soporte edita los datos mandando el plan actual; otro plan responde 403.
+     * Edición de datos administrativos y del plan. Si cambia algún dato se registra {@code DATA_UPDATED} con cuáles
+     * (el historial muestra quién, sea dueño o soporte). Cambiar el plan registra {@code PLAN_CHANGED} y es una
+     * decisión comercial: solo la toma un dueño. Sin plan ({@code null}, lo que manda soporte) se deja el actual;
+     * un plan distinto del actual pedido por quien no es dueño responde 403.
      */
     @Transactional
     public TenantDetail update(Long tenantId, UpdateTenantRequest request, Long actorUserId) {
@@ -207,36 +210,46 @@ public class TenantAdminService {
             throw new ConflictException(CODE_NAME_TAKEN, "Ya hay un comercio registrado con el nombre «" + name + "»");
         }
         TenantPlan previousPlan = tenant.getPlan();
-        if (previousPlan != request.plan()) {
+        TenantPlan plan = request.plan() == null ? previousPlan : request.plan();
+        if (previousPlan != plan) {
             if (!isOwner(actorUserId)) {
                 throw new ForbiddenException(ErrorCodes.FORBIDDEN, "El plan de un cliente lo cambia un dueño de "
                         + "GondolIA: pedíselo y guardá el resto de los datos");
             }
             long activeBranches = branchRepository.countByTenantIdAndActiveTrue(tenantId);
-            if (activeBranches > request.plan().maxBranches()) {
+            if (activeBranches > plan.maxBranches()) {
                 throw new ConflictException(ErrorCodes.BRANCH_LIMIT_REACHED, "El plan "
-                        + planLabel(request.plan()) + " permite " + request.plan().maxBranches()
-                        + (request.plan().maxBranches() == 1 ? " sucursal activa" : " sucursales activas")
+                        + planLabel(plan) + " permite " + plan.maxBranches()
+                        + (plan.maxBranches() == 1 ? " sucursal activa" : " sucursales activas")
                         + " y el comercio tiene " + activeBranches
                         + ": desactivá las sucursales que sobran antes de bajar el plan");
             }
         }
+        Map<String, Object> before = adminData(tenant);
         applyAdminData(tenant, name, request.legalName(), request.taxId(), request.businessType(),
                 request.contactName(), request.contactEmail(), request.contactPhone(), request.address(),
                 request.city(), request.province(), request.notes());
-        tenant.setPlan(request.plan());
+        List<String> changed = changedFields(before, adminData(tenant));
+        tenant.setPlan(plan);
         tenantRepository.saveAndFlush(tenant);
 
         if (request.stockRotation() != null) {
             TenantSettings settings = settingsRepository.findById(tenantId)
                     .orElseGet(() -> TenantSettings.defaultsFor(tenantId));
+            if (settings.getStockRotation() != request.stockRotation()) {
+                changed.add("rotación de stock");
+            }
             settings.setStockRotation(request.stockRotation());
             settingsRepository.save(settings);
         }
-        if (previousPlan != request.plan()) {
-            record(tenantId, TenantEventType.PLAN_CHANGED, previousPlan.name(), request.plan().name(),
+        if (!changed.isEmpty()) {
+            record(tenantId, TenantEventType.DATA_UPDATED, null, null, "Cambios: " + joinFields(changed),
+                    actorUserId);
+        }
+        if (previousPlan != plan) {
+            record(tenantId, TenantEventType.PLAN_CHANGED, previousPlan.name(), plan.name(),
                     request.planChangeReason(), actorUserId);
-            log.info("El comercio {} pasó del plan {} al plan {}", tenantId, previousPlan, request.plan());
+            log.info("El comercio {} pasó del plan {} al plan {}", tenantId, previousPlan, plan);
         }
         return detail(tenantId);
     }
@@ -318,6 +331,9 @@ public class TenantAdminService {
         admin.setMustChangePassword(true);
         admin.incrementTokenVersion();
         userRepository.saveAndFlush(admin);
+        // Con la temporal se puede entrar a la cuenta del admin: queda en el historial a nombre de quien la generó.
+        record(tenantId, TenantEventType.ADMIN_PASSWORD_RESET, null, null,
+                "Contraseña temporal para " + admin.getEmail(), actorUserId);
         // Lo hace un dueño o soporte (el "no puedo entrar" de un ticket): el mensaje no nombra a ninguno.
         sessionTermination.forceLogoutUser(admin.getId(), "PASSWORD_RESET",
                 "El equipo de GondolIA restableció tu contraseña. Volvé a iniciar sesión.");
@@ -363,6 +379,41 @@ public class TenantAdminService {
         tenant.setCity(trimToNull(city));
         tenant.setProvince(trimToNull(province));
         tenant.setNotes(trimToNull(notes));
+    }
+
+    /** Datos administrativos del comercio, en el orden del formulario, para ver qué cambió una edición. */
+    private static Map<String, Object> adminData(Tenant tenant) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("nombre", tenant.getName());
+        data.put("razón social", tenant.getLegalName());
+        data.put("CUIT", tenant.getTaxId());
+        data.put("rubro", tenant.getBusinessType());
+        data.put("dirección", tenant.getAddress());
+        data.put("ciudad", tenant.getCity());
+        data.put("provincia", tenant.getProvince());
+        data.put("notas internas", tenant.getNotes());
+        data.put("contacto", tenant.getContactName());
+        data.put("email de contacto", tenant.getContactEmail());
+        data.put("teléfono", tenant.getContactPhone());
+        return data;
+    }
+
+    private static List<String> changedFields(Map<String, Object> before, Map<String, Object> after) {
+        List<String> changed = new ArrayList<>();
+        before.forEach((field, value) -> {
+            if (!Objects.equals(value, after.get(field))) {
+                changed.add(field);
+            }
+        });
+        return changed;
+    }
+
+    /** ["teléfono", "CUIT", "notas internas"] → "teléfono, CUIT y notas internas". */
+    private static String joinFields(List<String> fields) {
+        if (fields.size() == 1) {
+            return fields.getFirst();
+        }
+        return String.join(", ", fields.subList(0, fields.size() - 1)) + " y " + fields.getLast();
     }
 
     private Branch createFirstBranch(Tenant tenant, CreateTenantRequest.BranchRequest request) {

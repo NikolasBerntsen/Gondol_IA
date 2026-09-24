@@ -194,7 +194,7 @@ ImportFileFormat: XLSX, XLS, CSV · ImportRowStatus: PENDING, VALID, WARNING, ER
 TenantPlan: FREEMIUM, BASICO, PROFESIONAL            (precio mensual ARS POR SUCURSAL activa: 0, 25000, 55000; máx. sucursales: 1, 3, 10)
 StockRotation: FIFO, FEFO                             (default FIFO)
 BusinessType: KIOSCO, ALMACEN, DIETETICA, MINIMERCADO, FARMACIA, OTRO
-TenantEventType: CREATED, PLAN_CHANGED, DISABLED, ENABLED, CANCELLED, REACTIVATED, DELETED, MODULE_ENABLED, MODULE_DISABLED
+TenantEventType: CREATED, PLAN_CHANGED, DISABLED, ENABLED, CANCELLED, REACTIVATED, DELETED, MODULE_ENABLED, MODULE_DISABLED, DATA_UPDATED, ADMIN_PASSWORD_RESET
 ProductUnit: UNIDAD, KG, LITRO, PAQUETE, CAJA
 LotStatus: ACTIVE, DEPLETED, EXPIRED_DISCARDED, RECALLED
 MovementType: ENTRY, SALE, SALE_VOID, ADJUSTMENT_IN, ADJUSTMENT_OUT, WASTE_EXPIRED, WASTE_DAMAGED, RECALL_REMOVAL, TRANSFER_OUT, TRANSFER_IN
@@ -289,6 +289,8 @@ spring-boot-starter-test, spring-security-test. `artifactId=gondolia-backend`, j
   ```java
   public static final String OWNER = "hasRole('PLATFORM_OWNER')";
   public static final String SUPPORT = "hasRole('SUPPORT_AGENT')";
+  // Equipo de GondolIA: soporte también usa Clientes y Módulos por cliente para resolver tickets (§6.6).
+  public static final String PLATFORM_ANY = "hasAnyRole('PLATFORM_OWNER','SUPPORT_AGENT')";
   public static final String TENANT_ANY = "hasAnyRole('TENANT_BOSS','TENANT_ADMIN','TENANT_EMPLOYEE','TENANT_CASHIER')";
   public static final String TENANT_POS = "hasAnyRole('TENANT_ADMIN','TENANT_EMPLOYEE','TENANT_CASHIER')";
   public static final String TENANT_ADMIN = "hasRole('TENANT_ADMIN')";
@@ -299,8 +301,12 @@ spring-boot-starter-test, spring-security-test. `artifactId=gondolia-backend`, j
   ```
   Además `SecurityConfig` protege por prefijo: `/api/auth/login`, `/api/integrations/pos/**`, `/actuator/health`,
   `/api/docs/**`, `/api/swagger-ui/**`, `/ws/**` → permitAll (el WS autentica en CONNECT; POS con API key);
-  `/api/platform/**` → PLATFORM_OWNER; `/api/support/**` → SUPPORT_AGENT; `/api/tenant/**` → roles tenant;
-  resto `/api/**` → authenticated. Sesión STATELESS, CSRF deshabilitado, CORS permitido para `http://localhost:5173` (dev).
+  antes del prefijo de la consola, reglas por URL y método para soporte (PLATFORM_OWNER o SUPPORT_AGENT):
+  `SUPPORT_PLATFORM_READS` (GET de `/api/platform/tenants`, `/tenants/*`, `/tenants/*/modules` y `/tenant-modules`),
+  `SUPPORT_PLATFORM_EDITS` (PUT de `/tenants/*` y `/tenants/*/modules/*`) y `SUPPORT_PLATFORM_ADMIN_PASSWORD`
+  (POST de `/tenants/*/reset-admin-password`); el resto de `/api/platform/**` → PLATFORM_OWNER (cada endpoint repite
+  la regla con su `@PreAuthorize`: son dos barreras); `/api/support/**` → SUPPORT_AGENT; `/api/tenant/**` → roles
+  tenant; resto `/api/**` → authenticated. Sesión STATELESS, CSRF deshabilitado, CORS permitido para `http://localhost:5173` (dev).
 - **Errores**: `com.gondolia.common.error`: `ApiException(HttpStatus status, String code, String message)` y
   `NotFoundException(String msg)` (404 `NOT_FOUND`), `BadRequestException(String code, String msg)` (400),
   `ForbiddenException(String code, String msg)` (403), `ConflictException(String code, String msg)` (409).
@@ -543,13 +549,16 @@ Roles: lectura **y decisiones** (gestionar alertas, aceptar/descartar recomendac
   · `POST /api/tenant/recommendations/{id}/discard` `{note?}`. Job diario mide `outcome` de DISCOUNT aceptados a los 7 días
   (`{unitsBefore7d,unitsAfter7d,lift,lotUnitsSold,lotUnitsRemaining}`) y lo envía como `feedback` en el próximo análisis.
 
-### 6.6 Módulo C — Consola de dueños (`com.gondolia.platform`) · rol PLATFORM_OWNER
+### 6.6 Módulo C — Consola de dueños (`com.gondolia.platform`) · rol PLATFORM_OWNER (+ SUPPORT_AGENT en clientes y módulos)
 - **Soporte** (`Roles.PLATFORM_ANY` = PLATFORM_OWNER + SUPPORT_AGENT) usa, para resolver tickets: `GET /api/platform/tenants`,
-  `GET/PUT /api/platform/tenants/{id}` (un plan distinto del actual → 403: el plan lo cambia el dueño),
+  `GET/PUT /api/platform/tenants/{id}` (sin plan se deja el actual; un plan distinto del actual → 403: el plan lo
+  cambia el dueño),
   `POST /api/platform/tenants/{id}/reset-admin-password`, `GET /api/platform/tenant-modules`,
   `GET /api/platform/tenants/{id}/modules` y `PUT /api/platform/tenants/{id}/modules/{module}`. Todo lo demás de
   `/api/platform/**` (métricas, catálogo con adopción, alta, estado, eliminación, avisos, equipo) es solo del dueño (403).
-  Lo que cambia soporte queda en el historial del comercio a su nombre.
+  Lo que cambia soporte queda en el historial del comercio a su nombre, igual que lo del dueño: `DATA_UPDATED` (qué
+  datos editó, sin los valores), `ADMIN_PASSWORD_RESET` (para qué cuenta generó la temporal) y
+  `MODULE_ENABLED`/`MODULE_DISABLED`.
 - `GET /api/platform/metrics` →
   ```json
   {"tenants":{"total":18,"active":14,"disabled":2,"cancelled":2,"newLast30d":3,"cancelledLast30d":1},
@@ -569,10 +578,10 @@ Roles: lectura **y decisiones** (gestionar alertas, aceptar/descartar recomendac
     (de las sucursales solo datos administrativos: nombre, ciudad, estado — nunca stock ni ventas)
   · `POST /api/platform/tenants` `{name,legalName,taxId,businessType,plan,contactName,contactEmail,contactPhone,address,city,province,notes,firstBranch:{name,address,city,province},boss:{fullName,email,password},admin:{...},employee:{...}}`
     (crea tenant + settings + primera sucursal + 3 usuarios; el empleado queda asignado a la primera sucursal)
-  · `PUT /{id}` (datos y plan; plan distinto → evento PLAN_CHANGED; bajar a un plan con menos sucursales que las activas → 409 `BRANCH_LIMIT_REACHED`)
+  · `PUT /{id}` (datos y plan; datos distintos → evento DATA_UPDATED con qué cambió; `plan` nulo = el actual; plan distinto → evento PLAN_CHANGED; bajar a un plan con menos sucursales que las activas → 409 `BRANCH_LIMIT_REACHED`)
   · `POST /{id}/disable {reason}` · `POST /{id}/enable` · `POST /{id}/cancel {reason}` · `POST /{id}/reactivate`
     (eventos + `TenantStatusChangedEvent` + `SessionTerminationService.forceLogoutTenant` al bloquear)
-  · `DELETE /{id}?confirmName=` (solo CANCELLED; nombre exacto) · `POST /{id}/reset-admin-password` → `{email,temporaryPassword}`
+  · `DELETE /{id}?confirmName=` (solo CANCELLED; nombre exacto) · `POST /{id}/reset-admin-password` → `{email,temporaryPassword}` (evento ADMIN_PASSWORD_RESET)
 - **Módulos por cliente** (§14): catálogo, matriz tenants × módulos, activar/desactivar por tenant, presets al crear,
   `modules` en TenantSummary, filtro `?module=`, adopción y MRR con adicionales en `/metrics`.
 - Equipo: `GET /api/platform/users` → `[{id,fullName,email,role,active,lastLoginAt,createdAt}]` (roles de plataforma) ·

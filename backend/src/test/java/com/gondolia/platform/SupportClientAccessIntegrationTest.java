@@ -115,7 +115,11 @@ class SupportClientAccessIntegrationTest extends PostgresIntegrationTest {
                         .content(updateBody(tenantName, "BASICO", "11-4000-" + suffix.substring(0, 4))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.contactPhone").value("11-4000-" + suffix.substring(0, 4)))
-                .andExpect(jsonPath("$.plan").value("BASICO"));
+                .andExpect(jsonPath("$.plan").value("BASICO"))
+                // La edición queda en el historial a nombre del agente, con qué datos cambió.
+                .andExpect(jsonPath("$.events[0].type").value("DATA_UPDATED"))
+                .andExpect(jsonPath("$.events[0].reason").value("Cambios: ciudad, provincia, contacto y teléfono"))
+                .andExpect(jsonPath("$.events[0].actorName").value(AGENT_NAME));
 
         // El plan es una decisión comercial: 403 aunque el resto de los datos sea válido.
         mvc.perform(as(supportToken, put("/api/platform/tenants/" + tenant))
@@ -131,6 +135,15 @@ class SupportClientAccessIntegrationTest extends PostgresIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(updateBody(tenantName, "PROFESIONAL", "11-4000-0000")))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.plan").value("PROFESIONAL"));
+
+        // El formulario de soporte no manda el plan: aunque el dueño lo haya cambiado mientras editaba, guarda sin
+        // 403 y deja el plan que está.
+        mvc.perform(as(supportToken, put("/api/platform/tenants/" + tenant))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody(tenantName, null, "11-4000-1111")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contactPhone").value("11-4000-1111"))
                 .andExpect(jsonPath("$.plan").value("PROFESIONAL"));
     }
 
@@ -152,13 +165,22 @@ class SupportClientAccessIntegrationTest extends PostgresIntegrationTest {
     }
 
     @Test
-    void supportResetsTheAdminPassword() throws Exception {
+    void supportResetsTheAdminPasswordAndTheHistoryNamesTheAgent() throws Exception {
         mvc.perform(as(supportToken, post("/api/platform/tenants/" + tenant + "/reset-admin-password")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.temporaryPassword").isNotEmpty());
         assertThat(jdbc.queryForObject("""
                 select must_change_password from users where tenant_id = ? and role = 'TENANT_ADMIN'
                 """, Boolean.class, tenant)).isTrue();
+
+        // Con la temporal se entra a la cuenta del admin: el dueño ve en el historial quién la generó y para quién.
+        String adminEmail = jdbc.queryForObject("select email from users where tenant_id = ? and role = 'TENANT_ADMIN'",
+                String.class, tenant);
+        mvc.perform(as(ownerToken, get("/api/platform/tenants/" + tenant)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.events[0].type").value("ADMIN_PASSWORD_RESET"))
+                .andExpect(jsonPath("$.events[0].reason").value("Contraseña temporal para " + adminEmail))
+                .andExpect(jsonPath("$.events[0].actorName").value(AGENT_NAME));
     }
 
     // ------------------------------------------------------------------ solo del dueño
@@ -207,11 +229,12 @@ class SupportClientAccessIntegrationTest extends PostgresIntegrationTest {
         }
     }
 
+    /** Cuerpo de la edición; con {@code plan} nulo no lo manda (como el formulario de soporte). */
     private String updateBody(String name, String plan, String phone) {
         return """
-                {"name":"%s","businessType":"KIOSCO","plan":"%s","contactName":"Marta","contactPhone":"%s",
+                {"name":"%s","businessType":"KIOSCO",%s"contactName":"Marta","contactPhone":"%s",
                  "city":"Rosario","province":"Santa Fe"}
-                """.formatted(name, plan, phone);
+                """.formatted(name, plan == null ? "" : "\"plan\":\"" + plan + "\",", phone);
     }
 
     private String createBody() {

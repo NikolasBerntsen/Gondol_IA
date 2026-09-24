@@ -100,7 +100,7 @@ const blank = (value: string) => (value.trim() ? value.trim() : undefined);
 
 /**
  * Alta y edición de un cliente (SPEC §6.6 y §14.3). Soporte solo llega a la edición: corrige los datos, pero el plan
- * es una decisión comercial del dueño y le queda fijo (el backend responde 403 si llega otro).
+ * es una decisión comercial del dueño, le queda fijo y no se manda (el backend responde 403 si llega otro).
  */
 export default function TenantFormPage() {
   const { can } = useAccess();
@@ -181,10 +181,10 @@ export default function TenantFormPage() {
         stockRotation: form.stockRotation,
       };
       if (isEdit) {
-        const body: UpdateTenantRequest = {
-          ...common,
-          planChangeReason: originalPlan !== form.plan ? blank(form.planChangeReason) : undefined,
-        };
+        // Soporte no manda el plan: el backend deja el que esté, aunque un dueño lo haya cambiado mientras editaba.
+        const body: UpdateTenantRequest = canChangePlan
+          ? { ...common, planChangeReason: originalPlan !== form.plan ? blank(form.planChangeReason) : undefined }
+          : { ...common, plan: undefined };
         return platformApi.tenants.update(tenantId as number, body);
       }
       const body: CreateTenantRequest = {

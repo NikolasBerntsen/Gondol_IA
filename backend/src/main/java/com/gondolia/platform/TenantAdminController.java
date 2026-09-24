@@ -86,8 +86,9 @@ public class TenantAdminController {
     }
 
     @Operation(summary = "Editar los datos y el plan de un cliente",
-            description = "Cambiar el plan registra PLAN_CHANGED y es solo del dueño: soporte edita los datos, pero "
-                    + "un plan distinto del actual responde 403 FORBIDDEN. Bajar a un plan con menos sucursales que "
+            description = "Si cambia algún dato registra DATA_UPDATED a nombre de quien edita. Cambiar el plan "
+                    + "registra PLAN_CHANGED y es solo del dueño: soporte manda plan nulo (se deja el actual) y un "
+                    + "plan distinto del actual le responde 403 FORBIDDEN. Bajar a un plan con menos sucursales que "
                     + "las activas responde 409 BRANCH_LIMIT_REACHED.")
     @PutMapping("/{id}")
     @PreAuthorize(Roles.PLATFORM_ANY)
