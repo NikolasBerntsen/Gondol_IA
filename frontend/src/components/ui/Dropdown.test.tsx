@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DropdownItem, DropdownPanel, floatingPosition, useDropdown } from './Dropdown';
+import { anchorHidden, DropdownItem, DropdownPanel, floatingPosition, useDropdown } from './Dropdown';
 
 describe('floatingPosition', () => {
   const viewport = { width: 1280, height: 800 };
@@ -33,7 +33,7 @@ describe('floatingPosition', () => {
     expect(floatingPosition(nearRight, size, viewport, 'start').left).toBe(1280 - 16 - 240);
   });
 
-  it('sigue al disparador cuando el scroll lo saca de la pantalla', () => {
+  it('la posición sigue al disparador aunque salga de la pantalla (el menú lo cierra useDropdown)', () => {
     const above = { top: -80, bottom: -48, left: 900, right: 932 };
     expect(floatingPosition(above, size, viewport)).toMatchObject({ top: -40, side: 'bottom' });
   });
@@ -122,6 +122,58 @@ describe('DropdownPanel flotante', () => {
     expect(menu).toHaveAttribute('data-side', 'top');
   });
 
+  it('se cierra si el scroll saca el botón de la pantalla, sin perder el foco', async () => {
+    const user = userEvent.setup();
+    renderMenu(true);
+    const trigger = screen.getByRole('button', { name: 'Acciones' });
+    await user.click(trigger);
+    const focus = vi.spyOn(trigger, 'focus');
+
+    // Arriba del todo, fuera de la pantalla: antes el panel seguía ahí, suelto sobre el encabezado.
+    anchorTop = -80;
+    act(() => {
+      fireEvent.scroll(window);
+    });
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    // El foco vuelve al botón (Tab sigue desde ahí) sin scrollear la página de vuelta hasta él.
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    expect(trigger).toHaveFocus();
+  });
+
+  it('se cierra si el scroll deja el botón debajo de la barra superior', async () => {
+    const user = userEvent.setup();
+    renderMenu(true);
+    const trigger = screen.getByRole('button', { name: 'Acciones' });
+    await user.click(trigger);
+    const topbar = document.createElement('header');
+    document.body.append(topbar);
+    const elementFromPoint = vi.fn<(x: number, y: number) => Element | null>(() => trigger);
+    Object.defineProperty(document, 'elementFromPoint', { value: elementFromPoint, configurable: true });
+
+    try {
+      // Todavía se ve: el menú sigue abierto y se reubica.
+      anchorTop = 300;
+      act(() => {
+        fireEvent.scroll(screen.getByTestId('table'));
+      });
+      expect(screen.getByRole('menu')).toBeInTheDocument();
+      expect(elementFromPoint).toHaveBeenLastCalledWith(1016, 316);
+
+      // La barra fija lo tapa (sigue dentro de la pantalla): se cierra.
+      anchorTop = 20;
+      elementFromPoint.mockReturnValue(topbar);
+      act(() => {
+        fireEvent.scroll(window);
+      });
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    } finally {
+      Reflect.deleteProperty(document, 'elementFromPoint');
+      topbar.remove();
+    }
+  });
+
   it('mantiene el teclado: foco en el primer ítem, flechas, Esc devuelve el foco al botón', async () => {
     const user = userEvent.setup();
     renderMenu(true);
@@ -174,5 +226,51 @@ describe('DropdownPanel flotante', () => {
     expect(menu).toHaveClass('absolute');
     expect(menu).not.toHaveClass('fixed');
     expect(menu).not.toHaveAttribute('data-side');
+  });
+});
+
+describe('anchorHidden', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(document, 'elementFromPoint');
+    vi.restoreAllMocks();
+  });
+
+  function anchorAt(top: number) {
+    const anchor = document.createElement('button');
+    anchor.append(document.createElement('svg'));
+    vi.spyOn(anchor, 'getBoundingClientRect').mockReturnValue({
+      top,
+      bottom: top + 32,
+      left: 1000,
+      right: 1032,
+    } as DOMRect);
+    return anchor;
+  }
+
+  beforeEach(() => {
+    vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(1280);
+    vi.spyOn(document.documentElement, 'clientHeight', 'get').mockReturnValue(800);
+  });
+
+  it('fuera de la pantalla, arriba o abajo, está oculto', () => {
+    expect(anchorHidden(anchorAt(-40), null)).toBe(true);
+    expect(anchorHidden(anchorAt(790), null)).toBe(true);
+    expect(anchorHidden(anchorAt(400), null)).toBe(false);
+  });
+
+  it('se ve si lo que está encima es el botón, algo de adentro o el propio panel', () => {
+    const anchor = anchorAt(400);
+    const panel = document.createElement('div');
+    const item = document.createElement('button');
+    panel.append(item);
+    const elementFromPoint = vi.fn<(x: number, y: number) => Element | null>();
+    Object.defineProperty(document, 'elementFromPoint', { value: elementFromPoint, configurable: true });
+
+    elementFromPoint.mockReturnValue(anchor.firstElementChild);
+    expect(anchorHidden(anchor, panel)).toBe(false);
+    elementFromPoint.mockReturnValue(item);
+    expect(anchorHidden(anchor, panel)).toBe(false);
+    elementFromPoint.mockReturnValue(document.createElement('header'));
+    expect(anchorHidden(anchor, panel)).toBe(true);
   });
 });

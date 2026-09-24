@@ -32,9 +32,28 @@ export interface UseDropdownOptions {
    * El panel va flotando: en un portal sobre `document.body`, con `position: fixed` contra el disparador. Usalo en los
    * menús que viven dentro de una tabla o de cualquier contenedor con `overflow` (p. ej. las acciones de una fila): el
    * panel no estira ni lo recorta el contenedor, se abre hacia arriba si abajo no hay lugar y sigue al disparador con
-   * el scroll. Los menús de la barra superior no lo necesitan.
+   * el scroll. Si el scroll deja el disparador fuera de la pantalla o tapado (por la barra superior fija o el borde de
+   * la tabla), el menú se cierra: no queda flotando suelto sobre otra cosa. Los menús de la barra superior no lo
+   * necesitan.
    */
   floating?: boolean;
+}
+
+/**
+ * `true` si ya no se ve el disparador de un panel flotante: su centro quedó fuera de la pantalla, debajo de otra cosa
+ * (la barra superior, que es `sticky`) o recortado por un contenedor con scroll (en ese punto se ve lo que está
+ * detrás). El panel mismo no cuenta: cuando no entra de ningún lado puede quedar sobre su botón.
+ */
+export function anchorHidden(anchor: HTMLElement, panel: HTMLElement | null): boolean {
+  const rect = anchor.getBoundingClientRect();
+  const root = document.documentElement;
+  const x = (rect.left + rect.right) / 2;
+  const y = (rect.top + rect.bottom) / 2;
+  if (x < 0 || y < 0 || x > root.clientWidth || y > root.clientHeight) return true;
+  // jsdom no lo implementa: ahí alcanza con la pantalla.
+  if (typeof document.elementFromPoint !== 'function') return false;
+  const hit = document.elementFromPoint(x, y);
+  return hit !== null && !anchor.contains(hit) && !(panel?.contains(hit) ?? false);
 }
 
 /**
@@ -78,6 +97,20 @@ export function useDropdown({ kind = 'menu', initialFocus = 'checked', floating 
     }
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [open, kind, initialFocus, close]);
+
+  useEffect(() => {
+    if (!open || !floating) return;
+    const onScroll = () => {
+      const trigger = triggerRef.current;
+      if (!trigger || !anchorHidden(trigger, panelRef.current)) return;
+      // Si el foco estaba en el menú vuelve al botón (así Tab sigue desde ahí), pero sin scrollear hasta él.
+      if (panelRef.current?.contains(document.activeElement)) trigger.focus({ preventScroll: true });
+      setOpen(false);
+    };
+    // En captura, como el reubicado del panel: también el scroll de la tabla o del contenido.
+    window.addEventListener('scroll', onScroll, true);
+    return () => window.removeEventListener('scroll', onScroll, true);
+  }, [open, floating]);
 
   const onPanelKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (kind !== 'menu') return;
