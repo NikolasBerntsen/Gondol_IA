@@ -3,9 +3,12 @@ name: Pruebas
 # Corre las pruebas de los tres servicios.
 #
 # Cuándo:
-#   - en cada push a una rama de trabajo (para verlo antes de abrir el pull request);
 #   - en cada pull request contra main (es el control que hay que exigir para poder mergear);
-#   - antes de cada despliegue: deploy.yml lo llama con `uses:` y solo despliega si pasó.
+#   - antes de cada despliegue: deploy.yml lo llama con `uses:` y solo despliega si pasó;
+#   - a mano sobre cualquier rama, sin abrir un pull request: Actions → Pruebas → Run workflow.
+#
+# No corre en cada push a una rama: con el pull request abierto, cada push disparaba dos corridas
+# completas del mismo commit (una por el push y otra por el pull request).
 #
 # Para que un pull request NO se pueda mergear con las pruebas en rojo hay que marcarlo como
 # obligatorio una sola vez en GitHub:
@@ -13,12 +16,6 @@ name: Pruebas
 #   → "Require status checks to pass before merging" → elegir: backend, frontend, ai-service, nginx.
 # Ver docs/ci-y-variables.md §3.
 on:
-  push:
-    branches-ignore: [main]
-    paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
-      - 'design/**'
   pull_request:
     branches: [main]
   workflow_call: {}

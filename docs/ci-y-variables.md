@@ -106,10 +106,13 @@ Hay tres cosas que cuidan ese circuito:
 
 Cuándo corre:
 
-- **en cada push** a una rama que no sea `main`;
-- **en cada pull request** contra `main`;
+- **en cada pull request** contra `main` (y en cada push a una rama que ya tiene uno abierto);
 - **antes de cada despliegue**: `deploy.yml` lo llama con `uses:` y el job `deploy` depende de él,
-  así que un merge a `main` con las pruebas en rojo no llega a la VM.
+  así que un merge a `main` con las pruebas en rojo no llega a la VM;
+- **a mano** sobre cualquier rama, sin abrir un pull request: *Actions → Pruebas → Run workflow*.
+
+No corre en cada push a una rama: con el pull request abierto, eso disparaba dos corridas completas
+del mismo commit (una por el push y otra por el pull request).
 
 ### 3.1 Exigir las pruebas para poder mergear (una sola vez)
 
