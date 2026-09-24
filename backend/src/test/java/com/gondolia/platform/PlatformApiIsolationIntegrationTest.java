@@ -32,7 +32,9 @@ import org.springframework.transaction.annotation.Transactional;
  * Aislamiento y privacidad de la consola de dueños (SPEC §3.4 y §6.6):
  * <ul>
  *   <li>un dueño de GondolIA recibe 403 en cualquier endpoint de comercio ({@code /api/tenant/**}) y de soporte;</li>
- *   <li>los usuarios de comercio (de cualquier comercio) y el soporte reciben 403 en {@code /api/platform/**};</li>
+ *   <li>los usuarios de comercio (de cualquier comercio) reciben 403 en {@code /api/platform/**};</li>
+ *   <li>soporte tampoco entra a {@code /api/tenant/**} ni a las métricas, el equipo o las acciones comerciales de la
+ *   consola (lo que sí puede hacer con los clientes lo cubre {@link SupportClientAccessIntegrationTest});</li>
  *   <li>el detalle de un cliente solo trae datos administrativos: ni productos, ni stock, ni ventas, ni chats;</li>
  *   <li>las métricas y los recalls son solo cantidades: nunca dicen qué comercios están alcanzados.</li>
  * </ul>
@@ -97,8 +99,8 @@ class PlatformApiIsolationIntegrationTest extends PostgresIntegrationTest {
     }
 
     @Test
-    void tenantUsersAndSupportCannotReachThePlatformConsole() throws Exception {
-        for (String token : List.of(adminToken, otherAdminToken, supportToken)) {
+    void tenantUsersCannotReachThePlatformConsole() throws Exception {
+        for (String token : List.of(adminToken, otherAdminToken)) {
             mvc.perform(get("/api/platform/metrics").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                     .andExpect(status().isForbidden());
             mvc.perform(get("/api/platform/tenants").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
@@ -124,6 +126,26 @@ class PlatformApiIsolationIntegrationTest extends PostgresIntegrationTest {
                     .andExpect(status().isForbidden());
         }
         mvc.perform(get("/api/platform/metrics")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void supportCannotReachTenantDataNorTheOwnerOnlyConsole() throws Exception {
+        for (String endpoint : TENANT_ENDPOINTS) {
+            mvc.perform(get(endpoint).header(HttpHeaders.AUTHORIZATION, "Bearer " + supportToken))
+                    .andExpect(status().isForbidden());
+        }
+        mvc.perform(get("/api/platform/metrics").header(HttpHeaders.AUTHORIZATION, "Bearer " + supportToken))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/platform/users").header(HttpHeaders.AUTHORIZATION, "Bearer " + supportToken))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/platform/tenants/" + tenantB + "/disable")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + supportToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"prueba\"}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(delete("/api/platform/tenants/" + tenantB + "?confirmName=x")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + supportToken))
+                .andExpect(status().isForbidden());
     }
 
     @Test

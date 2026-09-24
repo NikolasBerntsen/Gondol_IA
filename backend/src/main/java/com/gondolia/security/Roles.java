@@ -11,6 +11,12 @@ public final class Roles {
 
     public static final String OWNER = "hasRole('PLATFORM_OWNER')";
     public static final String SUPPORT = "hasRole('SUPPORT_AGENT')";
+    /**
+     * Equipo de GondolIA: dueños y soporte. Soporte ve y edita los datos de un cliente y sus módulos para resolver
+     * tickets; lo comercial o destructivo (alta, bloqueo, baja, eliminación, cambio de plan) y las métricas siguen
+     * siendo del dueño ({@link #OWNER}).
+     */
+    public static final String PLATFORM_ANY = "hasAnyRole('PLATFORM_OWNER','SUPPORT_AGENT')";
     public static final String TENANT_ANY =
             "hasAnyRole('TENANT_BOSS','TENANT_ADMIN','TENANT_EMPLOYEE','TENANT_CASHIER')";
     /** Punto de venta GondolIA (SPEC §15): administrador, empleado y cajero. */

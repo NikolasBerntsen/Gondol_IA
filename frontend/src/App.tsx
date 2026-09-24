@@ -119,16 +119,25 @@ function AppRoutes() {
         <Route path="profile" element={<ProfilePage />} />
         <Route path="notifications" element={<NotificationsPage />} />
 
-        <Route path="owner" element={<RequireRole roles={ROLE_GROUPS.OWNER} />}>
-          <Route index element={<OwnerMetricsPage />} />
-          <Route path="tenants" element={<TenantsPage />} />
-          <Route path="tenants/new" element={<TenantFormPage />} />
-          <Route path="tenants/:id" element={<TenantDetailPage />} />
-          <Route path="tenants/:id/edit" element={<TenantFormPage />} />
-          <Route path="modules" element={<ModulesMatrixPage />} />
-          <Route path="announcements" element={<OwnerAnnouncementsPage />} />
-          <Route path="announcements/new" element={<AnnouncementFormPage />} />
-          <Route path="team" element={<PlatformTeamPage />} />
+        <Route path="owner">
+          <Route element={<RequireRole roles={ROLE_GROUPS.OWNER} />}>
+            <Route index element={<OwnerMetricsPage />} />
+            <Route path="tenants/new" element={<TenantFormPage />} />
+            <Route path="announcements" element={<OwnerAnnouncementsPage />} />
+            <Route path="announcements/new" element={<AnnouncementFormPage />} />
+            <Route path="team" element={<PlatformTeamPage />} />
+          </Route>
+          {/* Clientes y módulos: también los usa soporte para resolver tickets. */}
+          <Route element={<RequireRole roles={rolesWith('platform.tenants.view')} />}>
+            <Route path="tenants" element={<TenantsPage />} />
+            <Route path="tenants/:id" element={<TenantDetailPage />} />
+          </Route>
+          <Route element={<RequireRole roles={rolesWith('platform.tenants.edit')} />}>
+            <Route path="tenants/:id/edit" element={<TenantFormPage />} />
+          </Route>
+          <Route element={<RequireRole roles={rolesWith('platform.modules.manage')} />}>
+            <Route path="modules" element={<ModulesMatrixPage />} />
+          </Route>
         </Route>
 
         <Route path="support" element={<RequireRole roles={ROLE_GROUPS.SUPPORT} />}>

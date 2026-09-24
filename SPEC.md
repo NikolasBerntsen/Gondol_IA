@@ -99,7 +99,7 @@ Backend (Spring) las lee como: `spring.datasource.url=jdbc:postgresql://${DB_HOS
 | Rol | Ámbito | Etiqueta UI | Propósito |
 |---|---|---|---|
 | `PLATFORM_OWNER` | plataforma (tenant_id NULL) | Dueño GondolIA | Alta/baja/habilitación de tenants, métricas agregadas, avisos y recalls, equipo interno. **Nunca ve datos de negocio de un tenant** (productos, stock, ventas, chats). |
-| `SUPPORT_AGENT` | plataforma | Soporte | Atiende tickets y chat en vivo de todos los tenants. Ve solo lo que el cliente envía en el ticket (texto e imágenes) + nombre de comercio/usuario. |
+| `SUPPORT_AGENT` | plataforma | Soporte | Atiende tickets y chat en vivo de todos los tenants. Ve solo lo que el cliente envía en el ticket (texto e imágenes) + nombre de comercio/usuario. Para resolver tickets también entra a **Clientes** y **Módulos por cliente** de la consola (§6.6): ve y edita los datos administrativos de un comercio, activa o desactiva sus módulos y restablece la contraseña de su administrador. No da de alta comercios, no cambia el plan ni el estado (deshabilitar, baja, reactivar, eliminar) y no ve métricas, avisos ni el equipo. |
 | `TENANT_BOSS` | tenant | Jefe | Dueño y tomador de decisiones, con **vista resumida**: Inicio, Estadísticas, Inteligencia IA y Alertas; **ve** (sin cargar ni editar) inventario, ficha de producto con lotes y movimientos, vencimientos, historial de ventas, movimientos y transferencias; **decide** sobre las recomendaciones de la IA y las alertas (y puede recalcular la IA) + Avisos, Seguridad alimentaria, Soporte. |
 | `TENANT_ADMIN` | tenant | Administrador | Máximo nivel dentro del tenant: todo. |
 | `TENANT_EMPLOYEE` | tenant | Empleado | Carga de inventario y productos con vencimiento/lote (escáner y OCR), vencimientos y **cobro en el POS GondolIA** (si el módulo está activo) + Avisos, Seguridad alimentaria, Soporte. |
@@ -154,7 +154,7 @@ Las filas marcadas con [módulo] además requieren que ese módulo esté habilit
 3. `/api/platform/**` solo devuelve agregados o datos administrativos del tenant (nombre, contacto, plan,
    estado, cantidad de usuarios, última actividad). Prohibido exponer productos, stock, ventas, alertas,
    chats o qué tenants coinciden con un recall (solo **cantidades**).
-4. `SUPPORT_AGENT` no accede a `/api/tenant/**`. Los tenant users no acceden a `/api/support/**` ni `/api/platform/**`.
+4. `SUPPORT_AGENT` no accede a `/api/tenant/**` y de `/api/platform/**` solo a las rutas de clientes y módulos de §6.6. Los tenant users no acceden a `/api/support/**` ni `/api/platform/**`.
 5. Suscripciones STOMP autorizadas por destino (§7).
 6. **Sucursales**: toda operación sobre datos por sucursal valida que la sucursal pertenezca al tenant y que el usuario
    tenga acceso (`BranchAccessService`, §5.3). Un empleado nunca ve ni modifica stock, lotes, ventas, alertas o recalls
@@ -544,6 +544,12 @@ Roles: lectura **y decisiones** (gestionar alertas, aceptar/descartar recomendac
   (`{unitsBefore7d,unitsAfter7d,lift,lotUnitsSold,lotUnitsRemaining}`) y lo envía como `feedback` en el próximo análisis.
 
 ### 6.6 Módulo C — Consola de dueños (`com.gondolia.platform`) · rol PLATFORM_OWNER
+- **Soporte** (`Roles.PLATFORM_ANY` = PLATFORM_OWNER + SUPPORT_AGENT) usa, para resolver tickets: `GET /api/platform/tenants`,
+  `GET/PUT /api/platform/tenants/{id}` (un plan distinto del actual → 403: el plan lo cambia el dueño),
+  `POST /api/platform/tenants/{id}/reset-admin-password`, `GET /api/platform/tenant-modules`,
+  `GET /api/platform/tenants/{id}/modules` y `PUT /api/platform/tenants/{id}/modules/{module}`. Todo lo demás de
+  `/api/platform/**` (métricas, catálogo con adopción, alta, estado, eliminación, avisos, equipo) es solo del dueño (403).
+  Lo que cambia soporte queda en el historial del comercio a su nombre.
 - `GET /api/platform/metrics` →
   ```json
   {"tenants":{"total":18,"active":14,"disabled":2,"cancelled":2,"newLast30d":3,"cancelledLast30d":1},
@@ -760,7 +766,8 @@ archivos nuevos solo dentro de `features/<modulo>/` (`api.ts`, `types.ts`, `comp
 | `/login` | LoginPage | público |
 | `/` | redirección por rol: OWNER→`/owner`, SUPPORT→`/support`, BOSS/ADMIN→`/app/dashboard`, EMPLOYEE→`/app/intake`, CASHIER→`/app/pos` | auth |
 | `/profile`, `/notifications` | ProfilePage, NotificationsPage | todos |
-| `/owner` · `/owner/tenants` · `/owner/tenants/new` · `/owner/tenants/:id` · `/owner/tenants/:id/edit` · `/owner/announcements` · `/owner/announcements/new` · `/owner/team` | OwnerMetricsPage · TenantsPage · TenantFormPage · TenantDetailPage · TenantFormPage · OwnerAnnouncementsPage · AnnouncementFormPage · PlatformTeamPage | PLATFORM_OWNER |
+| `/owner` · `/owner/tenants/new` · `/owner/announcements` · `/owner/announcements/new` · `/owner/team` | OwnerMetricsPage · TenantFormPage · OwnerAnnouncementsPage · AnnouncementFormPage · PlatformTeamPage | PLATFORM_OWNER |
+| `/owner/tenants` · `/owner/tenants/:id` · `/owner/tenants/:id/edit` | TenantsPage · TenantDetailPage · TenantFormPage | PLATFORM_OWNER, SUPPORT_AGENT (sin alta, plan ni estado) |
 | `/support` · `/support/tickets/:id` | SupportConsolePage | SUPPORT_AGENT |
 | `/app/dashboard` · `/app/statistics` · `/app/insights` · `/app/alerts` | Dashboard · Statistics · Insights · Alerts | BOSS, ADMIN |
 | `/app/inventory` (acepta `?q=` y `?stockStatus=`) · `/app/products/:id` · `/app/expirations` | Inventory · ProductDetail · Expirations | BOSS (solo lectura), ADMIN, EMPLOYEE |
@@ -773,7 +780,7 @@ archivos nuevos solo dentro de `features/<modulo>/` (`api.ts`, `types.ts`, `comp
 | `/app/pos/sales/:id/ticket` | PosTicketPage (**fuera del AppShell**, para imprimir) | ADMIN, EMPLOYEE, CASHIER + POS_GONDOLIA |
 | `/app/integrations` | IntegrationsPage (A2: POS propio) | ADMIN + POS_INTEGRATION |
 | `/app/imports` · `/app/imports/:id` | ImportsPage · ImportWizardPage (§16) | ADMIN |
-| `/owner/modules` | ModulesMatrixPage (§14) | PLATFORM_OWNER |
+| `/owner/modules` | ModulesMatrixPage (§14) | PLATFORM_OWNER, SUPPORT_AGENT (sin adopción ni MRR) |
 `/app/transfers` requiere además MULTI_BRANCH. Rutas con módulo deshabilitado → `ModuleDisabledPage` (guard `RequireModule`).
 Las rutas y los botones salen de los permisos de `config/access.ts` (regla de §3.3): en las pantallas que el jefe ve en
 solo lectura no aparecen Nuevo producto, Editar, Dar de baja, Importar, Cargar mercadería, Descartar, Registrar venta,
@@ -784,7 +791,7 @@ reponer → `/app/inventory?stockStatus=LOW` y cada producto → `/app/products/
 ### 9.4 Navegación (sidebar, íconos lucide)
 Cada ítem puede declarar `module`; si el tenant no lo tiene habilitado, el ítem no se muestra.
 - OWNER: Métricas (BarChart3) · Clientes (Store) · Módulos por cliente (Blocks) · Avisos y recalls (Megaphone) · Equipo GondolIA (Users)
-- SUPPORT: Bandeja de soporte (Headset)
+- SUPPORT: Bandeja de soporte (Headset) ‖ Clientes (Store) · Módulos por cliente (Blocks)
 - BOSS: Inicio (Home) · Inventario (Package) · Vencimientos (CalendarClock) · Ventas (ShoppingCart) · Estadísticas (BarChart3) · Inteligencia IA (Sparkles) · Alertas (Bell) ‖ Avisos (Megaphone) · Seguridad alimentaria (ShieldAlert) · Soporte (LifeBuoy)
   (vista resumida: Movimientos y Transferencias no están en su menú, pero las puede abrir en solo lectura)
 - ADMIN: Inicio · Punto de venta (MonitorSmartphone)[POS_GONDOLIA] · Inventario (Package) · Carga de mercadería (ScanBarcode) · Importar Excel/CSV (FileSpreadsheet) · Vencimientos (CalendarClock) · Ventas (ShoppingCart) · Transferencias (ArrowLeftRight)[MULTI_BRANCH] · Movimientos (History) · Estadísticas · Inteligencia IA · Alertas · Proveedores (Truck) · Categorías (Tags) ‖ Sucursales (Building2) · Usuarios (UserCog) · Cajas y turnos (Calculator)[POS_GONDOLIA] · Integración POS (Plug)[POS_INTEGRATION] · Configuración (Settings) ‖ Avisos · Seguridad alimentaria · Soporte

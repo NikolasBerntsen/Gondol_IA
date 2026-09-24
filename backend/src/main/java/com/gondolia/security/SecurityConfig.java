@@ -45,6 +45,26 @@ public class SecurityConfig {
             "/error"
     };
 
+    /**
+     * Lecturas de la consola que también usa soporte (SPEC §3.3): listado y detalle de los clientes, sus módulos y la
+     * matriz de módulos. El resto de {@code /api/platform/**} (métricas, equipo, avisos) sigue siendo del dueño.
+     */
+    static final String[] SUPPORT_PLATFORM_READS = {
+            "/api/platform/tenants",
+            "/api/platform/tenants/*",
+            "/api/platform/tenants/*/modules",
+            "/api/platform/tenant-modules"
+    };
+
+    /** Escrituras de la consola que también usa soporte: los datos de un cliente y el alta o baja de un módulo. */
+    static final String[] SUPPORT_PLATFORM_EDITS = {
+            "/api/platform/tenants/*",
+            "/api/platform/tenants/*/modules/*"
+    };
+
+    /** Soporte también restablece la contraseña del administrador de un cliente (el "no puedo entrar"). */
+    static final String SUPPORT_PLATFORM_ADMIN_PASSWORD = "/api/platform/tenants/*/reset-admin-password";
+
     /** Orden de {@link PreAuthorizeBeforeBindingInterceptor} entre los interceptores de Spring MVC. */
     public static final int PRE_AUTHORIZE_INTERCEPTOR_ORDER = 10;
 
@@ -73,6 +93,15 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(PUBLIC_PATHS).permitAll()
+                        // Soporte entra solo a estas rutas de la consola, con estos métodos (sin alta, bloqueo, baja
+                        // ni eliminación). Qué acción es solo del dueño también lo dice el @PreAuthorize de cada
+                        // controlador: son dos barreras.
+                        .requestMatchers(HttpMethod.GET, SUPPORT_PLATFORM_READS)
+                        .hasAnyRole("PLATFORM_OWNER", "SUPPORT_AGENT")
+                        .requestMatchers(HttpMethod.PUT, SUPPORT_PLATFORM_EDITS)
+                        .hasAnyRole("PLATFORM_OWNER", "SUPPORT_AGENT")
+                        .requestMatchers(HttpMethod.POST, SUPPORT_PLATFORM_ADMIN_PASSWORD)
+                        .hasAnyRole("PLATFORM_OWNER", "SUPPORT_AGENT")
                         .requestMatchers("/api/platform/**").hasRole("PLATFORM_OWNER")
                         .requestMatchers("/api/support/**").hasRole("SUPPORT_AGENT")
                         .requestMatchers("/api/tenant/**")

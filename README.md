@@ -174,7 +174,10 @@ Datos preparados para la demo:
   equipo interno. **Nunca ve datos de negocio** de un comercio (productos, stock, ventas, alertas, chats): de un recall
   solo ve **cuántos** comercios están afectados, no cuáles.
 - **Soporte** (`SUPPORT_AGENT`): atiende la bandeja de tickets y el chat en vivo de todos los comercios. Solo ve lo que
-  el cliente envía en el ticket (texto e imágenes) y el nombre del comercio y del usuario.
+  el cliente envía en el ticket (texto e imágenes) y el nombre del comercio y del usuario. Para resolver un ticket
+  también entra a **Clientes** y **Módulos por cliente**: corrige los datos administrativos de un comercio, activa o
+  desactiva sus módulos y restablece la contraseña de su administrador. El alta, el cambio de plan, el bloqueo, la baja,
+  la eliminación y las métricas siguen siendo del dueño.
 
 **Roles de un comercio**
 

@@ -35,6 +35,10 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Comercios clientes vistos por los dueños de GondolIA (SPEC §6.6): alta, edición, bloqueo, baja, eliminación y
  * reseteo de la contraseña del administrador. <b>Solo datos administrativos</b> (SPEC §3.4.3).
+ * <p>
+ * Soporte ({@link Roles#PLATFORM_ANY}) usa el listado, el detalle, la edición de los datos y el reseteo de la
+ * contraseña del administrador para resolver tickets. El alta, el bloqueo, la baja, la eliminación y el cambio de plan
+ * son decisiones comerciales: siguen siendo solo del dueño (el {@code @PreAuthorize} de la clase).
  */
 @Tag(name = "Consola de dueños · Clientes")
 @RestController
@@ -50,6 +54,7 @@ public class TenantAdminController {
                     + "módulo habilitado. Orden: name, createdAt, lastActivityAt, status, plan, city, "
                     + "activeBranchCount o userCount.")
     @GetMapping
+    @PreAuthorize(Roles.PLATFORM_ANY)
     public PageResponse<TenantSummary> list(
             @RequestParam(required = false) String q,
             @RequestParam(required = false) TenantStatus status,
@@ -66,6 +71,7 @@ public class TenantAdminController {
     @Operation(summary = "Detalle administrativo de un cliente",
             description = "Datos, sucursales (nombre, ciudad y estado), usuarios, módulos e historial de eventos.")
     @GetMapping("/{id}")
+    @PreAuthorize(Roles.PLATFORM_ANY)
     public TenantDetail detail(@PathVariable Long id) {
         return tenantAdminService.detail(id);
     }
@@ -80,9 +86,11 @@ public class TenantAdminController {
     }
 
     @Operation(summary = "Editar los datos y el plan de un cliente",
-            description = "Cambiar el plan registra PLAN_CHANGED. Bajar a un plan con menos sucursales que las "
-                    + "activas responde 409 BRANCH_LIMIT_REACHED.")
+            description = "Cambiar el plan registra PLAN_CHANGED y es solo del dueño: soporte edita los datos, pero "
+                    + "un plan distinto del actual responde 403 FORBIDDEN. Bajar a un plan con menos sucursales que "
+                    + "las activas responde 409 BRANCH_LIMIT_REACHED.")
     @PutMapping("/{id}")
+    @PreAuthorize(Roles.PLATFORM_ANY)
     public TenantDetail update(@PathVariable Long id, @RequestBody @Valid UpdateTenantRequest request) {
         return tenantAdminService.update(id, request, CurrentUser.id());
     }
@@ -130,6 +138,7 @@ public class TenantAdminController {
             description = "Devuelve una contraseña temporal que se muestra una sola vez; el administrador tiene que "
                     + "cambiarla al entrar y se cierran sus sesiones abiertas.")
     @PostMapping("/{id}/reset-admin-password")
+    @PreAuthorize(Roles.PLATFORM_ANY)
     public TemporaryPasswordResponse resetAdminPassword(@PathVariable Long id) {
         return tenantAdminService.resetAdminPassword(id, CurrentUser.id());
     }

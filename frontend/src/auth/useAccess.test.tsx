@@ -66,6 +66,16 @@ describe('canOpen', () => {
     expect(access.current.canOpen('/owner/tenants')).toBe(true);
   });
 
+  it('soporte abre Clientes y Módulos por cliente, pero no las métricas ni el alta', () => {
+    const access = signedInAs('SUPPORT_AGENT', null);
+    expect(access.current.canOpen('/owner/tenants/7')).toBe(true);
+    expect(access.current.canOpen('/owner/modules')).toBe(true);
+    expect(access.current.canOpen('/owner')).toBe(false);
+    expect(access.current.canOpen('/owner/tenants/new')).toBe(false);
+    expect(access.current.can('platform.tenants.edit')).toBe(true);
+    expect(access.current.can('platform.tenants.changeStatus')).toBe(false);
+  });
+
   it('transferencias exige MULTI_BRANCH', () => {
     expect(signedInAs('TENANT_BOSS', ['MULTI_BRANCH']).current.canOpen('/app/transfers')).toBe(true);
     expect(signedInAs('TENANT_BOSS', ['POS_GONDOLIA']).current.canOpen('/app/transfers')).toBe(false);

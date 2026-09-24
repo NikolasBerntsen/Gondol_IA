@@ -37,6 +37,22 @@ describe('NAVIGATION', () => {
     }
   });
 
+  it('soporte tiene su bandeja y, para resolver tickets, Clientes y Módulos por cliente', () => {
+    expect(itemsOf('SUPPORT_AGENT').map((navItem) => navItem.to)).toEqual([
+      '/support',
+      '/owner/tenants',
+      '/owner/modules',
+    ]);
+    // Métricas, avisos y el equipo siguen siendo solo del dueño.
+    expect(itemsOf('PLATFORM_OWNER').map((navItem) => navItem.to)).toEqual([
+      '/owner',
+      '/owner/tenants',
+      '/owner/modules',
+      '/owner/announcements',
+      '/owner/team',
+    ]);
+  });
+
   it('cada ítem tiene etiqueta e ícono', () => {
     for (const role of ROLES) {
       for (const navItem of itemsOf(role)) {

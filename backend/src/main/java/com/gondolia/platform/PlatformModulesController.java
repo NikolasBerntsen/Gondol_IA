@@ -28,6 +28,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Módulos por cliente (SPEC §14.3): catálogo con adopción, matriz clientes × módulos y activación por comercio.
+ * <p>
+ * Soporte ({@link Roles#PLATFORM_ANY}) usa la matriz y activa o desactiva módulos para resolver tickets; el cambio
+ * queda en el historial del cliente a su nombre. El catálogo con la adopción es una métrica del negocio: solo del
+ * dueño.
  */
 @Tag(name = "Consola de dueños · Módulos")
 @RestController
@@ -48,6 +52,7 @@ public class PlatformModulesController {
     @Operation(summary = "Matriz clientes × módulos",
             description = "Una fila por comercio con los tres módulos, sus sucursales activas y la cuota estimada.")
     @GetMapping("/tenant-modules")
+    @PreAuthorize(Roles.PLATFORM_ANY)
     public PageResponse<TenantModulesRow> matrix(
             @RequestParam(required = false) String q,
             @RequestParam(required = false) TenantStatus status,
@@ -62,6 +67,7 @@ public class PlatformModulesController {
 
     @Operation(summary = "Módulos de un cliente")
     @GetMapping("/tenants/{id}/modules")
+    @PreAuthorize(Roles.PLATFORM_ANY)
     public List<TenantModuleStatus> statuses(@PathVariable Long id) {
         return modulesService.statuses(id);
     }
@@ -70,6 +76,7 @@ public class PlatformModulesController {
             description = "Sus usuarios reciben MODULES_CHANGED al instante. Deshabilitar MULTI_BRANCH con más de "
                     + "una sucursal activa responde 409 MODULE_IN_USE.")
     @PutMapping("/tenants/{id}/modules/{module}")
+    @PreAuthorize(Roles.PLATFORM_ANY)
     public TenantModuleStatus setEnabled(@PathVariable Long id, @PathVariable TenantModule module,
                                          @RequestBody @Valid ModuleToggleRequest request) {
         return modulesService.setEnabled(id, module, Boolean.TRUE.equals(request.enabled()), CurrentUser.id());

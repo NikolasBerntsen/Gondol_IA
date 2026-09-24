@@ -8,7 +8,8 @@ import {
   type TicketPriority,
   type TicketStatus,
 } from '@/api/types';
-import { Alert, Badge, Field, Select } from '@/components/ui';
+import { useAccess } from '@/auth/useAccess';
+import { Alert, Badge, ButtonLink, Field, Select } from '@/components/ui';
 import { formatDateTime, formatRelative } from '@/lib/format';
 import { CATEGORY_OPTIONS, PRIORITY_OPTIONS, STATUS_OPTIONS } from '../labels';
 import type { SupportAgent, TicketDetail } from '../types';
@@ -37,6 +38,8 @@ export function TicketInfoPanel({
   onAssign,
   busy,
 }: TicketInfoPanelProps) {
+  const { canOpen } = useAccess();
+  const tenantPath = `/owner/tenants/${ticket.tenantId}`;
   const agentOptions = agents.map((agent) => ({
     value: String(agent.id),
     label: `${agent.fullName}${agent.online ? ' · en línea' : ''}`,
@@ -62,6 +65,12 @@ export function TicketInfoPanel({
           )}
           <Badge tone="neutral">#{ticket.tenantId}</Badge>
         </div>
+        {/* Para resolver el ticket: la ficha del cliente, con sus datos, módulos y la contraseña del admin. */}
+        {canOpen(tenantPath) ? (
+          <ButtonLink to={tenantPath} variant="outline" size="sm" leftIcon={<Store />}>
+            Ver la ficha del cliente
+          </ButtonLink>
+        ) : null}
       </section>
 
       <section className="space-y-1">

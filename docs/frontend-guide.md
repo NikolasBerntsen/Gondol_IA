@@ -263,7 +263,9 @@ const { can, canOpen } = useAccess();
 Fuera de componentes: `can(role, permiso)`, `canAccessPath(role, ruta)` y `linkTargetFor(role, link)` (lo usa la
 campana para no mandar a nadie a "Acceso denegado"). El jefe tiene la vista resumida pero **ve** inventario, ficha
 de producto, vencimientos, ventas, movimientos y transferencias (sin botones de carga ni edición) y **decide** sobre
-recomendaciones y alertas. El cajero solo ve POS + Avisos/Seguridad alimentaria/Soporte. El backend igual valida.
+recomendaciones y alertas. El cajero solo ve POS + Avisos/Seguridad alimentaria/Soporte. Soporte, además de su bandeja,
+abre Clientes y Módulos por cliente con los permisos `platform.*` (ve y edita; el alta, el plan, el estado y las
+métricas son del dueño). El backend igual valida.
 
 ### 5.2 Módulos por tenant (SPEC §14)
 

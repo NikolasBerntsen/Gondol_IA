@@ -14,6 +14,7 @@ import {
   type TenantPlan,
   type TenantStatus,
 } from '@/api/types';
+import { useAccess } from '@/auth/useAccess';
 import {
   Card,
   PageHeader,
@@ -36,11 +37,18 @@ import { PrivacyNote } from '../components/PrivacyNote';
 import { useModuleToggle } from '../hooks/useModuleToggle';
 import { estimatedMonthlyFee, TENANT_MODULE_SHORT } from '../moduleMath';
 import type { TenantModulesRow } from '../types';
+import { useConsoleRole } from '../useConsoleRole';
 
 const PAGE_SIZE = 20;
 
-/** Módulos por cliente (SPEC §14.3): adopción, matriz con switches y cuota estimada en vivo. */
+/**
+ * Módulos por cliente (SPEC §14.3): adopción, matriz con switches y cuota estimada en vivo. Soporte también la usa
+ * para activar o desactivar un módulo al resolver un ticket; la adopción y el MRR de la lista son métricas del dueño.
+ */
 export default function ModulesMatrixPage() {
+  const { can } = useAccess();
+  const { eyebrow } = useConsoleRole();
+  const showMetrics = can('platform.metrics.view');
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState(() => params.get('q') ?? '');
   const debouncedQuery = useDebounce(query, 300);
@@ -68,7 +76,11 @@ export default function ModulesMatrixPage() {
     sort: 'name',
   };
 
-  const catalog = useQuery({ queryKey: platformKeys.moduleCatalog, queryFn: platformApi.modules.catalog });
+  const catalog = useQuery({
+    queryKey: platformKeys.moduleCatalog,
+    queryFn: platformApi.modules.catalog,
+    enabled: showMetrics,
+  });
   const matrix = useQuery({
     queryKey: platformKeys.moduleMatrix(listParams),
     queryFn: () => platformApi.modules.matrix(listParams),
@@ -196,25 +208,33 @@ export default function ModulesMatrixPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Consola de dueños"
+        eyebrow={eyebrow}
         title="Módulos por cliente"
         icon={Blocks}
         description="Activá o desactivá funciones por comercio. Los cambios aplican al instante para todos sus usuarios."
         actions={
-          <div className="text-left sm:text-right">
-            <div className="text-sm text-muted-foreground">MRR estimado de esta lista</div>
-            <div className="font-display text-xl font-semibold leading-8 tabular-nums">{formatMoney(visibleMrr)}</div>
-          </div>
+          showMetrics ? (
+            <div className="text-left sm:text-right">
+              <div className="text-sm text-muted-foreground">MRR estimado de esta lista</div>
+              <div className="font-display text-xl font-semibold leading-8 tabular-nums">
+                {formatMoney(visibleMrr)}
+              </div>
+            </div>
+          ) : undefined
         }
       />
 
       <div className="flex flex-col gap-5">
-        <PrivacyNote>
-          <strong className="font-semibold">Solo ves datos administrativos:</strong> nunca el stock, las ventas ni los
-          chats de tus clientes.
-        </PrivacyNote>
+        {showMetrics ? (
+          <PrivacyNote>
+            <strong className="font-semibold">Solo ves datos administrativos:</strong> nunca el stock, las ventas ni
+            los chats de tus clientes.
+          </PrivacyNote>
+        ) : (
+          <PrivacyNote />
+        )}
 
-        <ModuleAdoptionCards items={catalog.data} loading={catalog.isPending} />
+        {showMetrics ? <ModuleAdoptionCards items={catalog.data} loading={catalog.isPending} /> : null}
 
         <Card padding="none" className="flex min-w-0 flex-col">
           <div className="flex flex-col gap-3 px-4 py-3 sm:px-5 md:flex-row md:flex-wrap md:items-end">

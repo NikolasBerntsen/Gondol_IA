@@ -4,6 +4,7 @@ import com.gondolia.common.PageResponse;
 import com.gondolia.common.error.BadRequestException;
 import com.gondolia.common.error.ConflictException;
 import com.gondolia.common.error.ErrorCodes;
+import com.gondolia.common.error.ForbiddenException;
 import com.gondolia.common.error.NotFoundException;
 import com.gondolia.common.events.TenantStatusChangedEvent;
 import com.gondolia.common.util.Emails;
@@ -194,7 +195,10 @@ public class TenantAdminService {
         return detail(tenant.getId());
     }
 
-    /** Edición de datos administrativos y del plan. Cambiar el plan registra {@code PLAN_CHANGED}. */
+    /**
+     * Edición de datos administrativos y del plan. Cambiar el plan registra {@code PLAN_CHANGED} y es una decisión
+     * comercial: solo la toma un dueño. Soporte edita los datos mandando el plan actual; otro plan responde 403.
+     */
     @Transactional
     public TenantDetail update(Long tenantId, UpdateTenantRequest request, Long actorUserId) {
         Tenant tenant = requireTenant(tenantId);
@@ -204,6 +208,10 @@ public class TenantAdminService {
         }
         TenantPlan previousPlan = tenant.getPlan();
         if (previousPlan != request.plan()) {
+            if (!isOwner(actorUserId)) {
+                throw new ForbiddenException(ErrorCodes.FORBIDDEN, "El plan de un cliente lo cambia un dueño de "
+                        + "GondolIA: pedíselo y guardá el resto de los datos");
+            }
             long activeBranches = branchRepository.countByTenantIdAndActiveTrue(tenantId);
             if (activeBranches > request.plan().maxBranches()) {
                 throw new ConflictException(ErrorCodes.BRANCH_LIMIT_REACHED, "El plan "
@@ -310,10 +318,11 @@ public class TenantAdminService {
         admin.setMustChangePassword(true);
         admin.incrementTokenVersion();
         userRepository.saveAndFlush(admin);
+        // Lo hace un dueño o soporte (el "no puedo entrar" de un ticket): el mensaje no nombra a ninguno.
         sessionTermination.forceLogoutUser(admin.getId(), "PASSWORD_RESET",
-                "Un dueño de GondolIA restableció tu contraseña. Volvé a iniciar sesión.");
-        log.info("Contraseña temporal generada para el administrador {} del comercio {} (dueño {})", admin.getId(),
-                tenantId, actorUserId);
+                "El equipo de GondolIA restableció tu contraseña. Volvé a iniciar sesión.");
+        log.info("Contraseña temporal generada para el administrador {} del comercio {} (usuario de plataforma {})",
+                admin.getId(), tenantId, actorUserId);
         return new TemporaryPasswordResponse(admin.getEmail(), admin.getFullName(), temporary);
     }
 
@@ -458,6 +467,13 @@ public class TenantAdminService {
             throw new NotFoundException(MSG_NOT_FOUND);
         }
         return row;
+    }
+
+    /** {@code true} si quien hace el cambio es un dueño de GondolIA (no soporte ni el sistema). */
+    private boolean isOwner(Long actorUserId) {
+        return actorUserId != null && userRepository.findById(actorUserId)
+                .map(user -> user.getRole() == Role.PLATFORM_OWNER)
+                .orElse(false);
     }
 
     Tenant requireTenant(Long tenantId) {

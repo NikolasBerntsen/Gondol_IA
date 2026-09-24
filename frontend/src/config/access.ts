@@ -13,6 +13,11 @@ export const ROLE_GROUPS = {
   ALL: ROLES,
   OWNER: ['PLATFORM_OWNER'],
   SUPPORT: ['SUPPORT_AGENT'],
+  /**
+   * Equipo de GondolIA: dueño y soporte. Comparten Clientes y Módulos por cliente; soporte los usa para resolver
+   * tickets y lo comercial o destructivo sigue siendo del dueño.
+   */
+  PLATFORM_ANY: ['PLATFORM_OWNER', 'SUPPORT_AGENT'],
   TENANT_ANY: TENANT_ROLES,
   /** Jefe y administrador: tableros, decisiones sobre la IA y las alertas, historiales. */
   TENANT_DASHBOARD: ['TENANT_BOSS', 'TENANT_ADMIN'],
@@ -25,8 +30,22 @@ export const ROLE_GROUPS = {
   TENANT_POS: ['TENANT_ADMIN', 'TENANT_EMPLOYEE', 'TENANT_CASHIER'],
 } as const satisfies Record<string, readonly Role[]>;
 
-/** Qué puede hacer cada rol de comercio (SPEC §3.3). */
+/**
+ * Qué puede hacer cada rol (SPEC §3.3). Los permisos `platform.*` son de la consola de GondolIA (dueño y soporte);
+ * el resto, de los roles de un comercio.
+ */
 export const PERMISSIONS = {
+  // Consola de GondolIA: clientes y módulos. Soporte ve y edita los datos de un cliente, sus módulos y la contraseña
+  // de su administrador para resolver tickets; el alta, el cambio de plan, el bloqueo, la baja y la eliminación son
+  // decisiones comerciales del dueño, igual que las métricas.
+  'platform.tenants.view': ROLE_GROUPS.PLATFORM_ANY,
+  'platform.tenants.edit': ROLE_GROUPS.PLATFORM_ANY,
+  'platform.tenants.resetAdminPassword': ROLE_GROUPS.PLATFORM_ANY,
+  'platform.modules.manage': ROLE_GROUPS.PLATFORM_ANY,
+  'platform.tenants.create': ROLE_GROUPS.OWNER,
+  'platform.tenants.changePlan': ROLE_GROUPS.OWNER,
+  'platform.tenants.changeStatus': ROLE_GROUPS.OWNER,
+  'platform.metrics.view': ROLE_GROUPS.OWNER,
   // Tableros (ver) y decisiones
   'dashboard.view': ROLE_GROUPS.TENANT_DASHBOARD,
   'recommendations.decide': ROLE_GROUPS.TENANT_DASHBOARD,
@@ -74,6 +93,10 @@ export function rolesWith(permission: Permission): readonly Role[] {
 /** Rutas y roles que las abren (el primer patrón que coincide gana: van de lo más específico a lo general). */
 const PATH_RULES: ReadonlyArray<readonly [RegExp, readonly Role[]]> = [
   [/^\/(profile|notifications)(\/|$)/, ROLE_GROUPS.ALL],
+  [/^\/owner\/tenants\/new(\/|$)/, PERMISSIONS['platform.tenants.create']],
+  [/^\/owner\/tenants\/[^/]+\/edit(\/|$)/, PERMISSIONS['platform.tenants.edit']],
+  [/^\/owner\/tenants(\/|$)/, PERMISSIONS['platform.tenants.view']],
+  [/^\/owner\/modules(\/|$)/, PERMISSIONS['platform.modules.manage']],
   [/^\/owner(\/|$)/, ROLE_GROUPS.OWNER],
   [/^\/support(\/|$)/, ROLE_GROUPS.SUPPORT],
   [/^\/app\/pos\/registers(\/|$)/, PERMISSIONS['pos.admin']],

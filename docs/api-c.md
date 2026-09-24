@@ -4,8 +4,14 @@ Endpoints de la consola con la que **los dueños de GondolIA** administran su ne
 comercios clientes, módulos por cliente y equipo interno. Implementa SPEC.md §6.6 y §14.3 y se apoya en la fundación
 (`docs/api-foundation.md`).
 
-- Base: `/api/platform`. Todo requiere **rol `PLATFORM_OWNER`** (`@PreAuthorize(Roles.OWNER)`): un `SUPPORT_AGENT`,
-  un usuario de comercio o un pedido sin token reciben `403 FORBIDDEN` / `401`.
+- Base: `/api/platform`. Todo requiere **rol `PLATFORM_OWNER`** (`@PreAuthorize(Roles.OWNER)`): un usuario de comercio
+  o un pedido sin token reciben `403 FORBIDDEN` / `401`.
+- **Soporte** (`SUPPORT_AGENT`, `Roles.PLATFORM_ANY`) usa Clientes y Módulos por cliente para resolver tickets:
+  `GET /tenants`, `GET /tenants/{id}`, `PUT /tenants/{id}` (con el plan actual: un plan distinto responde `403`),
+  `POST /tenants/{id}/reset-admin-password`, `GET /tenant-modules`, `GET /tenants/{id}/modules` y
+  `PUT /tenants/{id}/modules/{module}`. El resto (métricas, catálogo con adopción, alta, deshabilitar, habilitar, baja,
+  reactivar, eliminar, avisos y equipo) le responde `403`. Son dos barreras: la regla por URL y método de
+  `SecurityConfig` y el `@PreAuthorize` de cada endpoint. Lo que cambia soporte queda en el historial a su nombre.
 - JSON en camelCase, instantes ISO-8601 UTC, importes en ARS. Paginación con `PageResponse<T>`
   (`content`, `page` 0-based, `size`, `totalElements`, `totalPages`).
 - Pantallas: `/owner` (métricas), `/owner/tenants`, `/owner/tenants/new`, `/owner/tenants/:id`,
@@ -293,8 +299,12 @@ Notas de implementación:
 
 `backend/src/test/java/com/gondolia/platform` (19 tests, todos sobre Postgres real vía `PostgresIntegrationTest`):
 
-- `PlatformApiIsolationIntegrationTest` — un dueño recibe `403` en `/api/tenant/**`; los usuarios de comercio y el
-  soporte reciben `403` en `/api/platform/**`; el detalle y las métricas solo traen datos administrativos y agregados.
+- `PlatformApiIsolationIntegrationTest` — un dueño recibe `403` en `/api/tenant/**`; los usuarios de comercio reciben
+  `403` en `/api/platform/**` y el soporte en las métricas, el equipo y las acciones de estado; el detalle y las
+  métricas solo traen datos administrativos y agregados.
+- `SupportClientAccessIntegrationTest` — soporte lista, abre y edita un cliente (sin cambiar el plan), activa o
+  desactiva módulos (el historial lo nombra) y restablece la contraseña del admin; todo lo demás le responde `403`.
+  `PlatformConsoleAccessMatrixTest` fija qué `@PreAuthorize` tiene cada endpoint de la consola.
 - `PlatformMetricsServiceIntegrationTest` — MRR con plan + módulos por sucursal activa, uso, crecimiento reconstruido
   desde los eventos, agregados de soporte y recalls, conversión a plan pago.
 - `TenantAdminServiceIntegrationTest` — alta con preset y con módulos explícitos, emails repetidos, `BRANCH_LIMIT_REACHED`,

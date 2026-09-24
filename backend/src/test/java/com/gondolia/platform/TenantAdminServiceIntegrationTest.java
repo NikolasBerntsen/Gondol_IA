@@ -157,6 +157,28 @@ class TenantAdminServiceIntegrationTest extends PostgresIntegrationTest {
         assertThat(updated.events().getFirst().actorName()).isEqualTo(owner.fullName());
     }
 
+    @Test
+    void supportEditsTheDataButNotThePlan() {
+        AuthUser support = data.user(null, Role.SUPPORT_AGENT, true);
+        TenantDetail detail = service.create(request(TenantPlan.BASICO, null), owner.id());
+
+        // Con el plan actual, soporte corrige los datos del cliente.
+        TenantDetail updated = service.update(detail.id(), update(detail.name() + " Centro", TenantPlan.BASICO),
+                support.id());
+        assertThat(updated.name()).isEqualTo(detail.name() + " Centro");
+        assertThat(updated.plan()).isEqualTo(TenantPlan.BASICO);
+
+        // Cambiar el plan es comercial: 403 y no se toca nada.
+        assertThatThrownBy(() -> service.update(detail.id(), update("Otro nombre " + suffix, TenantPlan.PROFESIONAL),
+                support.id()))
+                .isInstanceOf(ApiException.class)
+                .satisfies(error -> assertThat(((ApiException) error).getCode()).isEqualTo("FORBIDDEN"));
+        TenantDetail after = service.detail(detail.id());
+        assertThat(after.plan()).isEqualTo(TenantPlan.BASICO);
+        assertThat(after.name()).isEqualTo(detail.name() + " Centro");
+        assertThat(after.events()).extracting(TenantEventDto::type).doesNotContain(TenantEventType.PLAN_CHANGED);
+    }
+
     // ------------------------------------------------------------------ estado
 
     @Test

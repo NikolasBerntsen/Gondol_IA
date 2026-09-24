@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ROLES, type Role } from '@/api/types';
+import { ROLES, TENANT_ROLES, type Role } from '@/api/types';
 import {
   PERMISSIONS,
   can,
@@ -28,9 +28,41 @@ describe('can', () => {
   });
 
   it('los roles de plataforma no usan los permisos del comercio', () => {
-    for (const permission of Object.keys(PERMISSIONS) as Permission[]) {
+    const tenantPermissions = (Object.keys(PERMISSIONS) as Permission[]).filter((p) => !p.startsWith('platform.'));
+    expect(tenantPermissions.length).toBeGreaterThan(0);
+    for (const permission of tenantPermissions) {
       expect(can('PLATFORM_OWNER', permission)).toBe(false);
       expect(can('SUPPORT_AGENT', permission)).toBe(false);
+    }
+  });
+
+  it('los roles de un comercio no usan los permisos de la consola', () => {
+    const platformPermissions = (Object.keys(PERMISSIONS) as Permission[]).filter((p) => p.startsWith('platform.'));
+    for (const role of TENANT_ROLES) {
+      for (const permission of platformPermissions) {
+        expect(can(role, permission), `${role} → ${permission}`).toBe(false);
+      }
+    }
+  });
+
+  it('soporte ve y edita clientes y módulos; lo comercial y las métricas son del dueño', () => {
+    for (const permission of [
+      'platform.tenants.view',
+      'platform.tenants.edit',
+      'platform.tenants.resetAdminPassword',
+      'platform.modules.manage',
+    ] as const) {
+      expect(can('SUPPORT_AGENT', permission), permission).toBe(true);
+      expect(can('PLATFORM_OWNER', permission), permission).toBe(true);
+    }
+    for (const permission of [
+      'platform.tenants.create',
+      'platform.tenants.changePlan',
+      'platform.tenants.changeStatus',
+      'platform.metrics.view',
+    ] as const) {
+      expect(can('SUPPORT_AGENT', permission), permission).toBe(false);
+      expect(can('PLATFORM_OWNER', permission), permission).toBe(true);
     }
   });
 
@@ -50,9 +82,21 @@ describe('rutas', () => {
 
   it('cada consola es de su rol', () => {
     expect(canAccessPath('PLATFORM_OWNER', '/owner/tenants')).toBe(true);
-    expect(canAccessPath('SUPPORT_AGENT', '/owner/tenants')).toBe(false);
+    expect(canAccessPath('PLATFORM_OWNER', '/support/tickets/3')).toBe(false);
     expect(canAccessPath('SUPPORT_AGENT', '/support/tickets/3')).toBe(true);
     expect(canAccessPath('TENANT_ADMIN', '/support/tickets/3')).toBe(false);
+    expect(canAccessPath('TENANT_ADMIN', '/owner/tenants')).toBe(false);
+  });
+
+  it('soporte abre Clientes y Módulos por cliente, pero no el resto de la consola del dueño', () => {
+    for (const path of ['/owner/tenants', '/owner/tenants/7', '/owner/tenants/7/edit', '/owner/modules?plan=BASICO']) {
+      expect(canAccessPath('SUPPORT_AGENT', path), path).toBe(true);
+      expect(canAccessPath('PLATFORM_OWNER', path), path).toBe(true);
+    }
+    for (const path of ['/owner', '/owner/tenants/new', '/owner/announcements', '/owner/team']) {
+      expect(canAccessPath('SUPPORT_AGENT', path), path).toBe(false);
+      expect(canAccessPath('PLATFORM_OWNER', path), path).toBe(true);
+    }
   });
 
   it('gana el patrón más específico', () => {

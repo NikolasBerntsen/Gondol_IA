@@ -21,6 +21,7 @@ import {
   type TenantModule,
   type TenantPlan,
 } from '@/api/types';
+import { useAccess } from '@/auth/useAccess';
 import {
   Alert,
   Button,
@@ -41,6 +42,7 @@ import { NewUserFields } from '../components/NewUserFields';
 import { PrivacyNote } from '../components/PrivacyNote';
 import { PLAN_MODULE_PRESET } from '../moduleMath';
 import type { CreateTenantRequest, NewUserRequest, UpdateTenantRequest } from '../types';
+import { useConsoleRole } from '../useConsoleRole';
 
 const EMPTY_USER: NewUserRequest = { fullName: '', email: '', password: '' };
 
@@ -96,8 +98,14 @@ const INITIAL: FormState = {
 
 const blank = (value: string) => (value.trim() ? value.trim() : undefined);
 
-/** Alta y edición de un cliente (SPEC §6.6 y §14.3). */
+/**
+ * Alta y edición de un cliente (SPEC §6.6 y §14.3). Soporte solo llega a la edición: corrige los datos, pero el plan
+ * es una decisión comercial del dueño y le queda fijo (el backend responde 403 si llega otro).
+ */
 export default function TenantFormPage() {
+  const { can } = useAccess();
+  const { eyebrow } = useConsoleRole();
+  const canChangePlan = can('platform.tenants.changePlan');
   const { id } = useParams<{ id: string }>();
   const tenantId = id ? Number(id) : undefined;
   const isEdit = tenantId !== undefined;
@@ -230,7 +238,13 @@ export default function TenantFormPage() {
 
   return (
     <form onSubmit={submit} noValidate>
-      <PageHeaderSection isEdit={isEdit} name={detail.data?.name} tenantId={tenantId} />
+      <PageHeaderSection
+        isEdit={isEdit}
+        name={detail.data?.name}
+        tenantId={tenantId}
+        eyebrow={eyebrow}
+        canChangePlan={canChangePlan}
+      />
 
       <div className="flex flex-col gap-5">
         {!isEdit ? <PrivacyNote /> : null}
@@ -344,9 +358,14 @@ export default function TenantFormPage() {
           />
           <div className="space-y-4 p-4 sm:p-5">
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Plan" error={errors.plan}>
+              <Field
+                label="Plan"
+                error={errors.plan}
+                hint={canChangePlan ? undefined : 'El plan lo cambia un dueño de GondolIA: pedíselo si hace falta.'}
+              >
                 <Select
                   value={form.plan}
+                  disabled={!canChangePlan}
                   onChange={(event) => changePlan(event.target.value as TenantPlan)}
                   options={TENANT_PLANS.map((value) => ({
                     value,
@@ -542,18 +561,23 @@ function PageHeaderSection({
   isEdit,
   name,
   tenantId,
+  eyebrow,
+  canChangePlan,
 }: {
   isEdit: boolean;
   name: string | undefined;
   tenantId: number | undefined;
+  eyebrow: string;
+  canChangePlan: boolean;
 }) {
+  const editable = canChangePlan ? 'los datos administrativos y el plan' : 'los datos administrativos';
   return (
     <PageHeader
-      eyebrow="Consola de dueños"
+      eyebrow={eyebrow}
       title={isEdit ? `Editar ${name ?? 'cliente'}` : 'Dar de alta un cliente'}
       description={
         isEdit
-          ? 'Cambiá los datos administrativos y el plan. Los módulos se manejan desde el detalle.'
+          ? `Cambiá ${editable}. Los módulos se manejan desde el detalle.`
           : 'Creás el comercio, su primera sucursal y las tres cuentas con las que van a entrar.'
       }
       back={
