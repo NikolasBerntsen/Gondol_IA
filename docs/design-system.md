@@ -390,7 +390,10 @@ ejemplos reales, validación al salir del campo y al enviar, botón principal co
 - Franja superior: sucursal, caja, cajero, "Turno abierto 08:02", "Retiro de efectivo", "Cerrar caja", atajos.
 - **Hoja de cobro:** medios combinables (Efectivo, Débito, Crédito, Transferencia, QR), billetes rápidos
   ($ 1.000 / $ 2.000 / $ 10.000 / $ 20.000), "Monto justo", Total/Pagado/Falta/**Vuelto** (el vuelto solo sale del
-  efectivo), Confirmar con Enter → ticket 80 mm con "Imprimir" y "Nueva venta".
+  efectivo), Confirmar con Enter → ticket 80 mm con "Imprimir" y "Nueva venta". Arranca sin medios: cada medio que se
+  toca queda iluminado (`aria-pressed`) y suma una línea con lo que falta; tocarlo de nuevo (o la X de la línea) la
+  quita. Los billetes rápidos van dentro de la línea de efectivo y solo aparecen con ella (el primero reemplaza el
+  monto sugerido, los siguientes suman). El resumen y los botones quedan fijos abajo; lo que se desplaza es la lista.
 - Atajos: **F2** buscar · **F4** cobrar · **F8** quitar ítem · **Esc** limpiar/cerrar · **Enter** agrega el primer
   resultado / confirma.
 - Móvil: paneles apilados + barra fija inferior con total y "Cobrar"; la hoja de cobro se ancla abajo.
