@@ -789,7 +789,7 @@ archivos nuevos solo dentro de `features/<modulo>/` (`api.ts`, `types.ts`, `comp
 | `/app/pos/sales/:id/ticket` | PosTicketPage (**fuera del AppShell**, para imprimir) | ADMIN, EMPLOYEE, CASHIER + POS_GONDOLIA |
 | `/app/integrations` | IntegrationsPage (A2: POS propio) | ADMIN + POS_INTEGRATION |
 | `/app/imports` · `/app/imports/:id` | ImportsPage · ImportWizardPage (§16) | ADMIN |
-| `/owner/modules` | ModulesMatrixPage (§14) | PLATFORM_OWNER, SUPPORT_AGENT (sin adopción ni MRR) |
+| `/owner/modules` | ModulesMatrixPage (§14) | PLATFORM_OWNER, SUPPORT_AGENT (sin adopción ni MRR de la lista; ve la cuota de cada cliente, como en Clientes) |
 `/app/transfers` requiere además MULTI_BRANCH. Rutas con módulo deshabilitado → `ModuleDisabledPage` (guard `RequireModule`).
 Las rutas y los botones salen de los permisos de `config/access.ts` (regla de §3.3): en las pantallas que el jefe ve en
 solo lectura no aparecen Nuevo producto, Editar, Dar de baja, Importar, Cargar mercadería, Descartar, Registrar venta,

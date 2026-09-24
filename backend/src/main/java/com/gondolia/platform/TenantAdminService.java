@@ -78,6 +78,8 @@ public class TenantAdminService {
     static final String MSG_NOT_FOUND = "El comercio no existe";
     static final String MSG_DISABLED = "El acceso de tu comercio está deshabilitado. Comunicate con GondolIA.";
     static final String MSG_CANCELLED = "Tu comercio fue dado de baja del servicio. Comunicate con GondolIA.";
+    /** Motivo guardado de {@code ADMIN_PASSWORD_RESET}: sin el email, que se resuelve al mostrar el historial. */
+    static final String PASSWORD_RESET_REASON = "Contraseña temporal para el administrador";
     static final String CODE_EMAIL_TAKEN = "EMAIL_TAKEN";
     static final String CODE_NAME_TAKEN = "NAME_TAKEN";
     static final String CODE_NO_ADMIN = "NO_ADMIN";
@@ -332,8 +334,10 @@ public class TenantAdminService {
         admin.incrementTokenVersion();
         userRepository.saveAndFlush(admin);
         // Con la temporal se puede entrar a la cuenta del admin: queda en el historial a nombre de quien la generó.
-        record(tenantId, TenantEventType.ADMIN_PASSWORD_RESET, null, null,
-                "Contraseña temporal para " + admin.getEmail(), actorUserId);
+        // Se guarda el id de la cuenta y no su email: el historial sobrevive a la eliminación del comercio (métricas)
+        // y no tiene que quedar ahí un dato personal de un usuario borrado. El email se resuelve al mostrarlo.
+        record(tenantId, TenantEventType.ADMIN_PASSWORD_RESET, null, String.valueOf(admin.getId()),
+                PASSWORD_RESET_REASON, actorUserId);
         // Lo hace un dueño o soporte (el "no puedo entrar" de un ticket): el mensaje no nombra a ninguno.
         sessionTermination.forceLogoutUser(admin.getId(), "PASSWORD_RESET",
                 "El equipo de GondolIA restableció tu contraseña. Volvé a iniciar sesión.");
@@ -466,27 +470,53 @@ public class TenantAdminService {
         }
     }
 
-    /** Historial del comercio, del más nuevo al más viejo (a igual instante, el último registrado primero). */
+    /**
+     * Historial del comercio, del más nuevo al más viejo (a igual instante, el último registrado primero). En
+     * {@code ADMIN_PASSWORD_RESET} el motivo nombra el email actual de la cuenta, si todavía es de este comercio.
+     */
     private List<TenantEventDto> eventsOf(Long tenantId) {
         List<TenantEvent> all = new ArrayList<>(eventRepository.findByTenantIdOrderByCreatedAtDesc(tenantId));
         all.sort(Comparator.comparing(TenantEvent::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(TenantEvent::getId, Comparator.nullsLast(Comparator.reverseOrder())));
-        Set<Long> actorIds = new HashSet<>();
+        Set<Long> userIds = new HashSet<>();
         all.forEach(event -> {
             if (event.getActorUserId() != null) {
-                actorIds.add(event.getActorUserId());
+                userIds.add(event.getActorUserId());
+            }
+            Long resetUserId = passwordResetUserId(event);
+            if (resetUserId != null) {
+                userIds.add(resetUserId);
             }
         });
-        Map<Long, String> actorNames = new HashMap<>();
-        if (!actorIds.isEmpty()) {
-            userRepository.findAllById(actorIds).forEach(user -> actorNames.put(user.getId(), user.getFullName()));
+        Map<Long, User> users = new HashMap<>();
+        if (!userIds.isEmpty()) {
+            userRepository.findAllById(userIds).forEach(user -> users.put(user.getId(), user));
         }
         List<TenantEventDto> dtos = new ArrayList<>(all.size());
         for (TenantEvent event : all) {
+            User actor = event.getActorUserId() == null ? null : users.get(event.getActorUserId());
+            String reason = event.getReason();
+            Long resetUserId = passwordResetUserId(event);
+            User resetUser = resetUserId == null ? null : users.get(resetUserId);
+            if (resetUser != null && tenantId.equals(resetUser.getTenantId())) {
+                reason = "Contraseña temporal para " + resetUser.getEmail();
+            }
             dtos.add(new TenantEventDto(event.getId(), event.getType(), event.getFromValue(), event.getToValue(),
-                    event.getReason(), actorNames.get(event.getActorUserId()), event.getCreatedAt()));
+                    reason, actor == null ? null : actor.getFullName(), event.getCreatedAt()));
         }
         return dtos;
+    }
+
+    /** Id de la cuenta a la que se le generó la temporal ({@code to_value} de {@code ADMIN_PASSWORD_RESET}). */
+    private static Long passwordResetUserId(TenantEvent event) {
+        if (event.getType() != TenantEventType.ADMIN_PASSWORD_RESET || event.getToValue() == null) {
+            return null;
+        }
+        try {
+            return Long.valueOf(event.getToValue());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private void record(Long tenantId, TenantEventType type, String fromValue, String toValue, String reason,

@@ -136,7 +136,10 @@ describe('autocompletado por código de barras', () => {
   ];
 
   it('lookupSourceLabel nombra el origen de los datos', () => {
-    expect(lookupSourceLabel(REFERENCE_CATALOG_SOURCE)).toBe('catálogo de productos argentinos de GondolIA');
+    // Datos de Open Food Facts: la ODbL pide atribuirlos donde se muestran.
+    expect(lookupSourceLabel(REFERENCE_CATALOG_SOURCE)).toBe(
+      'catálogo de productos argentinos (datos de Open Food Facts, licencia ODbL)',
+    );
     expect(lookupSourceLabel('OPEN_FOOD_FACTS')).toBe('Open Food Facts');
     expect(lookupSourceLabel(null)).toBeNull();
     expect(lookupSourceLabel('OTRA')).toBeNull();

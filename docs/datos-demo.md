@@ -300,7 +300,8 @@ Cómo mostrarlo:
 2. Escaneá el código con la cámara (el paquete de verdad o el código en otra pantalla), con el lector USB, o tipealo
    en "Código de barras" → **Buscar**.
 3. Aparece "Este código no está en tu catálogo" con los datos encontrados: nombre (con el contenido), marca,
-   contenido y categoría, y la fuente ("catálogo de productos argentinos de GondolIA").
+   contenido y categoría, y la fuente ("catálogo de productos argentinos (datos de Open Food Facts, licencia ODbL)":
+   la licencia de la base pide atribuir los datos donde se muestran).
 4. **Crear el producto**: el formulario llega con nombre, marca, "Contenido: …" en la descripción y la categoría
    elegida —la del comercio que se llama igual o, si el comercio no la tiene, una nueva con ese nombre que se crea al
    guardar—. Completá costo y precio y guardá.
@@ -338,7 +339,7 @@ Algunos para probar (todos están en el catálogo; los EAN-8 de 8 dígitos tambi
 | `7790580221904` | Puré de tomate Arcor 520 g | Arcor | 520 g | Conservas |
 | `7793360005084` | Atún al natural La Campagnola 120 g | La Campagnola | 120 g | Conservas |
 | `7790040424845` | Galletitas Chocolinas 150 g | Bagley | 150 g | Galletitas y snacks |
-| `7790040872202` | Galletitas de agua Traviata x 3 303 g | Bagley | 303 g | Galletitas y snacks |
+| `7790040872202` | Galletitas de agua Traviata x 3 (303 g) | Bagley | 303 g | Galletitas y snacks |
 | `7790310984017` | Papas fritas Lay's clásicas 249 g | Lay's | 249 g | Galletitas y snacks |
 | `77976291` | Galletita Tita Terrabusi 19 g | Terrabusi | 19 g | Golosinas |
 | `77939234` | Alfajor Terrabusi clásico 50 g | Terrabusi | 50 g | Golosinas |

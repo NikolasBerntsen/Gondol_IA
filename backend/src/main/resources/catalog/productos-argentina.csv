@@ -91,7 +91,7 @@ codigo;nombre;marca;contenido;categoria;fuente
 7793147572624;Cerveza Imperial Golden 710 ml;Imperial;710 ml;Bebidas alcohólicas;OFF
 7793147570743;Cerveza Imperial IPA lata 473 ml;Imperial;473 ml;Bebidas alcohólicas;OFF
 7793147573515;Cerveza Isenbeck liviana lata 473 ml;Isenbeck;473 ml;Bebidas alcohólicas;OFF
-7792798013630;Cerveza Patagonia 24.7 1 L;Patagonia;1 L;Bebidas alcohólicas;OFF
+7792798013630;Cerveza Patagonia 24.7 botella 1 L;Patagonia;1 L;Bebidas alcohólicas;OFF
 7792798001972;Cerveza Patagonia 24.7 lata 473 ml;Patagonia;473 ml;Bebidas alcohólicas;OFF
 7792798009459;Cerveza Patagonia Sol Citra lata 473 ml;Patagonia;473 ml;Bebidas alcohólicas;OFF
 7792798009107;Cerveza Quilmes 0,0% sin alcohol lata 473 ml;Quilmes;473 ml;Bebidas alcohólicas;OFF
@@ -208,7 +208,7 @@ codigo;nombre;marca;contenido;categoria;fuente
 7790080013610;Queso reggianito SanCor Corazón de Horma 230 g;SanCor;230 g;Fiambres y quesos;OFF
 7795917816259;Salame tipo milán La Piamontesa 150 g;La Piamontesa;150 g;Fiambres y quesos;OFF
 7790670051220;Salchichas Paty Viena Fun 190 g;Paty;190 g;Fiambres y quesos;OFF
-7790360000132;Salchichas Swift x 6 225 g;Swift;225 g;Fiambres y quesos;OFF
+7790360000132;Salchichas Swift x 6 (225 g);Swift;225 g;Fiambres y quesos;OFF
 7792180001665;Aceite de girasol Cañuelas 1,5 L;Cañuelas;1,5 L;Almacén;OFF
 7790070012050;Aceite de girasol Cocinero 900 ml;Cocinero;900 ml;Almacén;OFF
 7790070231468;Aceite de girasol Lira 900 ml;Lira;900 ml;Almacén;OFF
@@ -423,9 +423,9 @@ codigo;nombre;marca;contenido;categoria;fuente
 7798082744518;Galletitas crackers de agua Tía Maruca 318 g;Tía Maruca;318 g;Galletitas y snacks;OFF
 7790045000174;Galletitas crackers Granix con salvado 270 g;Granix;270 g;Galletitas y snacks;OFF
 7790040377707;Galletitas Criollitas 100 g;Bagley;100 g;Galletitas y snacks;OFF
-7790040377806;Galletitas Criollitas x 3 300 g;Bagley;300 g;Galletitas y snacks;OFF
+7790040377806;Galletitas Criollitas x 3 (300 g);Bagley;300 g;Galletitas y snacks;OFF
 7790040872103;Galletitas de agua Traviata 101 g;Bagley;101 g;Galletitas y snacks;OFF
-7790040872202;Galletitas de agua Traviata x 3 303 g;Bagley;303 g;Galletitas y snacks;OFF
+7790040872202;Galletitas de agua Traviata x 3 (303 g);Bagley;303 g;Galletitas y snacks;OFF
 7791875000334;Galletitas de limón Havanna 300 g;Havanna;300 g;Galletitas y snacks;OFF
 7790045001188;Galletitas Frutigran avena y pasas 250 g;Granix;250 g;Galletitas y snacks;OFF
 7790045825395;Galletitas Frutigran avena, chía y lino 240 g;Granix;240 g;Galletitas y snacks;OFF
@@ -447,7 +447,7 @@ codigo;nombre;marca;contenido;categoria;fuente
 7790040133266;Galletitas Maná rellenas frutilla 152 g;Arcor;152 g;Galletitas y snacks;OFF
 7790040133259;Galletitas Maná rellenas limón 152 g;Arcor;152 g;Galletitas y snacks;OFF
 7790040133235;Galletitas Maná rellenas vainilla 152 g;Arcor;152 g;Galletitas y snacks;OFF
-7790040133693;Galletitas Mediatarde clásicas x 3 315 g;Lía;315 g;Galletitas y snacks;OFF
+7790040133693;Galletitas Mediatarde clásicas x 3 (315 g);Lía;315 g;Galletitas y snacks;OFF
 7790040932708;Galletitas Merengadas 93 g;Bagley;93 g;Galletitas y snacks;OFF
 7790263119634;Galletitas Okebon avena y cacao 240 g;Okebon;240 g;Galletitas y snacks;OFF
 7790040719804;Galletitas Rex original 125 g;Bagley;125 g;Galletitas y snacks;OFF
@@ -465,8 +465,8 @@ codigo;nombre;marca;contenido;categoria;fuente
 7790040676800;Galletitas Tortitas Black 125 g;Arcor;125 g;Galletitas y snacks;OFF
 7790040677005;Galletitas Tortitas chocolate 125 g;Arcor;125 g;Galletitas y snacks;OFF
 7790040117747;Galletitas Vainitas 165 g;Bagley;165 g;Galletitas y snacks;OFF
-7798151953124;Maní Maní King sabor crema y cebolla 80 g;Maní King;80 g;Galletitas y snacks;OFF
 7794520412216;Maní pelado salado Krachitos 120 g;Krachitos;120 g;Galletitas y snacks;OFF
+7798151953124;Maní sabor crema y cebolla Maní King 80 g;Maní King;80 g;Galletitas y snacks;OFF
 7790310983911;Maní salado Pehuamar 85 g;Pehuamar;85 g;Galletitas y snacks;OFF
 7790040008175;Obleas Opera 220 g;Bagley;220 g;Galletitas y snacks;OFF
 7790310984390;Palitos Pehuamar sabor queso 90 g;Pehuamar;90 g;Galletitas y snacks;OFF
@@ -512,13 +512,13 @@ codigo;nombre;marca;contenido;categoria;fuente
 7798128000493;Alfajores Cachafaz de chocolate blanco 360 g;Cachafaz;360 g;Golosinas;OFF
 7798128000462;Alfajores Cachafaz de chocolate negro 720 g;Cachafaz;720 g;Golosinas;OFF
 7791875003465;Alfajores Havanna de chocolate blanco 330 g;Havanna;330 g;Golosinas;OFF
-7791875000440;Alfajores Havanna de chocolate x 12 660 g;Havanna;660 g;Golosinas;OFF
+7791875000440;Alfajores Havanna de chocolate x 12 (660 g);Havanna;660 g;Golosinas;OFF
 7791875006138;Alfajores Havanna de nuez 330 g;Havanna;330 g;Golosinas;OFF
-7791875000013;Alfajores Havanna mixtos x 6 306 g;Havanna;306 g;Golosinas;OFF
+7791875000013;Alfajores Havanna mixtos x 6 (306 g);Havanna;306 g;Golosinas;OFF
 77955838;Barra Bon o Bon 35 g;Bon o Bon;35 g;Golosinas;OFF
 77961815;Bombón Bon o Bon blanco 15 g;Bon o Bon;15 g;Golosinas;OFF
 77907509;Bombón Dos Corazones 26 g;Felfort;26 g;Golosinas;OFF
-7790580106959;Bombones Bon o Bon leche x 30 480 g;Bon o Bon;480 g;Golosinas;OFF
+7790580106959;Bombones Bon o Bon leche x 30 (480 g);Bon o Bon;480 g;Golosinas;OFF
 7790580134235;Caramelos duros rellenos frutales Arcor 140 g;Arcor;140 g;Golosinas;OFF
 7790380029083;Caramelos Flynn Paff surtidos 503 g;Georgalos;503 g;Golosinas;OFF
 7792860009073;Caramelos Palito de la Selva 500 g;Lheritier;500 g;Golosinas;OFF
@@ -563,10 +563,10 @@ codigo;nombre;marca;contenido;categoria;fuente
 7793890259377;Pan lactal integral Fargo 350 g;Fargo;350 g;Panificados;OFF
 7793890258820;Pan lacteado Fargo 380 g;Fargo;380 g;Panificados;OFF
 7796989009983;Pan Oroweat Whole Grains semillas 600 g;Oroweat;600 g;Panificados;OFF
-7796989007699;Pan para hamburguesas Bimbo x 4 210 g;Bimbo;210 g;Panificados;OFF
+7796989007699;Pan para hamburguesas Bimbo x 4 (210 g);Bimbo;210 g;Panificados;OFF
 7790070622044;Tapa para pascualina hojaldrada La Salteña 400 g;La Salteña;400 g;Panificados;OFF
 7798042002559;Tapas para empanadas Ariana 400 g;Ariana;400 g;Panificados;OFF
-7790070622013;Tapas para empanadas La Salteña x 12 330 g;La Salteña;330 g;Panificados;OFF
+7790070622013;Tapas para empanadas La Salteña x 12 (330 g);La Salteña;330 g;Panificados;OFF
 7793890258264;Tortillas Rapiditas clásicas 275 g;Bimbo;275 g;Panificados;OFF
 7793890258288;Tortillas Rapiditas integrales 275 g;Bimbo;275 g;Panificados;OFF
 7798142880026;Tostadas de arroz sin sal Cariló 150 g;Cariló;150 g;Panificados;OFF

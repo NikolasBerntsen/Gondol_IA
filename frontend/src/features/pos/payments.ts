@@ -4,8 +4,9 @@
  * línea exista, y volver a tocarlo la quita.
  *
  * Las líneas que el cajero no tocó (`suggested`) se completan solas: lo que falta después de las que sí escribió lo
- * toma la primera de ellas, y las otras quedan vacías. Así, con Débito + Crédito, escribir $ 1.000 en Crédito deja
- * Débito en $ 2.450 en vez de pasarse del total. Cada cambio de líneas (y del total) pasa por `rebalanceSuggested`.
+ * toma la primera de ellas, y las otras quedan vacías. Así, con un total de $ 3.450 y Débito + Crédito, escribir
+ * $ 1.000 en Crédito deja Débito en $ 2.450 en vez de pasarse del total. Cada cambio de líneas (y del total) pasa por
+ * `rebalanceSuggested`.
  *
  * Lógica pura (sin React) para probarla aparte de la pantalla. Las reglas son las del núcleo
  * (`PosSaleService.validatePayments`): los pagos cubren el total y el excedente sale del efectivo.

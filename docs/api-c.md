@@ -208,8 +208,11 @@ entrar. Se devuelve **una sola vez**: no se guarda en claro.
 
 Formato `Gnd-XXXX-9999`, sin caracteres que se confundan (`0/O`, `1/l/I`), pensado para dictarla por teléfono.
 Si el comercio no tiene un administrador activo → `409`. Con la temporal se puede entrar a la cuenta del
-administrador, así que queda en el historial: evento `ADMIN_PASSWORD_RESET` a nombre de quien la generó, con
-`reason` = `"Contraseña temporal para <email del admin>"`.
+administrador, así que queda en el historial: evento `ADMIN_PASSWORD_RESET` a nombre de quien la generó. En la
+tabla se guarda el id de la cuenta en `to_value` y no su email (el historial de un comercio eliminado se conserva para
+las métricas y no tiene que llevarse datos personales); al leer el detalle, `reason` =
+`"Contraseña temporal para <email actual del admin>"`, o `"Contraseña temporal para el administrador"` si la cuenta ya
+no existe.
 
 ---
 
@@ -285,7 +288,7 @@ Deshabilitar `MULTI_BRANCH` con más de una sucursal activa:
 | `/owner/tenants` | `TenantsPage` | Píldoras de estado con contadores, buscador con *debounce*, filtros por plan, rubro y **módulo** (todo en la URL), tabla con plan, estado, módulos, sucursales, usuarios, actividad y cuota, y menú de acciones por fila. |
 | `/owner/tenants/new` · `/owner/tenants/:id/edit` | `TenantFormPage` | Alta con primera sucursal, los tres usuarios (con "Generar una" contraseña) y los módulos con **preset por plan**; edición de datos y plan, con aviso previo si el plan nuevo no alcanza para las sucursales activas. |
 | `/owner/tenants/:id` | `TenantDetailPage` | Datos, plan y facturación, módulos con switches, sucursales y usuarios (solo administrativo), historial de eventos, acciones de estado con motivo obligatorio, eliminación escribiendo el nombre y reseteo de la contraseña del admin mostrando la temporal una sola vez. |
-| `/owner/modules` | `ModulesMatrixPage` | Adopción arriba, buscador y filtros, matriz clientes × módulos con switches, MRR estimado **en vivo** de la lista, confirmación al desactivar explicando qué pierde el cliente y el bloqueo de `MULTI_BRANCH` en uso. |
+| `/owner/modules` | `ModulesMatrixPage` | Adopción arriba, buscador y filtros, matriz clientes × módulos con switches, MRR estimado **en vivo** de la lista, confirmación al desactivar explicando qué pierde el cliente y el bloqueo de `MULTI_BRANCH` en uso. Soporte no ve la adopción ni el MRR de la lista: la cuota de cada cliente le aparece como «Cuota», igual que en Clientes. |
 | `/owner/team` | `PlatformTeamPage` | Equipo de GondolIA: alta, edición (sin poder desactivarse a sí mismo) y reseteo de contraseña. |
 
 Notas de implementación:
@@ -303,7 +306,8 @@ Notas de implementación:
 
 ## 6. Pruebas
 
-`backend/src/test/java/com/gondolia/platform` (19 tests, todos sobre Postgres real vía `PostgresIntegrationTest`):
+`backend/src/test/java/com/gondolia/platform` (43 tests; los de integración, sobre Postgres real vía
+`PostgresIntegrationTest`):
 
 - `PlatformApiIsolationIntegrationTest` — un dueño recibe `403` en `/api/tenant/**`; los usuarios de comercio reciben
   `403` en `/api/platform/**` y el soporte en las métricas, el equipo y las acciones de estado; el detalle y las
@@ -311,12 +315,13 @@ Notas de implementación:
 - `SupportClientAccessIntegrationTest` — soporte lista, abre y edita un cliente (sin cambiar el plan, y sin mandarlo
   no pisa el de un dueño), activa o desactiva módulos y restablece la contraseña del admin; el historial lo nombra en
   cada caso y todo lo demás le responde `403`.
-  `PlatformConsoleAccessMatrixTest` fija qué `@PreAuthorize` tiene cada endpoint de la consola.
+- `PlatformConsoleAccessMatrixTest` (sin base) — fija qué `@PreAuthorize` tiene cada endpoint de la consola.
+- `PlatformQueriesTest` (sin base) — normalización del texto de búsqueda de comercios.
 - `PlatformMetricsServiceIntegrationTest` — MRR con plan + módulos por sucursal activa, uso, crecimiento reconstruido
   desde los eventos, agregados de soporte y recalls, conversión a plan pago.
 - `TenantAdminServiceIntegrationTest` — alta con preset y con módulos explícitos, emails repetidos, `BRANCH_LIMIT_REACHED`,
   `DATA_UPDATED` solo si algo cambió, flujo de estados con sus eventos, borrado con `confirmName` y reseteo de la
-  contraseña del admin con su evento.
+  contraseña del admin con su evento (que no deja el email del admin en el historial de un comercio eliminado).
 
 Comprobado además contra el jar (puerto 18104) con curl: camino feliz de cada endpoint, `403` por rol, `401` sin token,
 `403` de un dueño sobre `/api/tenant/**`, `400 VALIDATION_ERROR`, `409 EMAIL_TAKEN`, `409 BRANCH_LIMIT_REACHED`,

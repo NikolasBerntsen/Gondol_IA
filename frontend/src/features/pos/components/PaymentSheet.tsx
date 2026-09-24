@@ -22,6 +22,7 @@ import {
 } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { formatMoney } from '@/lib/format';
+import { useMediaQuery } from '@/lib/useMediaQuery';
 import { QUICK_BILLS } from '../money';
 import {
   addBill,
@@ -82,7 +83,7 @@ export interface PaymentSheetProps {
  * línea abajo con lo que falta; volver a tocar un medio iluminado quita su línea. Lo que el cajero no escribió se
  * acomoda solo a lo que falte, también si cambia el total (reglas en `../payments`). Los billetes rápidos aparecen
  * solo con una línea de efectivo. El resumen (Total, Pagado, Falta, Vuelto) y los botones quedan fijos abajo: lo
- * único que se desplaza es la lista de pagos.
+ * único que se desplaza es la lista de pagos (en una pantalla baja, la hoja entera, con el pie siempre a la vista).
  */
 export function PaymentSheet({
   open,
@@ -100,6 +101,9 @@ export function PaymentSheet({
 }: PaymentSheetProps) {
   const [lines, setLines] = useState<PaymentLine[]>([]);
   const nextId = useRef(1);
+  // Cabecera compacta (etiqueta chica y unidades abajo) cuando la mediana no deja lugar al título: por debajo de
+  // 360 px, o de 400 px si el total llega al millón.
+  const compactHeader = useMediaQuery(total >= 1_000_000 ? '(max-width: 399px)' : '(max-width: 359px)');
 
   useEffect(() => {
     if (open && !sale) {
@@ -117,12 +121,18 @@ export function PaymentSheet({
   const totals = useMemo(() => paymentTotals(lines, total), [lines, total]);
   const canConfirm = canCharge(totals, total) && !pending && !refreshing;
 
-  /** Enfoca después del render que agrega o quita la línea (el elemento todavía no existe o está por irse). */
+  /**
+   * Enfoca después del render que agrega o quita la línea (el elemento todavía no existe o está por irse). Si es el
+   * monto de una línea, además la muestra entera (con los billetes rápidos) por encima del pie fijo: en una pantalla
+   * baja el pie tapa la lista y el navegador, al enfocar, no lo tiene en cuenta (lo corrige el `scroll-padding` del
+   * diálogo).
+   */
   const focusLater = (elementId: string, select = false) => {
     requestAnimationFrame(() => {
       const el = document.getElementById(elementId);
       el?.focus();
       if (select && el instanceof HTMLInputElement) el.select();
+      el?.closest('li')?.scrollIntoView?.({ block: 'nearest' });
     });
   };
 
@@ -160,7 +170,10 @@ export function PaymentSheet({
         className={cn(
           // Columna: encabezado y pie fijos, el medio se achica y desplaza. Si la pantalla es tan baja que ni la
           // parte fija entra, el diálogo entero se desplaza (overflow-y-auto del DialogContent) en vez de cortarse.
-          'flex max-w-[680px] flex-col gap-0 p-0 sm:p-0',
+          // El scroll-padding (un poco más que el alto del pie) hace que enfocar o mostrar una línea la deje por
+          // encima del pie pegado abajo y no debajo.
+          'flex max-w-[680px] flex-col gap-0 p-0 [scroll-padding-bottom:10rem] sm:p-0',
+          'max-sm:[scroll-padding-bottom:11.5rem]',
           'max-sm:bottom-0 max-sm:top-auto max-sm:w-full max-sm:max-w-none max-sm:translate-y-0 max-sm:rounded-b-none',
         )}
         aria-describedby={undefined}
@@ -203,17 +216,29 @@ export function PaymentSheet({
               submit();
             }}
           >
-            {/* Sin flex-wrap: en un celular angosto baja el texto de al lado y no la etiqueta entera, que se
-                comería el alto que necesita la lista de pagos. */}
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border py-4 pl-5 pr-14 sm:gap-4 sm:pl-6">
-              <div className="min-w-0">
-                <DialogTitle>Cobrar</DialogTitle>
-                <p className="text-sm text-muted-foreground" aria-live="polite">
-                  {units} {units === 1 ? 'unidad' : 'unidades'} en el ticket
-                  {refreshing ? ' · actualizando precios…' : ''}
-                </p>
-              </div>
-              <PriceTag size="md" price={total} label="Total" className="shrink-0" />
+            {/* La etiqueta del total no baja de renglón (se comería el alto que necesita la lista de pagos): va al
+                lado del título. En la cabecera compacta es la chica y el renglón de unidades pasa abajo a todo el
+                ancho, porque en 320 px al lado de un total de seis cifras no entra ni la palabra "unidades". */}
+            <div className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 border-b border-border py-4 pl-5 pr-14 sm:gap-x-4 sm:pl-6">
+              <DialogTitle className={cn('col-start-1 row-start-1', compactHeader ? 'self-center' : 'self-end')}>
+                Cobrar
+              </DialogTitle>
+              <p
+                className={cn(
+                  'col-start-1 row-start-2 self-start text-sm text-muted-foreground',
+                  compactHeader && 'col-span-2 mt-1',
+                )}
+                aria-live="polite"
+              >
+                {units} {units === 1 ? 'unidad' : 'unidades'} en el ticket
+                {refreshing ? ' · actualizando precios…' : ''}
+              </p>
+              <PriceTag
+                size={compactHeader ? 'sm' : 'md'}
+                price={total}
+                label="Total"
+                className={cn('col-start-2 row-start-1', compactHeader ? 'row-span-1' : 'row-span-2')}
+              />
             </div>
 
             <div className="shrink-0 border-b border-border px-5 py-3 sm:px-6 sm:py-4">
@@ -231,7 +256,10 @@ export function PaymentSheet({
                         onClick={() => toggle(method)}
                         aria-pressed={on}
                         className={cn(
-                          'relative flex h-12 flex-col items-center justify-center gap-1 rounded-control border text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-16',
+                          // Foco con contorno punteado y separado del borde: un aro lleno pegado al borde se
+                          // confundía con un medio ya elegido al abrir con F4, que deja el foco en Efectivo sin
+                          // haber tocado nada. Elegido = fondo verde, borde y tilde.
+                          'relative flex h-12 flex-col items-center justify-center gap-1 rounded-control border text-sm font-semibold transition-colors focus-visible:outline-dashed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-16',
                           on
                             ? 'border-primary bg-primary/[0.12] text-foreground hover:bg-primary/[0.18]'
                             : 'border-input bg-card text-foreground hover:bg-muted',
@@ -255,8 +283,10 @@ export function PaymentSheet({
               </fieldset>
             </div>
 
-            {/* `relative`: las etiquetas `sr-only` (absolutas) quedan dentro de la lista y no estiran el diálogo. */}
-            <div className="gd-scroll relative min-h-[5.5rem] flex-1 overflow-y-auto px-5 py-4 sm:px-6">
+            {/* `relative`: las etiquetas `sr-only` (absolutas) quedan dentro de la lista y no estiran el diálogo.
+                En una pantalla baja (un celular apaisado) no hay alto para una lista con su propio scroll entre el
+                encabezado y el pie: ahí crece con sus líneas y se desplaza el diálogo entero, con el pie pegado abajo. */}
+            <div className="gd-scroll relative min-h-[5.5rem] flex-1 overflow-y-auto px-5 py-4 sm:px-6 [@media(max-height:540px)]:flex-none [@media(max-height:540px)]:overflow-visible">
               {lines.length ? (
                 <ul className="grid gap-2" aria-label="Pagos cargados">
                   {lines.map((line) => {

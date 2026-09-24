@@ -393,33 +393,42 @@ y agentes en línea del chat de soporte.
 Preparación: `./start.sh reset -y` para partir de datos limpios (opcional), un navegador normal, una ventana de incógnito
 y un celular en la misma red WiFi.
 
-1. **Tablero multi-sucursal** — Entrá con `jefe@elsol.com`. En *Inicio* elegí "Todas las sucursales": tarjetas de
+1. **Recall pendiente** — Los datos traen un recall sin atender: Dulce de leche Dulce Valle 400 g, lote `DV2603B`, en
+   cuarentena en Almacén Don Pepe y en El Sol Centro (cada `./start.sh reset -y` lo deja pendiente otra vez). Entrá con
+   `admin@donpepe.com`: salta el diálogo rojo de Seguridad alimentaria, que también les aparece a los demás usuarios de
+   Don Pepe y, en El Sol, a `jefe@`, `admin@`, `empleado@` y `cajero@elsol.com` (tienen Centro). Mostrá el diálogo, el
+   Inicio y el POS de `cajero@donpepe.com`, que no deja venderlo, y resolvelo en *Seguridad alimentaria* → *Retirar del
+   stock*; después, lo mismo en Centro con `admin@elsol.com`. Hacelo antes de los pasos siguientes, que usan esos
+   usuarios: si no, el diálogo aparece al entrar. Detalle en
+   [`docs/datos-demo.md` §5.1](docs/datos-demo.md#51-recall-pendiente-del-dulce-de-leche-ya-está-cargado).
+2. **Tablero multi-sucursal** — Entrá con `jefe@elsol.com`. En *Inicio* elegí "Todas las sucursales": tarjetas de
    productos, por vencer, stock bajo y valor de inventario, tendencia de ventas y comparativa entre Centro, Fisherton y
    Echesortu. Cambiá a una sucursal y mirá cómo cambian los números. El jefe solo lee: no ve inventario ni ventas.
-2. **Carga con el celular y rotación** — En el celular entrá con `empleado@elsol.com` (Centro y Fisherton). En *Carga de
+3. **Carga con el celular y rotación** — En el celular entrá con `empleado@elsol.com` (Centro y Fisherton). En *Carga de
    mercadería* elegí la sucursal, escaneá un código de barras y sacale una foto a la etiqueta para leer vencimiento y lote.
    Cargá un lote que venza **antes** que el stock existente: aparece el aviso de FIFO y la lista "ya tenés X u. con
    vencimiento…". En el detalle del producto se ven todos los lotes y cuál "Se vende primero". Para mostrar el alta de
    un producto nuevo, escaneá o tipeá uno de los productos reales de
    [`docs/datos-demo.md` §6](docs/datos-demo.md#6-códigos-de-barras-para-probar-la-carga-de-mercadería) (una yerba, una
    gaseosa, unas galletitas): nombre, marca, contenido y categoría se completan solos, aun sin internet.
-3. **Recall en vivo** — Dejá abiertas las sesiones de `admin@elsol.com` (incógnito) y `empleado@elsol.com` (celular). Con
+4. **Recall en vivo** — Dejá abiertas las sesiones de `admin@elsol.com` (incógnito) y `empleado@elsol.com` (celular). Con
    `dueno@gondolia.app`, en *Avisos y recalls*, creá un recall de "Sopa de tomate en lata La Huerta 340 g", EAN
    `7791234500017`, lote `L2409A`. La vista previa informa **2 comercios afectados** (sin decir cuáles). Al publicar, el
    administrador y el empleado de El Sol reciben al instante la alerta de seguridad (el lote está en Fisherton);
-   `empleado.echesortu@elsol.com` no la recibe y Vida Sana solo ve el aviso general. En *Seguridad alimentaria* marcá
-   "Entendido" y retirá el lote del stock. Volvé a la consola del dueño: solo ve cantidades.
-4. **Recomendaciones de IA** — Con `admin@elsol.com`, en *Inteligencia IA*, elegí una sucursal: patrones de venta,
+   `empleado.echesortu@elsol.com` no la recibe y Vida Sana solo ve el aviso general. En *Seguridad alimentaria*, en la
+   tarjeta de la sopa (Fisherton), marcá "Entendido" y retirá el lote del stock. Volvé a la consola del dueño: solo ve
+   cantidades. Paso a paso en [`docs/datos-demo.md` §5.2](docs/datos-demo.md#52-recall-en-vivo-paso-a-paso).
+5. **Recomendaciones de IA** — Con `admin@elsol.com`, en *Inteligencia IA*, elegí una sucursal: patrones de venta,
    pronóstico, días de cobertura y recomendaciones explicadas (reponer, descontar un lote en riesgo, revisar una anomalía).
    Aceptá un descuento: el lote queda con ese precio en las ventas. Con "Recalcular" se vuelve a analizar cada sucursal.
    Probá también `admin@vidasana.com` (FEFO) para comparar el orden de consumo de los lotes.
-5. **Soporte en vivo** — Con `empleado@donpepe.com` abrí el botón flotante de soporte y empezá un chat. En otra ventana,
+6. **Soporte en vivo** — Con `empleado@donpepe.com` abrí el botón flotante de soporte y empezá un chat. En otra ventana,
    `soporte@gondolia.app` lo ve entrar en la *Bandeja de soporte*, lo toma y responde: indicador de "escribiendo", imagen
    adjunta, cambio de estado y calificación al cerrar.
-6. **Deshabilitar un comercio** — Con la sesión de `admin@donpepe.com` abierta, el dueño entra a *Clientes → Almacén Don
+7. **Deshabilitar un comercio** — Con la sesión de `admin@donpepe.com` abierta, el dueño entra a *Clientes → Almacén Don
    Pepe → Deshabilitar* con un motivo: la sesión del comercio se cierra sola con el aviso de bloqueo y no puede volver a
    entrar. Habilitalo de nuevo y el acceso vuelve. (`admin@laesquina.com` ya está deshabilitado desde el inicio.)
-7. **Métricas de la plataforma** — Con `dueno@gondolia.app`, en *Métricas*: comercios por estado y plan, sucursales,
+8. **Métricas de la plataforma** — Con `dueno@gondolia.app`, en *Métricas*: comercios por estado y plan, sucursales,
    MRR (por sucursal activa), conversión de freemium a pago, crecimiento de 12 meses, soporte y recalls.
 
 ## Desarrollo local sin Docker

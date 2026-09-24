@@ -293,6 +293,34 @@ class TenantAdminServiceIntegrationTest extends PostgresIntegrationTest {
         assertThat(event.type()).isEqualTo(TenantEventType.ADMIN_PASSWORD_RESET);
         assertThat(event.reason()).isEqualTo("Contraseña temporal para " + before.getEmail());
         assertThat(event.actorName()).isEqualTo(owner.fullName());
+        // En la tabla se guarda el id de la cuenta, no su email: el email se resuelve al mostrar el historial.
+        assertThat(jdbc.queryForMap("""
+                select to_value, reason from tenant_events where tenant_id = ? and type = 'ADMIN_PASSWORD_RESET'
+                """, detail.id()))
+                .containsEntry("to_value", String.valueOf(before.getId()))
+                .containsEntry("reason", TenantAdminService.PASSWORD_RESET_REASON);
+    }
+
+    @Test
+    void deletedTenantHistoryKeepsNoEmailOfTheResetAdmin() {
+        TenantDetail detail = service.create(request(TenantPlan.BASICO, null), owner.id());
+        String adminEmail = userByRole(detail.id(), Role.TENANT_ADMIN).getEmail();
+        service.resetAdminPassword(detail.id(), owner.id());
+        service.cancel(detail.id(), "Baja del servicio", owner.id());
+
+        service.delete(detail.id(), detail.name(), owner.id());
+
+        // El historial sigue para las métricas, pero sin el email del administrador que se borró con el comercio.
+        assertThat(jdbc.queryForList("""
+                select type from tenant_events where deleted_tenant_id = ? and type = 'ADMIN_PASSWORD_RESET'
+                """, String.class, detail.id())).hasSize(1);
+        assertThat(jdbc.queryForObject("""
+                select count(*) from tenant_events
+                where deleted_tenant_id = ?
+                  and (coalesce(reason, '') ilike ? or coalesce(from_value, '') ilike ?
+                       or coalesce(to_value, '') ilike ?)
+                """, Long.class, detail.id(), "%" + adminEmail + "%", "%" + adminEmail + "%",
+                "%" + adminEmail + "%")).isZero();
     }
 
     @Test

@@ -95,11 +95,14 @@ export function normalizeBarcode(raw: string): string {
 /** Origen del autocompletado por código de barras: el catálogo de productos argentinos que trae el sistema. */
 export const REFERENCE_CATALOG_SOURCE = 'REFERENCE_CATALOG';
 
-/** De dónde salieron los datos del autocompletado (`BarcodeLookupResponse.source`), para mostrarlo al cargar. */
+/**
+ * De dónde salieron los datos del autocompletado (`BarcodeLookupResponse.source`), para mostrarlo al cargar. Los del
+ * catálogo de referencia son de Open Food Facts: la licencia ODbL pide decirlo donde se muestran.
+ */
 export function lookupSourceLabel(source: string | null | undefined): string | null {
   switch (source) {
     case REFERENCE_CATALOG_SOURCE:
-      return 'catálogo de productos argentinos de GondolIA';
+      return 'catálogo de productos argentinos (datos de Open Food Facts, licencia ODbL)';
     case 'OPEN_FOOD_FACTS':
       return 'Open Food Facts';
     default:

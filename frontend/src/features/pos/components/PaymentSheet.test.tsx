@@ -185,6 +185,44 @@ describe('PaymentSheet', () => {
     }
   });
 
+  it('al agregar un medio muestra la línea entera, con los billetes, por encima del pie fijo', async () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scrollIntoView });
+    try {
+      const { user } = renderSheet();
+      await user.click(methodButton('Efectivo'));
+
+      await waitFor(() => expect(amountInput('Efectivo')).toHaveFocus());
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+      const line = scrollIntoView.mock.contexts.at(-1) as HTMLElement;
+      expect(line.tagName).toBe('LI');
+      expect(line).toContainElement(screen.getByRole('button', { name: 'Monto justo' }));
+      // El scroll-padding del diálogo es lo que deja la línea arriba del pie y no debajo.
+      expect(screen.getByRole('dialog').className).toContain('[scroll-padding-bottom:');
+    } finally {
+      delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
+  });
+
+  it('en un celular angosto la etiqueta del total es la chica y las unidades pasan abajo', () => {
+    const matchMedia = vi.fn((query: string) => ({
+      matches: query === '(max-width: 359px)',
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
+    vi.stubGlobal('matchMedia', matchMedia);
+    try {
+      renderSheet({ total: 123456.78 });
+
+      const units = screen.getByText(/2 unidades en el ticket/);
+      expect(units).toHaveClass('col-span-2');
+      expect(screen.getByRole('group', { name: 'Total: $ 123.456,78' })).toHaveClass('row-span-1');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('con Enter en un monto confirma y manda los pagos en el orden de la hoja', async () => {
     const { user, onConfirm } = renderSheet();
     await user.click(methodButton('Débito'));
