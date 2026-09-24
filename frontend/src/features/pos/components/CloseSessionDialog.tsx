@@ -35,6 +35,9 @@ function noSalesReason(voidedCount: number): string {
  * Un turno sin ventas (nunca se cobró nada o se anularon todas) se cierra igual: el cajero pudo abrir la
  * caja por error o no vender nada en el día. Como último paso le avisamos que va a cerrar la caja sin ventas y
  * tiene que confirmarlo; el turno queda registrado como "Cerrado sin ventas".
+ *
+ * El aviso sale del turno que muestra el mostrador (lo vuelve a traer al abrir este diálogo); la marca del turno la
+ * decide el servidor con el arqueo del cierre, no este aviso.
  */
 export function CloseSessionDialog({ open, session, onClose, onSubmit, pending }: CloseSessionDialogProps) {
   const [counted, setCounted] = useState('');
@@ -54,12 +57,13 @@ export function CloseSessionDialog({ open, session, onClose, onSubmit, pending }
   const noSales = session.salesCount === 0;
   const value = parseArs(counted);
   const difference = value === null ? null : subtractMoney(value, session.expectedCash);
+  // Lo del cajón vacío ("escribí 0") ya lo dice la ayuda del campo: el error no lo repite.
   const error =
     !touched || value !== null
       ? undefined
       : counted.trim()
         ? 'No entendimos el importe: escribilo como 184.350 o 184350.'
-        : 'Escribí cuánto efectivo contaste. Si el cajón quedó vacío, escribí 0.';
+        : 'Escribí cuánto efectivo contaste.';
 
   const send = (countedCash: number) => onSubmit({ countedCash, note: note.trim() ? note.trim() : null });
 
@@ -186,7 +190,7 @@ export function CloseSessionDialog({ open, session, onClose, onSubmit, pending }
           if (value !== null) send(value);
         }}
         title="Estás a punto de cerrar la caja sin ventas"
-        description={`${noSalesReason(session.voidedCount)} Podés cerrarla igual: el turno queda registrado en Turnos de caja como «Cerrado sin ventas», con quién lo cerró y a qué hora.`}
+        description={`${noSalesReason(session.voidedCount)} Podés cerrar la caja igual: el turno queda registrado en Mis turnos de caja como «Cerrado sin ventas», con quién lo cerró y a qué hora.`}
         confirmLabel="Cerrar sin ventas"
         cancelLabel="Volver"
         tone="danger"

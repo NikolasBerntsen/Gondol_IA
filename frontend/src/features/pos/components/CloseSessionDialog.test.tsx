@@ -57,7 +57,12 @@ describe('CloseSessionDialog', () => {
     expect(counted()).not.toHaveAttribute('placeholder', '$ 0');
 
     await user.click(closeButton());
-    expect(screen.getByText('Escribí cuánto efectivo contaste. Si el cajón quedó vacío, escribí 0.')).toBeInTheDocument();
+    expect(screen.getByText('Escribí cuánto efectivo contaste.')).toBeInTheDocument();
+    // Lo del cajón vacío lo dice la ayuda del campo, una sola vez: el error no la repite.
+    expect(screen.getAllByText(/Si el cajón quedó vacío, escribí 0\./)).toHaveLength(1);
+    expect(counted()).toHaveAccessibleDescription(
+      'Escribí cuánto efectivo contaste. Usá punto para los miles: 184.350. Si el cajón quedó vacío, escribí 0.',
+    );
     expect(counted()).toHaveAttribute('aria-invalid', 'true');
     expect(warning()).not.toBeInTheDocument();
     expect(onSubmit).not.toHaveBeenCalled();
@@ -76,7 +81,10 @@ describe('CloseSessionDialog', () => {
 
     // El último paso es el aviso: todavía no se cerró nada.
     expect(warning()).toBeInTheDocument();
-    expect(screen.getByText(/queda registrado en Turnos de caja como «Cerrado sin ventas»/)).toBeInTheDocument();
+    expect(warning()).toHaveTextContent(
+      'En este turno no se cobró ninguna venta. Podés cerrar la caja igual: el turno queda registrado en Mis turnos de ' +
+        'caja como «Cerrado sin ventas», con quién lo cerró y a qué hora.',
+    );
     expect(onSubmit).not.toHaveBeenCalled();
     // En una acción que no se deshace el foco arranca en la salida: Enter no cierra la caja sin querer.
     expect(screen.getByRole('button', { name: 'Volver' })).toHaveFocus();

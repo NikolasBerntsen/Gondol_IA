@@ -100,7 +100,8 @@ export default function PosSessionsPage() {
         row.status === 'OPEN' ? (
           <StatusPill tone="ok">Abierto</StatusPill>
         ) : row.closedWithoutSales ? (
-          // El cajero confirmó el aviso de cierre sin ventas: queda a la vista en el historial.
+          // Cerró sin ninguna venta vigente (lo fija el servidor con el arqueo del cierre, no el aviso del mostrador):
+          // queda a la vista en el historial.
           <StatusPill tone="warn" solid>
             Cerrado sin ventas
           </StatusPill>

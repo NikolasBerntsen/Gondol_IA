@@ -150,8 +150,8 @@ export default function PosTerminalPage() {
         difference === 0 ? 'La caja cerró justa.' : `Diferencia de ${formatMoney(difference, { decimals: 2 })}.`;
       toast.success(report.closedWithoutSales ? 'Cerraste la caja sin ventas.' : 'Cerraste la caja.', {
         description: report.closedWithoutSales
-          ? `${result} Quedó registrado en Mis turnos como «Cerrado sin ventas».`
-          : `${result} El reporte Z quedó en Mis turnos.`,
+          ? `${result} Quedó registrado en Mis turnos de caja como «Cerrado sin ventas».`
+          : `${result} El reporte Z quedó en Mis turnos de caja.`,
       });
       navigate('/app/pos/sessions');
     },
@@ -534,7 +534,15 @@ export default function PosTerminalPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setCloseOpen(true)}
+            onClick={() => {
+              setCloseOpen(true);
+              // El turno en caché puede tener hasta 30 s: lo volvemos a traer para que el aviso de cierre sin ventas
+              // y el efectivo esperado sean los del turno real (un administrador pudo anular una venta desde otro
+              // equipo). Si ya lo cerraron en otro lado, el mostrador vuelve a la apertura sin el diálogo pendiente.
+              void sessionQuery.refetch().then(({ data }) => {
+                if (data === null) setCloseOpen(false);
+              });
+            }}
             leftIcon={<DoorClosed aria-hidden="true" />}
           >
             Cerrar caja
