@@ -109,7 +109,9 @@ describe('IntakePage → alta de un código que el comercio no tiene', () => {
 
     expect(await screen.findByText('Este código no está en tu catálogo')).toBeInTheDocument();
     expect(screen.getByText('Yerba mate Playadito 500 g')).toBeInTheDocument();
-    expect(screen.getByText('Fuente: catálogo de productos argentinos de GondolIA.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Fuente: catálogo de productos argentinos (datos de Open Food Facts, licencia ODbL).'),
+    ).toBeInTheDocument();
     expect(api.lookup).toHaveBeenCalledWith('7793704000911');
 
     await user.click(screen.getByRole('button', { name: 'Crear el producto' }));
