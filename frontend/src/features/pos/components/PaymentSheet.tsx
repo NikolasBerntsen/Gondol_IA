@@ -30,6 +30,7 @@ import {
   hasMethod,
   isInvalidAmount,
   paymentTotals,
+  rebalanceSuggested,
   removeLine,
   setLineAmount,
   toggleMethod,
@@ -78,9 +79,10 @@ export interface PaymentSheetProps {
  * el ticket con "Imprimir" y "Nueva venta".
  *
  * Arranca sin pagos: el cajero toca los medios con los que paga el cliente (quedan iluminados) y cada uno suma una
- * línea abajo con lo que falta; volver a tocar un medio iluminado quita su línea (reglas en `../payments`). Los
- * billetes rápidos aparecen solo con una línea de efectivo. El resumen (Total, Pagado, Falta, Vuelto) y los botones
- * quedan fijos abajo: lo único que se desplaza es la lista de pagos.
+ * línea abajo con lo que falta; volver a tocar un medio iluminado quita su línea. Lo que el cajero no escribió se
+ * acomoda solo a lo que falte, también si cambia el total (reglas en `../payments`). Los billetes rápidos aparecen
+ * solo con una línea de efectivo. El resumen (Total, Pagado, Falta, Vuelto) y los botones quedan fijos abajo: lo
+ * único que se desplaza es la lista de pagos.
  */
 export function PaymentSheet({
   open,
@@ -106,6 +108,12 @@ export function PaymentSheet({
     }
   }, [open, sale]);
 
+  // El mostrador puede cambiar el total con la hoja abierta (vuelve a pedir el carrito al abrirla y después de un
+  // PAYMENT_INSUFFICIENT): los montos sugeridos lo siguen y lo que escribió el cajero no se toca.
+  useEffect(() => {
+    setLines((prev) => rebalanceSuggested(prev, total));
+  }, [total]);
+
   const totals = useMemo(() => paymentTotals(lines, total), [lines, total]);
   const canConfirm = canCharge(totals, total) && !pending && !refreshing;
 
@@ -128,7 +136,7 @@ export function PaymentSheet({
   };
 
   const remove = (line: PaymentLine) => {
-    setLines(removeLine(lines, line.id));
+    setLines(removeLine(lines, line.id, total));
     focusLater(methodButtonId(line.method));
   };
 
@@ -236,8 +244,10 @@ export function PaymentSheet({
                             aria-hidden="true"
                           />
                         ) : null}
-                        <Icon className={cn('h-5 w-5', on && 'text-primary')} aria-hidden="true" />
-                        {PAYMENT_METHOD_LABELS[method]}
+                        <Icon className={cn('h-5 w-5 shrink-0', on && 'text-primary')} aria-hidden="true" />
+                        {/* En 320 px "Transferencia" entra justo: si no entra (otra tipografía), se corta con "…"
+                            en vez de pisar el borde. */}
+                        <span className="max-w-full truncate">{PAYMENT_METHOD_LABELS[method]}</span>
                       </button>
                     );
                   })}
@@ -258,8 +268,10 @@ export function PaymentSheet({
                         className="rounded-control border border-border px-3 py-2 transition-colors focus-within:border-primary/60 focus-within:bg-primary/[0.04]"
                       >
                         <div className="flex items-center gap-3">
-                          <span className="flex w-[118px] shrink-0 items-center gap-2 text-base font-semibold">
-                            <Icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                          {/* Ancho mínimo y no fijo: si la tipografía todavía no cargó (o el sistema la agranda),
+                              "Transferencia" empuja el input en vez de aplastar el ícono. */}
+                          <span className="flex min-w-[118px] shrink-0 items-center gap-2 text-base font-semibold">
+                            <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                             {label}
                           </span>
                           <label htmlFor={lineInputId(line.id)} className="sr-only">
@@ -279,7 +291,7 @@ export function PaymentSheet({
                               value={line.amount}
                               invalid={isInvalidAmount(line)}
                               placeholder={line.method === 'CASH' ? 'Recibido' : '0'}
-                              onChange={(event) => setLines(setLineAmount(lines, line.id, event.target.value))}
+                              onChange={(event) => setLines(setLineAmount(lines, line.id, event.target.value, total))}
                               className="pl-7 text-right font-semibold tabular-nums"
                             />
                           </div>
@@ -310,7 +322,7 @@ export function PaymentSheet({
                                   variant="outline"
                                   className="px-2 font-display text-md tabular-nums"
                                   onClick={() => {
-                                    setLines(addBill(lines, bill));
+                                    setLines(addBill(lines, bill, total));
                                     focusCash();
                                   }}
                                 >
@@ -352,7 +364,10 @@ export function PaymentSheet({
                     El vuelto solo se da en efectivo: bajá el monto con tarjeta, transferencia o QR.
                   </p>
                 ) : null}
-                <dl className="grid grid-cols-2 gap-y-1 text-base sm:grid-cols-4 sm:gap-x-6">
+                {/* Los montos no se parten en dos renglones (el pie crecería y le comería alto a la lista). El vuelto
+                    tiene la columna más ancha en escritorio y va más chico en el celular: "$ 100.000,00" entra
+                    en una línea desde 320 px. */}
+                <dl className="grid grid-cols-2 gap-y-1 whitespace-nowrap text-base sm:grid-cols-[repeat(3,minmax(0,1fr))_minmax(0,1.5fr)] sm:gap-x-6">
                   <div>
                     <dt className="text-sm text-muted-foreground">Total</dt>
                     <dd className="font-semibold tabular-nums">{formatMoney(total, { decimals: 2 })}</dd>
@@ -375,7 +390,7 @@ export function PaymentSheet({
                   <div>
                     <dt className="text-sm text-muted-foreground">Vuelto</dt>
                     <dd
-                      className="font-display text-xl font-semibold leading-8 tabular-nums text-ok-ink"
+                      className="font-display text-lg font-semibold tabular-nums text-ok-ink sm:text-xl sm:leading-8"
                       aria-live="polite"
                     >
                       {formatMoney(totals.change, { decimals: 2 })}

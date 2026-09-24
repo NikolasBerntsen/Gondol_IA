@@ -72,12 +72,54 @@ describe('PaymentSheet', () => {
     expect(items).toHaveLength(2);
     expect(items[0]).toHaveTextContent('Débito');
     expect(items[1]).toHaveTextContent('Crédito');
-    // El primero se lleva lo que faltaba (todo); el segundo queda vacío para repartir.
+    // El primero se lleva lo que faltaba (todo); el segundo queda vacío hasta que el cajero reparta.
     expect(amountInput('Débito').value).toBe('3.450');
     expect(amountInput('Crédito').value).toBe('');
     expect(summaryValue('Falta')).toBe('$ 0,00');
     expect(confirmButton()).toBeEnabled();
     await waitFor(() => expect(amountInput('Crédito')).toHaveFocus());
+  });
+
+  it('al repartir entre Débito y Crédito, el que no tocó el cajero se lleva lo que falta', async () => {
+    const { user, onConfirm } = renderSheet();
+    await user.click(methodButton('Débito'));
+    await user.click(methodButton('Crédito'));
+    await waitFor(() => expect(amountInput('Crédito')).toHaveFocus());
+
+    await user.keyboard('1.000');
+
+    expect(amountInput('Débito').value).toBe('2.450');
+    expect(summaryValue('Pagado')).toBe('$ 3.450,00');
+    expect(summaryValue('Falta')).toBe('$ 0,00');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(confirmButton()).toBeEnabled();
+
+    await user.keyboard('{Enter}');
+    expect(onConfirm).toHaveBeenCalledWith([
+      { method: 'DEBIT', amount: 2450 },
+      { method: 'CREDIT', amount: 1000 },
+    ]);
+  });
+
+  it('si el total cambia con la hoja abierta, lo sugerido lo sigue y lo que escribió el cajero no', async () => {
+    const { user, onConfirm, rerender } = renderSheet();
+    await user.click(methodButton('Débito'));
+    await user.clear(amountInput('Débito'));
+    await user.type(amountInput('Débito'), '1000');
+    await user.click(methodButton('Efectivo'));
+    expect(amountInput('Efectivo').value).toBe('2.450');
+
+    // El mostrador actualizó precios: el total bajó a $ 3.300.
+    rerender({ total: 3300 });
+
+    expect(amountInput('Débito').value).toBe('1000');
+    expect(amountInput('Efectivo').value).toBe('2.300');
+    expect(summaryValue('Vuelto')).toBe('$ 0,00');
+    await user.type(amountInput('Efectivo'), '{Enter}');
+    expect(onConfirm).toHaveBeenCalledWith([
+      { method: 'DEBIT', amount: 1000 },
+      { method: 'CASH', amount: 2300 },
+    ]);
   });
 
   it('volver a tocar un medio iluminado quita su línea, y la X de la línea también', async () => {
@@ -89,6 +131,8 @@ describe('PaymentSheet', () => {
     expect(methodButton('Débito')).toHaveAttribute('aria-pressed', 'false');
     expect(screen.queryByLabelText('Monto en Débito')).not.toBeInTheDocument();
     expect(methodButton('Débito')).toHaveFocus();
+    // Lo que cubría Débito pasa a Crédito, que el cajero no había tocado.
+    expect(amountInput('Crédito').value).toBe('3.450');
 
     await user.click(screen.getByRole('button', { name: 'Quitar Crédito' }));
     expect(methodButton('Crédito')).toHaveAttribute('aria-pressed', 'false');

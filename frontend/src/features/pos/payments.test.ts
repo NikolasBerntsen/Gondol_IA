@@ -7,6 +7,7 @@ import {
   isInvalidAmount,
   lineAmount,
   paymentTotals,
+  rebalanceSuggested,
   removeLine,
   setLineAmount,
   toggleMethod,
@@ -101,9 +102,9 @@ describe('toggleMethod', () => {
     expect(toggleMethod(lines, 'CASH', 2, 3450)).toEqual([line(1, 'DEBIT', '2.000'), line(2, 'CASH', '1.450', true)]);
   });
 
-  it('con el total cubierto la línea nueva queda vacía para que el cajero escriba', () => {
+  it('con el total cubierto la línea nueva queda vacía y sugerida: se lleva lo que falte si el cajero reparte', () => {
     const lines = toggleMethod([line(1, 'DEBIT', '3.450', true)], 'CREDIT', 2, 3450);
-    expect(lines[1]).toEqual(line(2, 'CREDIT', ''));
+    expect(lines).toEqual([line(1, 'DEBIT', '3.450', true), line(2, 'CREDIT', '', true)]);
   });
 
   it('redondea lo que falta a centavos', () => {
@@ -114,40 +115,99 @@ describe('toggleMethod', () => {
     const lines = [line(1, 'DEBIT', '2.000'), line(2, 'CREDIT', '1.450')];
     expect(toggleMethod(lines, 'DEBIT', 3, 3450)).toEqual([line(2, 'CREDIT', '1.450')]);
   });
+
+  it('si se quita la línea que cubría el total, lo que falta pasa a la sugerida que queda', () => {
+    const lines = [line(1, 'DEBIT', '3.450', true), line(2, 'CREDIT', '', true)];
+    expect(toggleMethod(lines, 'DEBIT', 3, 3450)).toEqual([line(2, 'CREDIT', '3.450', true)]);
+  });
+});
+
+describe('rebalanceSuggested', () => {
+  it('la primera sugerida se lleva lo que falta después de lo del cajero y las demás quedan vacías', () => {
+    const lines = [line(1, 'QR', '', true), line(2, 'DEBIT', '1.000'), line(3, 'CASH', '500', true)];
+    expect(rebalanceSuggested(lines, 3450)).toEqual([
+      line(1, 'QR', '2.450', true),
+      line(2, 'DEBIT', '1.000'),
+      line(3, 'CASH', '', true),
+    ]);
+  });
+
+  it('sigue al total si cambia, sin tocar lo que escribió el cajero', () => {
+    const lines = [line(1, 'DEBIT', '1000'), line(2, 'CASH', '2.450', true)];
+    expect(rebalanceSuggested(lines, 3300)).toEqual([line(1, 'DEBIT', '1000'), line(2, 'CASH', '2.300', true)]);
+    expect(rebalanceSuggested(lines, 4000)[1].amount).toBe('3.000');
+  });
+
+  it('si lo del cajero ya cubre el total, las sugeridas quedan vacías', () => {
+    const lines = [line(1, 'DEBIT', '3.450', true), line(2, 'CASH', '5.000')];
+    expect(rebalanceSuggested(lines, 3450)).toEqual([line(1, 'DEBIT', '', true), line(2, 'CASH', '5.000')]);
+  });
+
+  it('si no hay nada que acomodar devuelve el mismo arreglo', () => {
+    const lines = [line(1, 'DEBIT', '2.000'), line(2, 'CASH', '1.450', true)];
+    expect(rebalanceSuggested(lines, 3450)).toBe(lines);
+    expect(rebalanceSuggested([], 3450)).toEqual([]);
+  });
 });
 
 describe('hasMethod / removeLine / setLineAmount', () => {
   it('quitar la última línea de un medio lo apaga', () => {
     const lines = [line(1, 'DEBIT', '2.000'), line(2, 'CASH', '')];
     expect(hasMethod(lines, 'CASH')).toBe(true);
-    const next = removeLine(lines, 2);
+    const next = removeLine(lines, 2, 3450);
     expect(next).toEqual([line(1, 'DEBIT', '2.000')]);
     expect(hasMethod(next, 'CASH')).toBe(false);
   });
 
+  it('quitar una línea del cajero pasa lo que cubría a la sugerida', () => {
+    const lines = [line(1, 'DEBIT', '2.000'), line(2, 'CASH', '1.450', true)];
+    expect(removeLine(lines, 1, 3450)).toEqual([line(2, 'CASH', '3.450', true)]);
+  });
+
   it('lo que escribe el cajero deja de ser sugerido', () => {
     const lines = [line(1, 'CASH', '3.450', true), line(2, 'QR', '')];
-    expect(setLineAmount(lines, 1, '5000')).toEqual([line(1, 'CASH', '5000'), line(2, 'QR', '')]);
+    expect(setLineAmount(lines, 1, '5000', 3450)).toEqual([line(1, 'CASH', '5000'), line(2, 'QR', '')]);
+  });
+
+  it('al repartir entre dos medios, el que no tocó el cajero se lleva lo que falta', () => {
+    // Débito + Crédito: Débito arrancó con todo y Crédito vacío.
+    const lines = [line(1, 'DEBIT', '3.450', true), line(2, 'CREDIT', '', true)];
+    expect(setLineAmount(lines, 2, '1.000', 3450)).toEqual([
+      line(1, 'DEBIT', '2.450', true),
+      line(2, 'CREDIT', '1.000'),
+    ]);
+    // Al revés: escribe en Débito y Crédito completa.
+    expect(setLineAmount(lines, 1, '1000', 3450)).toEqual([
+      line(1, 'DEBIT', '1000'),
+      line(2, 'CREDIT', '2.450', true),
+    ]);
   });
 });
 
 describe('addBill', () => {
   it('el primer billete reemplaza el monto sugerido', () => {
-    expect(addBill([line(1, 'CASH', '3.450', true)], 10000)).toEqual([line(1, 'CASH', '10.000')]);
+    expect(addBill([line(1, 'CASH', '3.450', true)], 10000, 3450)).toEqual([line(1, 'CASH', '10.000')]);
   });
 
   it('los siguientes billetes se suman', () => {
-    expect(addBill([line(1, 'CASH', '10.000')], 2000)).toEqual([line(1, 'CASH', '12.000')]);
+    expect(addBill([line(1, 'CASH', '10.000')], 2000, 3450)).toEqual([line(1, 'CASH', '12.000')]);
   });
 
   it('sobre un monto vacío o ilegible arranca desde cero', () => {
-    expect(addBill([line(1, 'CASH', '')], 1000)[0].amount).toBe('1.000');
-    expect(addBill([line(1, 'CASH', 'abc')], 1000)[0].amount).toBe('1.000');
+    expect(addBill([line(1, 'CASH', '')], 1000, 3450)[0].amount).toBe('1.000');
+    expect(addBill([line(1, 'CASH', 'abc')], 1000, 3450)[0].amount).toBe('1.000');
   });
 
   it('solo toca la línea de efectivo', () => {
-    const debit = line(1, 'DEBIT', '2.000', true);
-    expect(addBill([debit, line(2, 'CASH', '')], 20000)).toEqual([debit, line(2, 'CASH', '20.000')]);
+    const debit = line(1, 'DEBIT', '2.000');
+    expect(addBill([debit, line(2, 'CASH', '')], 20000, 3450)).toEqual([debit, line(2, 'CASH', '20.000')]);
+  });
+
+  it('lo sugerido en otro medio se acomoda a lo que se recibió en efectivo', () => {
+    const lines = [line(1, 'DEBIT', '3.450', true), line(2, 'CASH', '', true)];
+    expect(addBill(lines, 1000, 3450)).toEqual([line(1, 'DEBIT', '2.450', true), line(2, 'CASH', '1.000')]);
+    // Si el efectivo ya cubre todo, el débito sugerido queda vacío y el excedente es vuelto.
+    expect(addBill(lines, 10000, 3450)[0]).toEqual(line(1, 'DEBIT', '', true));
   });
 });
 
@@ -160,6 +220,19 @@ describe('exactCash', () => {
   it('si los otros medios ya cubren el total no cambia nada', () => {
     const lines = [line(1, 'DEBIT', '3.450'), line(2, 'CASH', '')];
     expect(exactCash(lines, 3450)).toBe(lines);
+  });
+
+  it('sin línea de efectivo no cambia nada', () => {
+    const lines = [line(1, 'DEBIT', '1.000', true)];
+    expect(exactCash(lines, 3450)).toBe(lines);
+  });
+
+  it('deja fijos los otros medios como se ven y el efectivo pasa a seguir al total', () => {
+    const lines = [line(1, 'DEBIT', '2.450', true), line(2, 'CASH', '1.000')];
+    const exact = exactCash(lines, 3450);
+    expect(exact).toEqual([line(1, 'DEBIT', '2.450'), line(2, 'CASH', '1.000', true)]);
+    // Si después baja el total, se ajusta el efectivo y no el débito.
+    expect(rebalanceSuggested(exact, 3300)).toEqual([line(1, 'DEBIT', '2.450'), line(2, 'CASH', '850', true)]);
   });
 });
 

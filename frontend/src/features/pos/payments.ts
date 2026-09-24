@@ -3,6 +3,10 @@
  * suma una línea, en el orden en que los tocó. Hay una línea por medio: el botón del medio está iluminado mientras su
  * línea exista, y volver a tocarlo la quita.
  *
+ * Las líneas que el cajero no tocó (`suggested`) se completan solas: lo que falta después de las que sí escribió lo
+ * toma la primera de ellas, y las otras quedan vacías. Así, con Débito + Crédito, escribir $ 1.000 en Crédito deja
+ * Débito en $ 2.450 en vez de pasarse del total. Cada cambio de líneas (y del total) pasa por `rebalanceSuggested`.
+ *
  * Lógica pura (sin React) para probarla aparte de la pantalla. Las reglas son las del núcleo
  * (`PosSaleService.validatePayments`): los pagos cubren el total y el excedente sale del efectivo.
  */
@@ -15,9 +19,9 @@ export interface PaymentLine {
   /** Lo que se ve en el input, como lo escribe el cajero ("15.000", "1.234,50"). */
   amount: string;
   /**
-   * El monto lo puso la hoja (lo que faltaba al agregar la línea, o "Monto justo") y no el cajero. En efectivo el
-   * primer billete rápido lo reemplaza en vez de sumarle: si faltan $ 3.450 y te dan uno de $ 10.000, recibiste
-   * $ 10.000, no $ 13.450.
+   * El monto lo pone la hoja (lo que falta, o "Monto justo") y no el cajero: sigue a los cambios de las otras líneas y
+   * del total. En efectivo el primer billete rápido lo reemplaza en vez de sumarle: si faltan $ 3.450 y te dan uno de
+   * $ 10.000, recibiste $ 10.000, no $ 13.450.
    */
   suggested: boolean;
 }
@@ -70,39 +74,71 @@ export function hasMethod(lines: PaymentLine[], method: PaymentMethod): boolean 
 }
 
 /**
- * Tocar un medio. Si no está, agrega su línea al final con lo que falta (vacía si ya está cubierto); si ya estaba
- * (botón iluminado), la quita. `id` es el de la línea nueva.
+ * Completa las líneas sugeridas: la primera se lleva lo que falta después de las que escribió el cajero (redondeado a
+ * centavos, vacía si no falta nada) y las demás sugeridas quedan vacías. Si no cambia nada devuelve el mismo arreglo.
+ */
+export function rebalanceSuggested(lines: PaymentLine[], total: number): PaymentLine[] {
+  const typed = sumMoney(lines.filter((line) => !line.suggested).map(lineAmount));
+  let left = Math.max(0, subtractMoney(total, typed));
+  let changed = false;
+  const next = lines.map((line) => {
+    if (!line.suggested) return line;
+    const amount = left > 0 ? formatArsInput(left) : '';
+    left = 0;
+    if (line.amount === amount) return line;
+    changed = true;
+    return { ...line, amount };
+  });
+  return changed ? next : lines;
+}
+
+/**
+ * Tocar un medio. Si no está, agrega su línea al final como sugerida: se lleva lo que falta, o queda vacía si otra
+ * línea sugerida ya lo cubre. Si ya estaba (botón iluminado), la quita. `id` es el de la línea nueva.
  */
 export function toggleMethod(lines: PaymentLine[], method: PaymentMethod, id: number, total: number): PaymentLine[] {
-  if (hasMethod(lines, method)) return lines.filter((line) => line.method !== method);
-  const { remaining } = paymentTotals(lines, total);
-  return [...lines, { id, method, amount: remaining ? formatArsInput(remaining) : '', suggested: remaining > 0 }];
+  if (hasMethod(lines, method)) return rebalanceSuggested(lines.filter((line) => line.method !== method), total);
+  return rebalanceSuggested([...lines, { id, method, amount: '', suggested: true }], total);
 }
 
-export function removeLine(lines: PaymentLine[], id: number): PaymentLine[] {
-  return lines.filter((line) => line.id !== id);
+/** Quitar una línea: lo que cubría pasa a la primera sugerida que quede. */
+export function removeLine(lines: PaymentLine[], id: number, total: number): PaymentLine[] {
+  return rebalanceSuggested(lines.filter((line) => line.id !== id), total);
 }
 
-/** El cajero escribió en el input: desde acá el monto es suyo. */
-export function setLineAmount(lines: PaymentLine[], id: number, amount: string): PaymentLine[] {
-  return lines.map((line) => (line.id === id ? { ...line, amount, suggested: false } : line));
+/** El cajero escribió en el input: desde acá el monto es suyo y las sugeridas se acomodan a lo que falte. */
+export function setLineAmount(lines: PaymentLine[], id: number, amount: string, total: number): PaymentLine[] {
+  return rebalanceSuggested(
+    lines.map((line) => (line.id === id ? { ...line, amount, suggested: false } : line)),
+    total,
+  );
 }
 
 /** Billete rápido sobre la línea de efectivo: reemplaza el monto sugerido o suma al que cargó el cajero. */
-export function addBill(lines: PaymentLine[], bill: number): PaymentLine[] {
-  return lines.map((line) => {
-    if (line.method !== 'CASH') return line;
-    const amount = line.suggested ? bill : sumMoney([lineAmount(line), bill]);
-    return { ...line, amount: formatArsInput(amount), suggested: false };
-  });
+export function addBill(lines: PaymentLine[], bill: number, total: number): PaymentLine[] {
+  return rebalanceSuggested(
+    lines.map((line) => {
+      if (line.method !== 'CASH') return line;
+      const amount = line.suggested ? bill : sumMoney([lineAmount(line), bill]);
+      return { ...line, amount: formatArsInput(amount), suggested: false };
+    }),
+    total,
+  );
 }
 
-/** "Monto justo": el efectivo cubre exactamente lo que no pagan los otros medios. Sin nada que cubrir, no cambia. */
+/**
+ * "Monto justo": el efectivo cubre exactamente lo que no pagan los otros medios, tal como se ven. Esos montos quedan
+ * fijos (dejan de ser sugeridos) y el efectivo pasa a ser el que sigue al total. Sin nada que cubrir, no cambia.
+ */
 export function exactCash(lines: PaymentLine[], total: number): PaymentLine[] {
   const need = subtractMoney(total, paymentTotals(lines, total).nonCash);
-  if (need <= 0) return lines;
-  return lines.map((line) =>
-    line.method === 'CASH' ? { ...line, amount: formatArsInput(need), suggested: true } : line,
+  if (need <= 0 || !hasMethod(lines, 'CASH')) return lines;
+  return rebalanceSuggested(
+    lines.map((line) => {
+      if (line.method === 'CASH') return { ...line, amount: formatArsInput(need), suggested: true };
+      return line.suggested ? { ...line, suggested: false } : line;
+    }),
+    total,
   );
 }
 
