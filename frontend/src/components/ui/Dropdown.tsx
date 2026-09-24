@@ -10,7 +10,9 @@ import {
   type HTMLAttributes,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
+  type RefObject,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 import { cn } from '@/lib/cn';
 import { useOnClickOutside } from '@/lib/useOnClickOutside';
@@ -26,13 +28,20 @@ export interface UseDropdownOptions {
    * siempre el primero (menús de acciones que además incluyen una opción marcada, como el tema en el menú de usuario).
    */
   initialFocus?: 'checked' | 'first';
+  /**
+   * El panel va flotando: en un portal sobre `document.body`, con `position: fixed` contra el disparador. Usalo en los
+   * menús que viven dentro de una tabla o de cualquier contenedor con `overflow` (p. ej. las acciones de una fila): el
+   * panel no estira ni lo recorta el contenedor, se abre hacia arriba si abajo no hay lugar y sigue al disparador con
+   * el scroll. Los menús de la barra superior no lo necesitan.
+   */
+  floating?: boolean;
 }
 
 /**
  * Estado y accesibilidad de un desplegable anclado a un botón: click afuera, ESC (devuelve el foco),
  * navegación con flechas entre ítems de menú y cierre al cambiar de ruta.
  */
-export function useDropdown({ kind = 'menu', initialFocus = 'checked' }: UseDropdownOptions = {}) {
+export function useDropdown({ kind = 'menu', initialFocus = 'checked', floating = false }: UseDropdownOptions = {}) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -80,7 +89,12 @@ export function useDropdown({ kind = 'menu', initialFocus = 'checked' }: UseDrop
     else if (event.key === 'ArrowUp') next = (index - 1 + items.length) % items.length;
     else if (event.key === 'Home') next = 0;
     else if (event.key === 'End') next = items.length - 1;
-    else if (event.key === 'Tab') setOpen(false);
+    else if (event.key === 'Tab') {
+      // El panel flotante está al final del body: se devuelve el foco al disparador antes de que el navegador mueva el
+      // foco, así Tab sigue desde ahí (como si el menú estuviera al lado del botón) y no se va al final de la página.
+      if (floating) triggerRef.current?.focus();
+      setOpen(false);
+    }
     if (next >= 0) {
       event.preventDefault();
       items[next].focus();
@@ -105,12 +119,18 @@ export function useDropdown({ kind = 'menu', initialFocus = 'checked' }: UseDrop
       id: panelId,
       role: kind,
       onKeyDown: onPanelKeyDown,
+      anchorRef: floating ? triggerRef : undefined,
     },
   };
 }
 
 export interface DropdownPanelProps extends HTMLAttributes<HTMLDivElement> {
   align?: 'start' | 'end';
+  /**
+   * Disparador contra el que flota el panel. Lo pone `useDropdown({ floating: true })` en `panelProps`; sin él, el
+   * panel va anclado debajo del disparador dentro de su contenedor.
+   */
+  anchorRef?: RefObject<HTMLElement>;
 }
 
 /** Margen mínimo entre un panel flotante y el borde de la pantalla (el gutter mobile de docs/design-system.md). */
@@ -128,18 +148,63 @@ export function viewportShift(left: number, width: number, viewportWidth: number
   return Math.round(shift);
 }
 
+/** Separación entre el disparador y el panel (el `mt-2` del panel anclado) y margen vertical contra la pantalla. */
+const FLOATING_GAP_PX = 8;
+
+export interface FloatingPosition {
+  /** Coordenadas del panel en la pantalla (`position: fixed`). */
+  top: number;
+  left: number;
+  /** De qué lado del disparador quedó: abajo si entra; si no, arriba. */
+  side: 'bottom' | 'top';
+}
+
 /**
- * Panel flotante debajo del disparador (el contenedor debe ser `relative`). Se alinea al borde pedido y, si así se
- * saldría de la pantalla (p. ej. el selector de sucursal, centrado en la barra de un celular), se corre lo justo para
- * quedar dentro con el gutter de 16 px. El corrimiento usa la propiedad `translate`, que se suma al `transform` de la
- * animación de entrada sin pisarlo.
+ * Dónde va un panel flotante de `size` px contra el rectángulo del disparador (`anchor`, de `getBoundingClientRect`).
+ * Abre hacia abajo si entra y, si no, hacia arriba (la última fila de una tabla); si no entra de ningún lado, va del
+ * lado con más lugar y pegado al borde de la pantalla. Horizontalmente se alinea al borde pedido y se corre lo justo
+ * para quedar dentro del gutter de 16 px ({@link viewportShift}).
+ */
+export function floatingPosition(
+  anchor: Pick<DOMRect, 'top' | 'bottom' | 'left' | 'right'>,
+  size: { width: number; height: number },
+  viewport: { width: number; height: number },
+  align: 'start' | 'end' = 'end',
+): FloatingPosition {
+  const spaceBelow = viewport.height - anchor.bottom - FLOATING_GAP_PX * 2;
+  const spaceAbove = anchor.top - FLOATING_GAP_PX * 2;
+  const fitsBelow = size.height <= spaceBelow;
+  const fitsAbove = size.height <= spaceAbove;
+  const side = fitsBelow || (!fitsAbove && spaceBelow >= spaceAbove) ? 'bottom' : 'top';
+  let top = side === 'bottom' ? anchor.bottom + FLOATING_GAP_PX : anchor.top - FLOATING_GAP_PX - size.height;
+  if (!fitsBelow && !fitsAbove) {
+    top = Math.max(FLOATING_GAP_PX, Math.min(top, viewport.height - FLOATING_GAP_PX - size.height));
+  }
+  const left = align === 'end' ? anchor.right - size.width : anchor.left;
+  return {
+    top: Math.round(top),
+    left: Math.round(left + viewportShift(left, size.width, viewport.width)),
+    side,
+  };
+}
+
+/**
+ * Panel flotante del disparador. Anclado (lo habitual, el contenedor debe ser `relative`) va debajo del disparador, se
+ * alinea al borde pedido y, si así se saldría de la pantalla (p. ej. el selector de sucursal, centrado en la barra de
+ * un celular), se corre lo justo para quedar dentro con el gutter de 16 px; el corrimiento usa la propiedad
+ * `translate`, que se suma al `transform` de la animación de entrada sin pisarlo.
+ *
+ * Con `anchorRef` (`useDropdown({ floating: true })`) va en un portal con `position: fixed`: no agranda ni lo recorta
+ * un contenedor con `overflow` (una tabla), abre hacia arriba cuando abajo no hay lugar y se reubica con el scroll y
+ * al cambiar el tamaño de la ventana ({@link floatingPosition}).
  */
 export const DropdownPanel = forwardRef<HTMLDivElement, DropdownPanelProps>(function DropdownPanel(
-  { align = 'end', className, style, ...props },
+  { align = 'end', anchorRef, className, style, ...props },
   ref,
 ) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [shift, setShift] = useState(0);
+  const [position, setPosition] = useState<FloatingPosition | null>(null);
 
   const setRefs = useCallback(
     (node: HTMLDivElement | null) => {
@@ -153,6 +218,33 @@ export const DropdownPanel = forwardRef<HTMLDivElement, DropdownPanelProps>(func
   useLayoutEffect(() => {
     const panel = panelRef.current;
     if (!panel) return;
+    if (anchorRef) {
+      const placeFloating = () => {
+        const anchor = anchorRef.current;
+        if (!anchor) return;
+        const root = document.documentElement;
+        const next = floatingPosition(
+          anchor.getBoundingClientRect(),
+          { width: panel.offsetWidth, height: panel.offsetHeight },
+          { width: root.clientWidth, height: root.clientHeight },
+          align,
+        );
+        // El scroll dispara muchas veces: solo se vuelve a dibujar si el panel se movió.
+        setPosition((previous) =>
+          previous && previous.top === next.top && previous.left === next.left && previous.side === next.side
+            ? previous
+            : next,
+        );
+      };
+      placeFloating();
+      window.addEventListener('resize', placeFloating);
+      // En captura: también el scroll de la tabla o del contenido, que no burbujea hasta la ventana.
+      window.addEventListener('scroll', placeFloating, true);
+      return () => {
+        window.removeEventListener('resize', placeFloating);
+        window.removeEventListener('scroll', placeFloating, true);
+      };
+    }
     const place = () => {
       const anchor = panel.offsetParent;
       // Los paneles `fixed` (la campana en celulares) ya se ubican contra la pantalla.
@@ -167,13 +259,37 @@ export const DropdownPanel = forwardRef<HTMLDivElement, DropdownPanelProps>(func
     place();
     window.addEventListener('resize', place);
     return () => window.removeEventListener('resize', place);
-  }, [align]);
+  }, [align, anchorRef]);
+
+  const panelClasses = cn(
+    'z-40 min-w-[14rem] animate-in fade-in-0 zoom-in-95 rounded-panel border border-border bg-popover p-1.5',
+    'text-popover-foreground shadow-pop focus:outline-none',
+  );
+
+  if (anchorRef) {
+    return createPortal(
+      <div
+        ref={setRefs}
+        data-side={position?.side ?? 'bottom'}
+        className={cn(
+          'fixed',
+          panelClasses,
+          position?.side === 'top' ? 'origin-bottom' : 'origin-top',
+          className,
+        )}
+        style={{ ...style, top: position?.top ?? 0, left: position?.left ?? 0 }}
+        {...props}
+      />,
+      document.body,
+    );
+  }
 
   return (
     <div
       ref={setRefs}
       className={cn(
-        'absolute top-full z-40 mt-2 min-w-[14rem] origin-top animate-in fade-in-0 zoom-in-95 rounded-panel border border-border bg-popover p-1.5 text-popover-foreground shadow-pop focus:outline-none',
+        'absolute top-full mt-2 origin-top',
+        panelClasses,
         align === 'end' ? 'right-0' : 'left-0',
         className,
       )}

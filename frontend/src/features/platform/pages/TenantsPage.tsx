@@ -349,9 +349,12 @@ export default function TenantsPage() {
   );
 }
 
-/** Acciones administrativas de una fila, según el estado del cliente. */
+/**
+ * Acciones administrativas de una fila, según el estado del cliente. El menú flota sobre la página: en la última fila
+ * se abre hacia arriba en vez de estirar la tabla.
+ */
 function TenantRowMenu({ tenant, onAction }: { tenant: TenantSummary; onAction: (action: TenantAction) => void }) {
-  const dropdown = useDropdown();
+  const dropdown = useDropdown({ floating: true });
   const navigate = useNavigate();
 
   const run = (action: TenantAction) => {
@@ -365,7 +368,7 @@ function TenantRowMenu({ tenant, onAction }: { tenant: TenantSummary; onAction: 
   };
 
   return (
-    <div className="relative inline-block text-left">
+    <div className="inline-block text-left">
       <Button
         {...dropdown.triggerProps}
         variant="ghost"
