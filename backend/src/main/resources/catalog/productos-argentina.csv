@@ -7,7 +7,8 @@
 # © colaboradores de Open Food Facts. Nombres, marcas y contenidos revisados y normalizados para GondolIA; los
 # códigos de barras son los de la base pública, sin cambios.
 #
-# Formato: separado por ";", una fila por producto. codigo = EAN-13/EAN-8 con dígito verificador válido.
+# Formato: separado por ";", una fila por producto y sin comillas (ningún campo lleva ";" ni comillas). codigo =
+# EAN-13/EAN-8 con dígito verificador válido.
 codigo;nombre;marca;contenido;categoria;fuente
 7798062547788;Agua mineral con gas Villavicencio 1,5 L;Villavicencio;1,5 L;Bebidas;OFF
 7792799000639;Agua mineral Eco de los Andes 1 L;Eco de los Andes;1 L;Bebidas;OFF

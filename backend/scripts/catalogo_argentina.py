@@ -18,9 +18,10 @@ Cómo se armó y cómo ampliarlo (Python 3.10+, solo biblioteca estándar):
   2. Revisá los candidatos a mano: descartá los de nombre vacío, dudoso o en otro idioma, dejá el nombre prolijo
      ("Yerba mate Playadito 500 g", "Galletitas Chocolinas 150 g"), la marca, el contenido y una categoría de
      CATEGORIAS, y pegá las filas buenas en el catálogo.
-  3. verificar: controla el formato, los dígitos verificadores, los duplicados y las categorías, y con --online
-     confirma que cada código existe en su base (columna fuente) y deja un informe con los datos públicos al lado de
-     los nuestros para revisar nombres y contenidos. --reescribir ordena las filas y rehace la cabecera:
+  3. verificar: controla el formato (6 columnas y sin comillas, porque el backend corta cada línea en ";" tal cual),
+     los dígitos verificadores, los duplicados y las categorías, y con --online confirma que cada código existe en su
+     base (columna fuente) y deja un informe con los datos públicos al lado de los nuestros para revisar nombres y
+     contenidos. --reescribir ordena las filas y rehace la cabecera:
        python3 backend/scripts/catalogo_argentina.py verificar --reescribir
        python3 backend/scripts/catalogo_argentina.py verificar --online --informe /tmp/verificacion.tsv
 """
@@ -60,7 +61,8 @@ CABECERA = """\
 # © colaboradores de Open Food Facts. Nombres, marcas y contenidos revisados y normalizados para GondolIA; los
 # códigos de barras son los de la base pública, sin cambios.
 #
-# Formato: separado por ";", una fila por producto. codigo = EAN-13/EAN-8 con dígito verificador válido.
+# Formato: separado por ";", una fila por producto y sin comillas (ningún campo lleva ";" ni comillas). codigo =
+# EAN-13/EAN-8 con dígito verificador válido.
 """
 
 # Categorías del mundo demo (backend/src/main/java/com/gondolia/seed/DemoCatalog.java), en el orden en que se listan.
@@ -253,6 +255,10 @@ def verificar(online: bool, informe: Path | None, reescribir: bool) -> int:
             errores.append(f"fila {numero}: {codigo} tiene una categoría que no es del mundo demo: {fila['categoria']}")
         if fila["fuente"] not in PRODUCT_URLS:
             errores.append(f"fila {numero}: {codigo} tiene una fuente desconocida: {fila['fuente']}")
+        con_comillas = [columna for columna in COLUMNAS if '"' in fila[columna]]
+        if con_comillas:
+            errores.append(f"fila {numero}: {codigo} tiene comillas en {', '.join(con_comillas)} (el backend no las "
+                           f"interpreta y las mostraría tal cual)")
     if online:
         errores += verificar_online(filas, informe)
     for error in errores:
@@ -296,21 +302,27 @@ def verificar_online(filas: list[dict], informe: Path | None) -> list[str]:
 # --- catálogo -------------------------------------------------------------------------------------------------------
 
 def leer_catalogo() -> list[dict]:
+    """Filas del catálogo leídas igual que ReferenceCatalog del backend: cada línea cortada en ";", sin interpretar
+    comillas. Una comilla queda en el campo (verificar la rechaza) y un ";" dentro de un campo suma una columna."""
     if not CATALOGO.exists():
         return []
-    datos = [linea for linea in CATALOGO.read_text(encoding="utf-8").splitlines()
+    datos = [linea.split(";") for linea in CATALOGO.read_text(encoding="utf-8").splitlines()
              if linea.strip() and not linea.startswith("#")]
-    lector = csv.DictReader(io.StringIO("\n".join(datos)), delimiter=";")
-    if lector.fieldnames != COLUMNAS:
-        raise SystemExit(f"Columnas inesperadas en {CATALOGO}: {lector.fieldnames} (se esperaba {COLUMNAS})")
-    return [{clave: (valor or "").strip() for clave, valor in fila.items()} for fila in lector]
+    if not datos or datos[0] != COLUMNAS:
+        raise SystemExit(f"Columnas inesperadas en {CATALOGO}: {datos[0] if datos else []} (se esperaba {COLUMNAS})")
+    malas = [";".join(campos) for campos in datos[1:] if len(campos) != len(COLUMNAS)]
+    if malas:
+        raise SystemExit(f"Filas de {CATALOGO} sin {len(COLUMNAS)} columnas (¿un \";\" dentro de un campo?):\n"
+                         + "\n".join(malas))
+    return [{clave: valor.strip() for clave, valor in zip(COLUMNAS, campos)} for campos in datos[1:]]
 
 
 def escribir_catalogo(filas: list[dict]) -> None:
     orden = {categoria: indice for indice, categoria in enumerate(CATEGORIAS)}
     filas = sorted(filas, key=lambda fila: (orden.get(fila["categoria"], 99), sin_tildes(fila["nombre"]).lower()))
     salida = io.StringIO()
-    writer = csv.DictWriter(salida, fieldnames=COLUMNAS, delimiter=";", lineterminator="\n")
+    # Sin comillas, como lo lee el backend: un campo con ";" o comillas hace fallar la escritura en lugar de colarse.
+    writer = csv.DictWriter(salida, fieldnames=COLUMNAS, delimiter=";", lineterminator="\n", quoting=csv.QUOTE_NONE)
     writer.writeheader()
     writer.writerows(filas)
     CATALOGO.parent.mkdir(parents=True, exist_ok=True)

@@ -89,6 +89,7 @@ public class ReferenceCatalog {
                 if (line.isBlank() || line.startsWith("#")) {
                     continue;
                 }
+                // Sin comillas ni ";" dentro de un campo: lo controlan catalogo_argentina.py y ReferenceCatalogTest.
                 List<String> fields = List.of(line.split(";", -1));
                 if (header) {
                     if (!fields.equals(COLUMNS)) {

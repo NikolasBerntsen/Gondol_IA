@@ -488,7 +488,8 @@ export default function IntakePage() {
                 </div>
               ) : (
                 <p className="text-base text-muted-foreground">
-                  No encontramos el producto en la base pública. Creálo a mano y después cargá su mercadería.
+                  No encontramos el producto en el catálogo ni en la base pública. Crealo a mano y después cargá su
+                  mercadería.
                 </p>
               )}
               <div className="flex flex-col-reverse gap-2 sm:flex-row">

@@ -9,11 +9,13 @@ import java.io.StringReader;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
 /**
  * Catálogo de referencia de productos argentinos ({@code catalog/productos-argentina.csv}): el archivo publicado carga
- * entero, sin códigos repetidos ni dígitos verificadores inválidos, y responde como el autocompletado espera.
+ * entero, sin códigos repetidos, dígitos verificadores inválidos ni comillas, y responde como el autocompletado
+ * espera.
  */
 class ReferenceCatalogTest {
 
@@ -35,6 +37,10 @@ class ReferenceCatalogTest {
             assertThat(entry.brand()).as(entry.barcode()).isNotBlank();
             assertThat(entry.category()).as(entry.barcode()).isNotBlank();
             assertThat(entry.source()).as(entry.barcode()).isIn(SOURCES);
+            // Cada línea se corta en ";" sin interpretar comillas: una comilla se vería tal cual en la pantalla.
+            assertThat(Stream.of(entry.name(), entry.brand(), entry.quantity(), entry.category()))
+                    .as("comillas en " + entry.barcode())
+                    .noneMatch(field -> field != null && field.contains("\""));
         }
         // Productos de Argentina: casi todos con el prefijo GS1 779.
         long argentine = barcodes.stream().filter(barcode -> barcode.startsWith("779")).count();
