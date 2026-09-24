@@ -874,7 +874,8 @@ Contraseñas: plataforma `Gondolia2026!`, comercios `Demo2026!`.
   (incluido al menos un caso donde un lote más nuevo vence antes que uno más viejo, para mostrar el aviso de FIFO).
 - Patrones sembrados: finde fuerte (bebidas, snacks), estable (leche, pan), intermitente (especias), creciente,
   decreciente, sin movimiento, picos anómalos, lotes por vencer con sobrestock, productos bajo mínimo, algunos
-  vencidos pendientes; tickets de soporte con conversación (incluida una imagen), avisos generales y un recall histórico resuelto.
+  vencidos pendientes; tickets de soporte con conversación (incluida una imagen), avisos generales y un recall pendiente
+  (publicado el día anterior, sin resolver en los comercios alcanzados) para mostrar y resolver en la demo.
 
 ---
 

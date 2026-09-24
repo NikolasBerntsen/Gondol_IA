@@ -32,9 +32,10 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Las "historias" del mundo demo que no salen de la simulación: avisos generales y el recall histórico con sus
- * notificaciones, recomendaciones de la IA ya decididas (con el resultado medido que la IA recibe como feedback),
- * coincidencias de recall resueltas, la importación inicial de El Sol y las conversaciones de soporte.
+ * Las "historias" del mundo demo que no salen de la simulación: avisos generales y el recall pendiente del dulce de
+ * leche con sus notificaciones, recomendaciones de la IA ya decididas (con el resultado medido que la IA recibe como
+ * feedback), las coincidencias abiertas de ese recall, la importación inicial de El Sol y las conversaciones de
+ * soporte.
  */
 final class DemoStories {
 
@@ -47,7 +48,11 @@ final class DemoStories {
                      Set<BusinessType> targets, double readShare) {
     }
 
-    record Announcements(long oldRecallId, String oldRecallTitle, Published oldRecall, List<Published> general) {
+    /** Recall pendiente: sus datos arman el texto de la alerta igual que {@link RecallMatchingService}. */
+    record PendingRecall(long id, String title, String reason, String instructions) {
+    }
+
+    record Announcements(PendingRecall recall, Published recallNotice, List<Published> general) {
     }
 
     private final SeedJdbc db;
@@ -65,7 +70,7 @@ final class DemoStories {
         this.rnd = new SeedRandom(StoreSimulator.seedOf("historias", world.today()));
     }
 
-    // ------------------------------------------------------------------ avisos y recall histórico
+    // ------------------------------------------------------------------ avisos y recall pendiente
 
     Announcements announcements(Platform platform) {
         long owner = platform.id("dueno@gondolia.app");
@@ -117,16 +122,19 @@ final class DemoStories {
                 "Borrador: en octubre sumamos el ranking de categorías con mayor merma y la comparación entre "
                         + "sucursales por categoría.", partner, draftCreated, draftCreated);
 
-        // Recall histórico (ya resuelto por los comercios alcanzados).
-        DemoCatalog.Template product = DemoCatalog.byKey(DemoScenarios.OLD_RECALL_PRODUCT);
-        String title = "Retiro preventivo: Dulce de leche Dulce Valle 400 g, lote " + DemoScenarios.OLD_RECALL_LOT;
+        // Recall pendiente (ayer a la tarde): los comercios alcanzados todavía no lo atendieron. Como en
+        // AnnouncementService.create, se crea y se publica en el mismo instante y alcanza a todos los rubros.
+        DemoCatalog.Template product = DemoCatalog.byKey(DemoScenarios.PENDING_RECALL_PRODUCT);
+        String lotNumber = DemoScenarios.PENDING_RECALL_LOT;
+        String title = "Retiro preventivo: Dulce de leche Dulce Valle 400 g, lote " + lotNumber;
         String reason = "Falla en el sellado de los potes detectada por el fabricante (posible contaminación)";
-        String instructions = "Retirá todas las unidades del lote " + DemoScenarios.OLD_RECALL_LOT
+        String instructions = "Retirá todas las unidades del lote " + lotNumber
                 + " de la góndola y del depósito, separalas y coordiná la devolución con tu proveedor. No las vendas.";
-        String body = "Dulce Valle informó una falla en el sellado de los potes del lote " + DemoScenarios.OLD_RECALL_LOT
+        String body = "Dulce Valle informó una falla en el sellado de los potes del lote " + lotNumber
                 + " que podría afectar la inocuidad del producto. Si lo tenés en stock, GondolIA ya lo puso en "
                 + "cuarentena: retiralo de la venta y seguí las instrucciones.";
-        Instant published = world.daysAgo(DemoScenarios.OLD_RECALL_DAYS_AGO, LocalTime.of(10, 0));
+        Instant published = world.daysAgo(DemoScenarios.PENDING_RECALL_DAYS_AGO,
+                DemoScenarios.PENDING_RECALL_PUBLISHED_AT);
         long recallId = db.insert("""
                 insert into announcements (kind, severity, status, title, body, recall_product_name, recall_brand,
                                            recall_barcode, recall_all_lots, recall_reason, recall_instructions,
@@ -134,12 +142,12 @@ final class DemoStories {
                                            created_at, updated_at)
                 values ('RECALL', 'CRITICAL', 'PUBLISHED', ?, ?, ?, ?, ?, false, ?, ?, 0, 0, ?, ?, ?, ?)""",
                 title, body, product.name(), product.brand(), product.barcode(), reason, instructions, partner,
-                published, published.minus(Duration.ofMinutes(25)), published);
+                published, published, published);
         db.update("""
                 insert into announcement_recall_lots (announcement_id, lot_number, lot_number_normalized)
-                values (?, ?, ?)""", recallId, DemoScenarios.OLD_RECALL_LOT, DemoScenarios.OLD_RECALL_LOT);
-        Published oldRecall = new Published(recallId, title, body, Severity.CRITICAL, published, null, 0.95);
-        return new Announcements(recallId, title, oldRecall, general);
+                values (?, ?, ?)""", recallId, lotNumber, lotNumber);
+        Published notice = new Published(recallId, title, body, Severity.CRITICAL, published, null, 0.95);
+        return new Announcements(new PendingRecall(recallId, title, reason, instructions), notice, general);
     }
 
     private Published publish(long author, Severity severity, String title, String body, int daysAgo,
@@ -155,10 +163,14 @@ final class DemoStories {
         return new Published(id, title, body, severity, published, targets, readShare);
     }
 
-    /** Notificaciones y lecturas de los avisos para los usuarios de los comercios activos en ese momento. */
-    void announcementNotifications(List<TenantRecord> tenants, Announcements announcements) {
+    /**
+     * Notificaciones y lecturas de los avisos para los usuarios de los comercios activos en ese momento. Los usuarios
+     * de {@code recallAlerted} (los que recibieron la alerta del recall pendiente) no leyeron el aviso del recall:
+     * no entraron desde que salió, si no les habría saltado el diálogo de Seguridad alimentaria.
+     */
+    void announcementNotifications(List<TenantRecord> tenants, Announcements announcements, Set<Long> recallAlerted) {
         List<Published> all = new ArrayList<>(announcements.general());
-        all.add(announcements.oldRecall());
+        all.add(announcements.recallNotice());
         try (SeedJdbc.Copy notifications = db.copy("notifications", "user_id, tenant_id, type, severity, title, body, "
                 + "link, reference_type, reference_id, read_at, created_at");
              SeedJdbc.Copy reads = db.copy("announcement_reads", "announcement_id, user_id, read_at")) {
@@ -174,7 +186,9 @@ final class DemoStories {
                     for (Map.Entry<String, Long> user : tenant.users.entrySet()) {
                         recipients++;
                         Instant readAt = null;
-                        if (rnd.chance(published.readShare())) {
+                        boolean alerted = published == announcements.recallNotice()
+                                && recallAlerted.contains(user.getValue());
+                        if (rnd.chance(published.readShare()) && !alerted) {
                             readAt = published.publishedAt().plus(Duration.ofMinutes(rnd.between(20, 3 * 24 * 60)));
                             if (readAt.isAfter(world.now())) {
                                 readAt = null;
@@ -220,48 +234,53 @@ final class DemoStories {
         return text.length() <= 300 ? text : text.substring(0, 297).strip() + "…";
     }
 
-    // ------------------------------------------------------------------ recall histórico: coincidencias
+    // ------------------------------------------------------------------ recall pendiente: coincidencias
 
-    void recallMatches(List<TenantRecord> tenants, SimOutput out, Announcements announcements) {
+    /**
+     * Lo que deja {@link RecallMatchingService} al detectar cada lote alcanzado, sin que nadie lo haya atendido: la
+     * coincidencia {@code OPEN} (sin confirmar ni resolver), la alerta {@code RECALL_MATCH} abierta y la notificación
+     * {@code RECALL_ALERT} sin leer para cada usuario con acceso a la sucursal. El lote ya quedó {@code RECALLED} con
+     * su remanente en la simulación y nadie lo retiró del stock.
+     *
+     * @return los usuarios que recibieron la alerta
+     */
+    Set<Long> recallMatches(SimOutput out, Announcements announcements) {
+        PendingRecall recall = announcements.recall();
         Set<Long> affectedTenants = new java.util.HashSet<>();
-        for (SimOutput.RecallOutcome recall : out.recalls) {
-            TenantRecord tenant = tenants.stream().filter(record -> record.id == recall.tenantId()).findFirst()
-                    .orElseThrow();
-            affectedTenants.add(recall.tenantId());
-            Lot lot = recall.lot();
+        Set<Long> alerted = new java.util.HashSet<>();
+        for (SimOutput.RecallOutcome match : out.recalls) {
+            affectedTenants.add(match.tenantId());
+            Lot lot = match.lot();
             long matchId = db.insert("""
                     insert into recall_matches (announcement_id, tenant_id, branch_id, product_id, lot_id,
-                                                quantity_at_match, status, resolution, resolution_note, matched_at,
-                                                acknowledged_at, acknowledged_by, resolved_at, resolved_by)
-                    values (?, ?, ?, ?, ?, ?, 'RESOLVED', ?, ?, ?, ?, ?, ?, ?)""", announcements.oldRecallId(),
-                    recall.tenantId(), recall.branchId(), recall.product().id, lot.id, recall.quantityAtMatch(),
-                    recall.resolution(), recall.note(), recall.matchedAt(), recall.acknowledgedAt(),
-                    recall.acknowledgedBy(), recall.resolvedAt(), recall.resolvedBy());
-            String productName = recall.product().template.name();
-            String message = recall.branchName() + ": el lote " + lot.lotNumber + " de " + productName
-                    + (lot.expiryDate == null ? "" : " (vence " + lot.expiryDate.format(DAY) + ")")
-                    + " está alcanzado por el recall \"" + announcements.oldRecallTitle()
-                    + "\". Quedó en cuarentena y no se puede vender.";
+                                                quantity_at_match, status, matched_at)
+                    values (?, ?, ?, ?, ?, ?, 'OPEN', ?)""", recall.id(), match.tenantId(), match.branchId(),
+                    match.product().id, lot.id, match.quantityAtMatch(), match.matchedAt());
+            String productName = match.product().template.name();
+            String message = RecallMatchingService.alertMessage(match.branchName(), productName, lot.lotNumber,
+                    lot.expiryDate, recall.title(), recall.reason(), recall.instructions());
             db.update("""
                     insert into alerts (tenant_id, branch_id, type, severity, status, product_id, lot_id, announcement_id,
-                                        title, message, dedupe_key, handled_by, resolved_at, created_at, updated_at)
-                    values (?, ?, 'RECALL_MATCH', 'CRITICAL', 'RESOLVED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    recall.tenantId(), recall.branchId(), recall.product().id, lot.id, announcements.oldRecallId(),
-                    "Recall: " + productName + " (lote " + lot.lotNumber + ")", message,
-                    "RECALL:" + announcements.oldRecallId() + ":" + lot.id, recall.resolvedBy(), recall.resolvedAt(),
-                    recall.matchedAt(), recall.resolvedAt());
-            for (Long userId : recall.branchUserIds()) {
-                Instant readAt = recall.matchedAt().plus(Duration.ofMinutes(rnd.between(2, 90)));
+                                        title, message, dedupe_key, created_at, updated_at)
+                    values (?, ?, 'RECALL_MATCH', 'CRITICAL', 'OPEN', ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    match.tenantId(), match.branchId(), match.product().id, lot.id, recall.id(),
+                    RecallMatchingService.alertTitle(productName, lot.lotNumber), message,
+                    RecallMatchingService.ALERT_DEDUPE_PREFIX + recall.id() + ":" + lot.id, match.matchedAt(),
+                    match.matchedAt());
+            for (Long userId : match.branchUserIds()) {
                 db.update("""
                         insert into notifications (user_id, tenant_id, type, severity, title, body, link, reference_type,
-                                                   reference_id, read_at, created_at)
-                        values (?, ?, 'RECALL_ALERT', 'CRITICAL', ?, ?, ?, 'RECALL_MATCH', ?, ?, ?)""",
-                        userId, tenant.id, "Alerta de recall: " + productName, message,
-                        RecallMatchingService.recallMatchLink(matchId), matchId, readAt, recall.matchedAt());
+                                                   reference_id, created_at)
+                        values (?, ?, 'RECALL_ALERT', 'CRITICAL', ?, ?, ?, ?, ?, ?)""",
+                        userId, match.tenantId(), RecallMatchingService.notificationTitle(productName), message,
+                        RecallMatchingService.recallMatchLink(matchId), RecallMatchingService.REFERENCE_TYPE, matchId,
+                        match.matchedAt());
+                alerted.add(userId);
             }
         }
         db.update("update announcements set affected_tenants_count = ? where id = ?", affectedTenants.size(),
-                announcements.oldRecallId());
+                recall.id());
+        return alerted;
     }
 
     // ------------------------------------------------------------------ recomendaciones ya decididas

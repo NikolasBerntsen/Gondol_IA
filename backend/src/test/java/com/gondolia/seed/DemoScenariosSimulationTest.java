@@ -79,14 +79,27 @@ class DemoScenariosSimulationTest {
         }
     }
 
-    /** Los lotes de los recalls armados no se transfieren: el recall en vivo alcanza solo a Don Pepe y Fisherton. */
+    /**
+     * Los lotes de los recalls armados no se transfieren: el recall en vivo alcanza solo a Don Pepe y Fisherton, y el
+     * pendiente del dulce de leche, a Don Pepe y Centro, siempre con stock en cuarentena y sin retirar.
+     */
     private static void recallLotsStayWhereTheScenarioPutThem(SimulationFixture.Simulation simulation,
                                                               LocalDate today) {
         long donPepe = simulation.branch(DemoWorld.DON_PEPE, "PRI").id;
+        long centro = simulation.branch(DemoWorld.EL_SOL, "CEN").id;
         assertThat(branchesWithLot(simulation, DemoScenarios.LIVE_RECALL_LOT)).as("L2409A (%s)", today)
                 .containsExactlyInAnyOrder(donPepe, simulation.branch(DemoWorld.EL_SOL, "FIS").id);
-        assertThat(branchesWithLot(simulation, DemoScenarios.OLD_RECALL_LOT)).as("DV2603B (%s)", today)
-                .containsExactlyInAnyOrder(donPepe, simulation.branch(DemoWorld.EL_SOL, "CEN").id);
+        assertThat(branchesWithLot(simulation, DemoScenarios.PENDING_RECALL_LOT)).as("DV2603B (%s)", today)
+                .containsExactlyInAnyOrder(donPepe, centro);
+        assertThat(simulation.out().recalls).as("coincidencias del recall pendiente (%s)", today)
+                .extracting(SimOutput.RecallOutcome::branchId).containsExactlyInAnyOrder(donPepe, centro);
+        for (SimOutput.RecallOutcome recall : simulation.out().recalls) {
+            assertThat(recall.lot().recalled).isTrue();
+            assertThat(recall.lot().expiryDate).as("DV2603B vigente (%s)", today).isAfter(today);
+            assertThat(recall.quantityAtMatch()).as("stock al detectarlo (%s)", today).isPositive();
+            assertThat(recall.lot().quantity).as("stock en cuarentena (%s)", today)
+                    .isEqualTo(recall.quantityAtMatch());
+        }
     }
 
     /** El Sol vende también por la fuente manual (datos-demo §4): los pedidos quincenales que carga la administradora. */

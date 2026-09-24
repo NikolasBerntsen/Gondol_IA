@@ -1,6 +1,5 @@
 package com.gondolia.seed;
 
-import com.gondolia.domain.announcement.RecallResolution;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -60,10 +59,9 @@ final class SimOutput {
                           int stockAtDecision, double avgDaily, java.time.LocalDate suggestedDate) {
     }
 
+    /** Lote que quedó en cuarentena por el recall pendiente, con los usuarios con acceso a su sucursal. */
     record RecallOutcome(long tenantId, long branchId, String branchName, SimModel.Product product,
-                         SimModel.Lot lot, int quantityAtMatch, Instant matchedAt, Instant acknowledgedAt,
-                         long acknowledgedBy, Instant resolvedAt, long resolvedBy, RecallResolution resolution,
-                         String note, List<Long> branchUserIds) {
+                         SimModel.Lot lot, int quantityAtMatch, Instant matchedAt, List<Long> branchUserIds) {
     }
 
     /** Lote creado por la importación inicial (una fila de la planilla). */

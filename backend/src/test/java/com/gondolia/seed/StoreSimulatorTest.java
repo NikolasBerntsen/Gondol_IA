@@ -220,14 +220,26 @@ class StoreSimulatorTest {
     }
 
     @Test
-    void historicRecallWasMatchedAndRemoved() {
+    void pendingRecallLeavesItsLotsInQuarantineWithStock() {
+        StoreSimulator.TenantRun donPepe = runs.get(DemoWorld.DON_PEPE);
+        StoreSimulator.TenantRun elSol = runs.get(DemoWorld.EL_SOL);
+        long centro = elSol.branches.stream().filter(b -> b.spec.key().equals("CEN")).findFirst().orElseThrow().id;
         assertThat(out.recalls).hasSize(2);
+        assertThat(out.recalls).extracting(SimOutput.RecallOutcome::branchId)
+                .containsExactlyInAnyOrder(donPepe.branches.getFirst().id, centro);
         for (SimOutput.RecallOutcome recall : out.recalls) {
+            Lot lot = recall.lot();
+            assertThat(lot.lotNumber).isEqualTo(DemoScenarios.PENDING_RECALL_LOT);
+            assertThat(lot.recalled).isTrue();
+            // Publicado ayer a la tarde y sin resolver: el lote sigue en cuarentena con todo lo que tenía.
+            assertThat(recall.matchedAt().atZone(ZONE).toLocalDate()).isEqualTo(TODAY.minusDays(1));
             assertThat(recall.quantityAtMatch()).isPositive();
-            assertThat(recall.lot().recalled).isTrue();
-            assertThat(recall.lot().quantity).isZero();
-            assertThat(recall.lot().lotNumber).isEqualTo(DemoScenarios.OLD_RECALL_LOT);
-            assertThat(recall.resolvedAt()).isAfter(recall.acknowledgedAt());
+            assertThat(lot.quantity).isEqualTo(recall.quantityAtMatch());
+            assertThat(recall.branchUserIds()).isNotEmpty();
+            assertThat(out.movements).noneMatch(m -> m.lot == lot && m.occurredAt.isAfter(recall.matchedAt()));
+            // Como el POS GondolIA, desde la coincidencia no se vende el producto en esa sucursal (de ningún lote).
+            assertThat(out.movements).noneMatch(m -> m.type == MovementType.SALE && m.branchId == recall.branchId()
+                    && m.product == lot.product && m.occurredAt.isAfter(recall.matchedAt()));
         }
     }
 

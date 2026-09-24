@@ -102,7 +102,7 @@ final class SimulationFixture {
         boolean elSol = spec.key().equals(DemoWorld.EL_SOL);
         Instant imported = elSol ? today.minusDays(182).atTime(10, 31).atZone(ZONE).toInstant() : null;
         return new StoreSimulator.TenantRun(spec, tenantId, branches, products, admin, users, imported,
-                elSol ? 77L : null, 99L, DemoScenarios.forTenant(spec.key()));
+                elSol ? 77L : null, DemoScenarios.forTenant(spec.key()));
     }
 
     private SimModel.Register register(long tenantId, long branchId, String name, Instant created) {

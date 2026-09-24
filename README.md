@@ -159,7 +159,7 @@ Datos preparados para la demo:
 - **Varios lotes por producto** en cada sucursal, incluido al menos un caso en el que un lote más nuevo vence antes que uno más viejo.
 - Patrones de venta variados (fin de semana fuerte, estable, intermitente, creciente, en declive, sin movimiento, picos
   anómalos), lotes por vencer con sobrestock, productos bajo mínimo, vencidos pendientes, tickets de soporte con
-  conversación y un recall histórico resuelto.
+  conversación y un recall pendiente (Dulce de leche, lote `DV2603B`) para mostrar y resolver en la demo.
 
 > Con `APP_DEV_FIXTURE=true` (solo para desarrollo) se crea en cambio un comercio mínimo: `jefe@prueba.com`,
 > `admin@prueba.com`, `empleado@prueba.com` (solo Sucursal Centro), `admin@otro.com` y `soporte@gondolia.app`, todos con `Demo2026!`.

@@ -26,7 +26,8 @@ en [`datos-demo.md`](datos-demo.md); este documento cuenta cómo funciona el see
    hace 400 días como el resto del equipo, anterior a todos los comercios; sin tocar su contraseña) y crea
    `socia@gondolia.app`, `soporte@gondolia.app` y `soporte2@gondolia.app` si no existen.
 2. **Avisos**: 4 avisos generales publicados (uno segmentado por rubro, uno de mantenimiento con la fecha del próximo
-   domingo), uno archivado, un borrador y el **recall histórico** (Dulce de leche Dulce Valle 400 g, lote `DV2603B`).
+   domingo), uno archivado, un borrador y el **recall pendiente** (Dulce de leche Dulce Valle 400 g, lote `DV2603B`,
+   publicado ayer a las 18:40).
 3. **Comercios** (17): datos administrativos, `tenant_settings` (FIFO/FEFO), sucursales (con API key de demo en las que
    usan POS propio), usuarios por rol con sus sucursales, módulos habilitados y `tenant_events` fechados (altas, módulos,
    cambios de plan, deshabilitaciones, rehabilitación y bajas) para que crecimiento y churn tengan sentido.
@@ -36,7 +37,8 @@ en [`datos-demo.md`](datos-demo.md); este documento cuenta cómo funciona el see
    (ver §4).
 6. **Escritura en bloque** de lotes, movimientos, turnos, tickets, ítems, pagos y movimientos de caja con `COPY`.
 7. **Historias**: recomendaciones de la IA ya decididas (descuentos aceptados con resultado medido, reposiciones
-   aceptadas y descartadas), coincidencias del recall histórico resueltas (con su alerta resuelta y notificaciones),
+   aceptadas y descartadas), coincidencias del recall pendiente **abiertas** (lote en cuarentena con su stock, alerta
+   `RECALL_MATCH` abierta y notificaciones `RECALL_ALERT` sin leer, con los mismos textos que `RecallMatchingService`),
    la importación inicial APLICADA de El Sol con sus filas, notificaciones y lecturas de los avisos y los tickets de
    soporte con conversación (uno con **foto adjunta real** guardada con `AttachmentStorageService`).
 
@@ -81,10 +83,12 @@ Por comercio, día por día y sucursal por sucursal, con eventos ordenados por h
   número, vencimiento, costo, proveedor y `received_at` original, `origin_lot_id` y `TRANSFER_IN` con `T-...`.
 - **Hoy** se simula hasta la hora actual: ventas del día, turnos en curso abiertos (siempre al menos el de
   `cajero@elsol.com` en Caja 1 de El Sol Centro) y nada en el futuro.
-- **Escenarios armados** (`DemoScenarios`): lote `L2409A` del recall en vivo, recall histórico, caso "lote nuevo que
-  vence antes que uno viejo" en cada sucursal FIFO (y el equivalente con FEFO en Vida Sana), sobrestock por vencer con
-  descuento aceptado, una liquidación en curso, productos sin stock/bajo mínimo (proveedor que deja de entregar),
-  vencidos pendientes y decisiones sobre recomendaciones.
+- **Escenarios armados** (`DemoScenarios`): lote `L2409A` del recall en vivo, recall pendiente del dulce de leche
+  (el lote entra ayer a la mañana y a la tarde la coincidencia lo pone en cuarentena; desde ahí el POS GondolIA no
+  vende el producto en esa sucursal, como `PosSaleService`), caso "lote nuevo que vence antes que uno viejo" en cada
+  sucursal FIFO (y el equivalente con FEFO en Vida Sana), sobrestock por vencer con descuento aceptado, una
+  liquidación en curso, productos sin stock/bajo mínimo (proveedor que deja de entregar), vencidos pendientes y
+  decisiones sobre recomendaciones.
 - **Proveedor que deja de entregar** (`SupplyStop`): avisa 45 días antes; desde ahí no hay compras de oportunidad y
   solo manda cajas completas hasta cubrir lo que falta vender hasta el corte. Desde el corte no se piden más, el pedido
   pendiente no llega y la sucursal no recibe transferencias de ese producto: el faltante documentado se ve siempre,
@@ -119,8 +123,11 @@ Don Pepe → otro comercio = 404; comercios deshabilitados o dados de baja → l
   el webhook en vivo. Son solo para la demo: si la instancia queda expuesta, regenerarlas desde Integración POS.
 - **Foto de soporte generada**: un PNG de la etiqueta con el EAN real de la sopa, dibujado píxel a píxel y codificado a
   mano (sin `java.awt`, que en la imagen Alpine no tiene fuentes).
-- **Recall histórico publicado** (no archivado) para que los comercios lo vean en Avisos con su resolución; el recall
-  en vivo **no** se siembra: lo publica el dueño durante la demo.
+- **Recall pendiente, no resuelto**: se siembra como si el barrido en vivo lo hubiera detectado ayer y nadie lo hubiera
+  atendido (coincidencias `OPEN`, lotes `RECALLED` con stock, alertas abiertas, notificaciones y aviso sin leer para
+  los usuarios alcanzados), así se puede mostrar y resolver en la demo. Publicado ayer y no hace semanas: un recall
+  crítico abierto durante semanas no sería creíble. El recall en vivo **no** se siembra: lo publica el dueño durante la
+  demo.
 - **Recomendaciones decididas con `run_id` nulo**: son anteriores a los análisis de este arranque; su `outcome` tiene
   los mismos campos que mide el job diario (`unitsBefore7d`, `unitsAfter7d`, `lift`, `lotUnitsSold`,
   `lotUnitsRemaining`, `appliedDiscountPct`, `lotUnitsAtAccept`, `measuredAt`) y viaja como `feedback` a la IA.
@@ -148,10 +155,12 @@ Don Pepe → otro comercio = 404; comercios deshabilitados o dados de baja → l
 - `StoreSimulatorTest` (sin base): simula los 17 comercios y **reproduce cada movimiento** verificando que cada venta
   salga del lote correcto según FIFO/FEFO y liquidación, que nunca se venda un vencido o un lote en cuarentena, que
   ningún lote quede negativo, que los arqueos cierren, un turno abierto por usuario, recall en vivo solo en Don Pepe y
-  El Sol Fisherton, resultados de descuentos, casos FIFO, varios lotes vivos, vencidos pendientes y faltantes.
+  El Sol Fisherton, recall pendiente en cuarentena con stock y sin ventas desde la coincidencia, resultados de
+  descuentos, casos FIFO, varios lotes vivos, vencidos pendientes y faltantes.
 - `DemoDataSeederIntegrationTest` (`mvn test -Dgondolia.it=true`): crea la base `gondolia_it_seed`, arranca la
   aplicación con la demo y verifica volumen, tiempo, idempotencia, invariantes de stock y de caja, historias, logins,
-  aislamiento con la API real y el recall en vivo con `RecallMatchingService.matchAnnouncement`.
+  aislamiento con la API real, el recall pendiente (filas, destinatarios, POS bloqueado y resolución en vivo revertida
+  al final) y el recall en vivo con `RecallMatchingService.matchAnnouncement`.
 
 > Para correr **toda** la suite de integración en la base compartida conviene achicar el pool:
 > `DB_POOL_SIZE=5 mvn test -Dgondolia.it=true` (408 pruebas en verde). Con el pool por defecto (20) los contextos de
