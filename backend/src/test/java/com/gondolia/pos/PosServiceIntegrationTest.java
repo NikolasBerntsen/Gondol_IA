@@ -434,11 +434,124 @@ class PosServiceIntegrationTest extends PostgresIntegrationTest {
         assertThat(closed.expectedCash()).isEqualByComparingTo("11300.00");
         assertThat(closed.difference()).isEqualByComparingTo("-300.00");
         assertThat(closed.closingNote()).isEqualTo("Faltan monedas");
+        assertThat(closed.closedWithoutSales()).isFalse();
 
         assertApiError(() -> saleService.create(cashier, new PosSaleRequest(session.id(),
                 List.of(new PosSaleRequest.Item(leche, 1)),
                 List.of(new PosSaleRequest.Payment(PaymentMethod.CASH, new BigDecimal("1400"), null)),
                 null, null, false)), 409, "SESSION_NOT_OPEN");
+    }
+
+    @Test
+    void closesAShiftWithoutSalesAndFreesTheRegisterAndTheCashier() {
+        // El cajero abre la caja en $ 0 y no vende nada (la abrió por error o no hubo ventas en el día).
+        as(cashier, centro);
+        PosSessionReportDto session = sessionService.open(cashier,
+                new OpenSessionRequest(registerCentro, BigDecimal.ZERO));
+        assertThat(session.salesCount()).isZero();
+        assertThat(session.closedWithoutSales()).isFalse();
+
+        PosSessionReportDto closed = sessionService.close(cashier, session.id(),
+                new CloseSessionRequest(BigDecimal.ZERO, null));
+        assertThat(closed.status()).isEqualTo(PosSessionStatus.CLOSED);
+        assertThat(closed.closedWithoutSales()).isTrue();
+        assertThat(closed.expectedCash()).isEqualByComparingTo("0.00");
+        assertThat(closed.countedCash()).isEqualByComparingTo("0.00");
+        assertThat(closed.difference()).isEqualByComparingTo("0.00");
+        assertThat(closed.salesTotal()).isEqualByComparingTo("0.00");
+        assertThat(closed.topProducts()).isEmpty();
+        assertThat(closed.closedByName()).isEqualTo(cashier.fullName());
+
+        // Queda registrado: el historial y el reporte Z lo marcan como cerrado sin ventas.
+        assertThat(sessionService.list(cashier, PosSessionStatus.CLOSED, null, null, true, 0, 20).content())
+                .singleElement()
+                .satisfies(row -> {
+                    assertThat(row.id()).isEqualTo(session.id());
+                    assertThat(row.closedWithoutSales()).isTrue();
+                    assertThat(row.salesCount()).isZero();
+                });
+        assertThat(sessionService.get(cashier, session.id()).closedWithoutSales()).isTrue();
+        assertThat(jdbc.queryForObject("select closed_without_sales from pos_sessions where id = ?", Boolean.class,
+                session.id())).isTrue();
+
+        // La caja quedó libre: el cajero ya no tiene turno y otro cajero abre uno nuevo en la misma caja.
+        assertThat(sessionService.current(cashier)).isNull();
+        assertThat(registerService.get(tenantId, registerCentro).openSession()).isNull();
+        as(otherCashier, centro);
+        PosSessionReportDto next = sessionService.open(otherCashier,
+                new OpenSessionRequest(registerCentro, new BigDecimal("5000")));
+        assertThat(next.registerId()).isEqualTo(registerCentro);
+        assertThat(next.status()).isEqualTo(PosSessionStatus.OPEN);
+
+        // Y el cajero puede abrir otro turno (en otra caja: la suya ahora la usa su compañero).
+        as(cashier, centro);
+        long caja2 = register(tenantId, centro, "Caja 2");
+        assertThat(sessionService.open(cashier, new OpenSessionRequest(caja2, BigDecimal.ZERO)).status())
+                .isEqualTo(PosSessionStatus.OPEN);
+    }
+
+    @Test
+    void theAdminClosesAShiftWithoutSalesThatACashierLeftOpen() {
+        as(cashier, centro);
+        PosSessionReportDto session = sessionService.open(cashier,
+                new OpenSessionRequest(registerCentro, new BigDecimal("2000")));
+        sessionService.addCashMovement(cashier, session.id(),
+                new CashMovementRequest(CashMovementType.CASH_IN, new BigDecimal("500"), "Cambio chico"));
+
+        // Sin ventas el efectivo esperado es la apertura más los movimientos: 2000 + 500.
+        as(admin, centro);
+        PosSessionReportDto closed = sessionService.close(admin, session.id(),
+                new CloseSessionRequest(new BigDecimal("2500"), "La abrió por error"));
+        assertThat(closed.closedWithoutSales()).isTrue();
+        assertThat(closed.expectedCash()).isEqualByComparingTo("2500.00");
+        assertThat(closed.difference()).isEqualByComparingTo("0.00");
+        assertThat(closed.closedByName()).isEqualTo(admin.fullName());
+        assertThat(closed.openedByName()).isEqualTo(cashier.fullName());
+        assertThat(closed.closingNote()).isEqualTo("La abrió por error");
+
+        // El cajero vuelve a abrir la misma caja.
+        as(cashier, centro);
+        assertThat(sessionService.open(cashier, new OpenSessionRequest(registerCentro, BigDecimal.ZERO)).status())
+                .isEqualTo(PosSessionStatus.OPEN);
+    }
+
+    @Test
+    void aShiftWhoseOnlySaleWasVoidedClosesWithoutSales() {
+        as(cashier, centro);
+        PosSessionReportDto session = sessionService.open(cashier,
+                new OpenSessionRequest(registerCentro, new BigDecimal("1000")));
+        PosSaleDto sale = saleService.create(cashier, new PosSaleRequest(session.id(),
+                List.of(new PosSaleRequest.Item(leche, 1)),
+                List.of(new PosSaleRequest.Payment(PaymentMethod.CASH, new BigDecimal("1400"), null)),
+                null, null, false));
+        saleService.voidSale(cashier, sale.id(), new VoidSaleRequest("Se cobró dos veces"));
+
+        PosSessionReportDto closed = sessionService.close(cashier, session.id(),
+                new CloseSessionRequest(new BigDecimal("1000"), null));
+        assertThat(closed.salesCount()).isZero();
+        assertThat(closed.voidedCount()).isEqualTo(1);
+        assertThat(closed.closedWithoutSales()).isTrue();
+        assertThat(closed.difference()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void aShiftClosedWithSalesKeepsItsMarkWhenTheAdminVoidsThemAfterwards() {
+        as(cashier, centro);
+        PosSessionReportDto session = sessionService.open(cashier,
+                new OpenSessionRequest(registerCentro, BigDecimal.ZERO));
+        PosSaleDto sale = saleService.create(cashier, new PosSaleRequest(session.id(),
+                List.of(new PosSaleRequest.Item(leche, 1)),
+                List.of(new PosSaleRequest.Payment(PaymentMethod.CASH, new BigDecimal("1400"), null)),
+                null, null, false));
+        assertThat(sessionService.close(cashier, session.id(),
+                new CloseSessionRequest(new BigDecimal("1400"), null)).closedWithoutSales()).isFalse();
+
+        // Como el arqueo, la marca es la del momento del cierre: cuando se cerró, el turno tenía una venta.
+        as(admin, centro);
+        saleService.voidSale(admin, sale.id(), new VoidSaleRequest("Corrección del administrador"));
+        PosSessionReportDto report = sessionService.get(admin, session.id());
+        assertThat(report.salesCount()).isZero();
+        assertThat(report.closedWithoutSales()).isFalse();
     }
 
     @Test

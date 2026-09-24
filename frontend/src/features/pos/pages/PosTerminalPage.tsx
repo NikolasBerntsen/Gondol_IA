@@ -146,11 +146,12 @@ export default function PosTerminalPage() {
       queryClient.setQueryData(posKeys.currentSession(), null);
       queryClient.invalidateQueries({ queryKey: ['pos'] });
       const difference = report.difference ?? 0;
-      toast.success('Cerraste la caja.', {
-        description:
-          difference === 0
-            ? 'La caja cerró justa. El reporte Z quedó en Mis turnos.'
-            : `Diferencia de ${formatMoney(difference, { decimals: 2 })}. El reporte Z quedó en Mis turnos.`,
+      const result =
+        difference === 0 ? 'La caja cerró justa.' : `Diferencia de ${formatMoney(difference, { decimals: 2 })}.`;
+      toast.success(report.closedWithoutSales ? 'Cerraste la caja sin ventas.' : 'Cerraste la caja.', {
+        description: report.closedWithoutSales
+          ? `${result} Quedó registrado en Mis turnos como «Cerrado sin ventas».`
+          : `${result} El reporte Z quedó en Mis turnos.`,
       });
       navigate('/app/pos/sessions');
     },

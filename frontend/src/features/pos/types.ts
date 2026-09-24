@@ -126,6 +126,8 @@ export interface PosSessionReport {
   cashMovements: PosCashMovement[];
   mine: boolean;
   closingNote: string | null;
+  /** El turno se cerró sin ninguna venta vigente (el cajero confirmó el aviso). `false` mientras sigue abierto. */
+  closedWithoutSales: boolean;
 }
 
 export interface PosSessionSummary {
@@ -149,6 +151,8 @@ export interface PosSessionSummary {
   voidedCount: number;
   voidedTotal: number;
   mine: boolean;
+  /** El turno se cerró sin ninguna venta vigente. */
+  closedWithoutSales: boolean;
 }
 
 export interface OpenSessionRequest {

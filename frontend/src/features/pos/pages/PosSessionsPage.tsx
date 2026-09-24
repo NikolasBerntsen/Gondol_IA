@@ -99,6 +99,11 @@ export default function PosSessionsPage() {
       cell: (row) =>
         row.status === 'OPEN' ? (
           <StatusPill tone="ok">Abierto</StatusPill>
+        ) : row.closedWithoutSales ? (
+          // El cajero confirmó el aviso de cierre sin ventas: queda a la vista en el historial.
+          <StatusPill tone="warn" solid>
+            Cerrado sin ventas
+          </StatusPill>
         ) : (
           <StatusPill tone="neutral" solid>
             Cerrado

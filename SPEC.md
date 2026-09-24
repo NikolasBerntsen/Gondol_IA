@@ -967,7 +967,8 @@ los faltantes (`lot_id NULL`) no devuelven stock; 409 `ALREADY_VOIDED` si el bat
   `POST /api/tenant/pos/sessions/open` `{registerId,openingCash}` (409 `REGISTER_BUSY` / `SESSION_ALREADY_OPEN`) ·
   `POST /api/tenant/pos/sessions/{id}/cash-movements` `{type,amount,reason}` · `POST /api/tenant/pos/sessions/{id}/close` `{countedCash,note}` → reporte ·
   `GET /api/tenant/pos/sessions?status=&from=&to=&page=` (ADMIN: todos los del scope; EMPLOYEE/CASHIER: los propios) · `GET /api/tenant/pos/sessions/{id}` → reporte
-  `{id,branchId,branchName,registerId,registerName,status,openedByName,closedByName,openedAt,closedAt,openingCash,totalsByMethod:{CASH,DEBIT,CREDIT,TRANSFER,QR},cashIn,cashOut,changeGiven,expectedCash,countedCash,difference,salesCount,salesTotal,voidedCount,voidedTotal,topProducts:[{productName,units,total}],cashMovements:[...]}`.
+  `{id,branchId,branchName,registerId,registerName,status,openedByName,closedByName,openedAt,closedAt,openingCash,totalsByMethod:{CASH,DEBIT,CREDIT,TRANSFER,QR},cashIn,cashOut,changeGiven,expectedCash,countedCash,difference,salesCount,salesTotal,voidedCount,voidedTotal,topProducts:[{productName,units,total}],cashMovements:[...],closedWithoutSales}`.
+  El cierre no exige ventas: un turno sin ventas vigentes se cierra igual, libera la caja y queda con `closedWithoutSales:true`.
   `expectedCash = openingCash + Σ pagos CASH − Σ vuelto + CASH_IN − CASH_OUT − efectivo neto de ventas anuladas`.
 - **Productos para vender** (sucursal del turno): `GET /api/tenant/pos/products/lookup?code=` (código exacto) y
   `GET /api/tenant/pos/products/search?q=` (top 20) → `{productId,barcode,name,brand,unit,listPrice,sellableStock,nextLot:{lotId,lotNumber,expiryDate,discountPct,unitPrice}|null,hasRecalledStock,hasExpiredStock,outOfStock}`.
@@ -988,7 +989,8 @@ los faltantes (`lot_id NULL`) no devuelven stock; 409 `ALREADY_VOIDED` si el bat
   lector USB siempre enfocado + botón cámara (`BarcodeScanner` compartido); carrito con +/−, precio con descuento por lote y chip
   de lote/vencimiento; productos en cuarentena bloqueados y aviso de sin stock; atajos **F2** buscar, **F4** cobrar, **F8** quitar ítem,
   **Esc** cancelar; modal de cobro con medios combinables, billetes rápidos y vuelto; al confirmar muestra el ticket con Imprimir /
-  Nueva venta; retiros e ingresos de efectivo; cerrar caja con arqueo.
+  Nueva venta; retiros e ingresos de efectivo; cerrar caja con arqueo (sin ventas también, después del aviso
+  "Estás a punto de cerrar la caja sin ventas"; el turno queda como "Cerrado sin ventas").
 - `/app/pos/sessions` **PosSessionsPage** (turnos, ventas, reporte de cierre, anulación) · `/app/pos/registers` **PosRegistersPage** (ADMIN) ·
   `/app/pos/sales/:id/ticket` **PosTicketPage** (sin AppShell, CSS de impresión 80 mm, `window.print()`).
 
