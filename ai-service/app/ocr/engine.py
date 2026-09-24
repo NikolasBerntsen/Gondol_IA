@@ -3,6 +3,7 @@
 import functools
 import logging
 import math
+import os
 import statistics
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -25,6 +26,11 @@ AUTO_SEGMENTATION = 3
 SPARSE_TEXT = 11
 """Texto disperso: típico de etiquetas con datos sueltos, pero muy sensible al ruido."""
 SPARSE_VARIANTS = 2
+
+# Cada pasada es un proceso de Tesseract y corren PARALLEL_CALLS a la vez. El Tesseract de Debian/Ubuntu usa OpenMP:
+# sin límite, cada proceso abre un hilo por núcleo, compiten entre ellos y una lectura de 1 s supera CALL_TIMEOUT_SECONDS.
+# La imagen Docker ya fija OMP_THREAD_LIMIT=1; esto cubre pytest y uvicorn fuera de ella (CI, desarrollo local).
+os.environ.setdefault("OMP_THREAD_LIMIT", "1")
 
 
 class OcrUnavailableError(RuntimeError):

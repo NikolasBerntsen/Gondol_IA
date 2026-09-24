@@ -493,9 +493,10 @@ aplicá los cambios con `./start.sh restart`.
 
 ## Pruebas y despliegue
 
-Cada push a una rama y cada pull request contra `main` corren las pruebas de los tres servicios y la
-configuración de nginx (`.github/workflows/ci.yml`). El despliegue a la VM de Oracle depende de que
-esas pruebas pasen, así que un merge a `main` en rojo no llega al servidor.
+Cada pull request contra `main` corre las pruebas de los tres servicios y la configuración de nginx
+(`.github/workflows/ci.yml`); en una rama sin pull request se corren a mano desde
+*Actions → Pruebas*. El despliegue a la VM de Oracle depende de que esas pruebas pasen, así que un
+merge a `main` en rojo no llega al servidor.
 
 ```bash
 cd backend    && mvn verify                 # unitarias (+ integración con -Dgondolia.it=true)
