@@ -19,7 +19,7 @@ corren las pruebas que lo habilitan.
 
 | Secret | ¿Obligatorio? | Qué es | Si falta |
 | --- | --- | --- | --- |
-| `VM_SSH_KEY` | **Sí** | Clave privada SSH (contenido completo del archivo, incluidas las líneas `-----BEGIN…` y `-----END…`) del usuario `ubuntu` de la VM `144.22.138.149`. | El workflow *Deploy a Oracle Cloud* falla en el primer paso con un mensaje explícito y no se despliega nada. |
+| `VM_SSH_KEY` | **Sí** | Clave privada SSH (contenido completo del archivo, incluidas las líneas `-----BEGIN…` y `-----END…`) del usuario de la VM: la misma con la que se entra por SSH. Se carga sin que pase por ningún lado: `tr -d '\r' < clave.key \| gh secret set VM_SSH_KEY --repo NikolasBerntsen/Gondol_IA`. | El workflow *Deploy a Oracle Cloud* falla en el primer paso con un mensaje explícito y no se despliega nada. |
 
 No hay ningún otro secret. **Las contraseñas de la base, el `JWT_SECRET` y la contraseña del dueño
 NO van en GitHub**: viven solo en el `.env` de la VM, que `deploy/deploy.sh` genera la primera vez
@@ -27,12 +27,20 @@ NO van en GitHub**: viven solo en el `.env` de la VM, que `deploy/deploy.sh` gen
 
 ### 1.2 Variables (Settings → Secrets and variables → Actions → *Variables*)
 
-Las dos son opcionales; sin ellas el despliegue funciona con los valores por defecto.
+El workflow no tiene datos de la VM escritos: los lee de estas variables. Las dos primeras son
+obligatorias (sin ellas el deploy falla en el primer paso con un mensaje claro); el resto tiene
+valores por defecto.
 
-| Variable | Valor por defecto | Para qué sirve |
+| Variable | Valor en GondolIA (por defecto) | Para qué sirve |
 | --- | --- | --- |
-| `DEV_WIPE_DB` | *(sin definir)* = `false` | `true` hace que **cada** despliegue **borre la base de datos** y vuelva a sembrar (`deploy.sh reset`). Sirve mientras el modelo de datos cambia todos los días. ⚠ Antes de tener datos reales hay que ponerla en `false` o borrarla. |
-| `SEED_DEMO_DATA` | *(sin definir)* = deja el `.env` como está | `true` siembra el mundo demo (comercios, 180 días de ventas, cuentas de prueba) en una base vacía; `false` no siembra nada, que es lo que correspondería en una instalación real. Se escribe en `APP_SEED_DEMO` del `.env` de la VM. |
+| `VM_HOST` | IP pública de la VM (**obligatoria**) | A qué máquina se conecta el deploy. Si la VM cambia de IP, se cambia acá y listo. |
+| `APP_DOMAIN` | `gondolia.144-22-138-149.sslip.io` (**obligatoria**) | Dominio(s) públicos, separados por coma. `deploy.sh` lo usa para la ruta de Caddy y para `APP_CORS_ALLOWED_ORIGINS`. |
+| `VM_USER` | `ubuntu` | Usuario SSH. |
+| `DEPLOY_PATH` | `/home/ubuntu/Gondol_IA` | Carpeta del proyecto en la VM. **No cambiarla**: ahí está el `.env` con la contraseña de la base. |
+| `CADDY_CONTAINER` | `biotrust-caddy` (`caddy`) | El Caddy compartido de la VM. |
+| `CADDY_SITES_DIR` | `/home/ubuntu/caddy/conf/sites` | Carpeta de sitios que importa ese Caddy; `deploy.sh` escribe ahí `gondolia.caddy`. |
+| `DEV_WIPE_DB` | `false` *(sin definir = `false`)* | `true` hace que **cada** despliegue **borre la base de datos** y vuelva a sembrar (`deploy.sh reset`). Sirve mientras el modelo de datos cambia todos los días. ⚠ Antes de tener datos reales hay que ponerla en `false` o borrarla. |
+| `SEED_DEMO_DATA` | `true` *(sin definir = deja el `.env` como está)* | `true` siembra el mundo demo (comercios, 180 días de ventas, cuentas de prueba) en una base vacía; `false` no siembra nada, que es lo que correspondería en una instalación real. Se escribe en `APP_SEED_DEMO` del `.env` de la VM. |
 
 ### 1.3 Permisos del repositorio
 
@@ -46,7 +54,9 @@ El despliegue no publica paquetes ni escribe en el repositorio: los dos workflow
 Vive en `/home/ubuntu/Gondol_IA/.env`, con permisos `600`, y **solo en la VM**: está excluido del
 `rsync` del despliegue y del repositorio. Lo crea `deploy/deploy.sh` en el primer despliegue con
 contraseñas aleatorias; en los despliegues siguientes lo respeta y solo agrega las claves nuevas que
-falten.
+falten. Las excepciones son `APP_CORS_ALLOWED_ORIGINS` y `APP_SEED_DEMO`, que se reescriben en cada
+despliegue a partir de las variables del repo, y las `DEPLOY_*` (dominio y Caddy), que guardan la
+configuración del último deploy para que `bash deploy/deploy.sh update` también funcione a mano.
 
 | Variable | La genera / valor | Qué pasa si falta |
 | --- | --- | --- |
@@ -57,16 +67,17 @@ falten.
 | `JWT_EXPIRATION_HOURS` | `12` | Se usa `12`. |
 | `APP_TIMEZONE` | `America/Argentina/Buenos_Aires` | Se usa esa zona. Define qué es “hoy” para vencimientos y ventas. |
 | `APP_BOOTSTRAP_OWNER_EMAIL` | `dueno@gondolia.app` | Se usa ese email. Es el dueño de GondolIA que se crea si todavía no hay ninguno. |
-| `APP_BOOTSTRAP_OWNER_PASSWORD` | `Gondolia2026!` | **El backend no arranca.** ⚠ Cambiala apenas el sitio deje de ser una demo. |
+| `APP_BOOTSTRAP_OWNER_PASSWORD` | `Gondolia2026!` | **El backend no arranca.** Se usa solo al crear el dueño la primera vez: ⚠ apenas el sitio deje de ser una demo, cambiá la contraseña del dueño desde la app (cambiar esta variable después no la cambia). |
 | `APP_OPENFOODFACTS_ENABLED` | `true` | Se usa `true` (autocompletar por código de barras los productos que no están en el catálogo de referencia incluido; necesita internet). |
-| `APP_CORS_ALLOWED_ORIGINS` | `https://gondolia.144-22-138-149.sslip.io` | Se usa la URL pública. Es la lista de orígenes que el backend acepta; si no incluye el dominio del sitio y el header `Origin` llega al backend, **el login responde 403 y no se puede entrar** (ver §2.1). |
+| `APP_CORS_ALLOWED_ORIGINS` | `https://` + cada dominio de `APP_DOMAIN`, reescrita en cada despliegue | Se usa la URL pública. Es la lista de orígenes que el backend acepta; si no incluye el dominio del sitio y el header `Origin` llega al backend, **el login responde 403 y no se puede entrar** (ver §2.1). |
+| `DEPLOY_APP_DOMAIN`, `DEPLOY_CADDY_CONTAINER`, `DEPLOY_CADDY_SITES_DIR` | Las variables del repo del último deploy | Si faltan, un `deploy.sh update` a mano no sabe qué dominio publicar (desde GitHub siempre llegan). |
 | `APP_SEED_DEMO` | `true` | Se usa `true`. La variable `SEED_DEMO_DATA` del repositorio la pisa en cada despliegue. |
 | `JAVA_OPTS` | `-XX:MaxRAMPercentage=40.0 -XX:+ExitOnOutOfMemoryError` | Se usa ese valor. |
 
 Para ver o editar el archivo:
 
 ```bash
-ssh ubuntu@144.22.138.149
+ssh -i tu-clave.key ubuntu@<IP de la VM>   # la IP está en la variable VM_HOST del repo
 cd ~/Gondol_IA
 sudo cat .env                       # ver
 nano .env                           # editar

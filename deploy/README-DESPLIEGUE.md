@@ -1,7 +1,7 @@
 # 🚀 Despliegue de GondolIA en Oracle Cloud
 
-GondolIA vive en la **misma VM de Oracle** que los otros dos proyectos (BioTrust Asistencias y el
-Comando Central de la tesis) y se publica en:
+GondolIA vive en la **misma VM de Oracle** que otros proyectos (BioTrust Asistencias y el Comando
+Central de la tesis) y se publica en:
 
 **https://gondolia.144-22-138-149.sslip.io**
 
@@ -14,7 +14,10 @@ Comando Central de la tesis) y se publica en:
 ## Cómo está armado
 
 ```
-Internet ──HTTPS──> Caddy (del proyecto BioTrust: es el único dueño de los puertos 80 y 443)
+push a main ──> GitHub Actions: pruebas (ci.yml) ──> rsync + ssh ──> VM (/home/ubuntu/Gondol_IA)
+                                                                      └─ bash deploy/deploy.sh update
+
+Internet ──HTTPS──> Caddy (del proyecto BioTrust: el único dueño de los puertos 80 y 443)
                       ├── panel.…      → BioTrust
                       ├── tesis.…      → Comando Central
                       └── gondolia.…   → gondolia-web (nginx) ─┬─> backend (Spring) ─┬─> db (PostgreSQL)
@@ -22,98 +25,104 @@ Internet ──HTTPS──> Caddy (del proyecto BioTrust: es el único dueño de
                                                                 └─ /ws (WebSocket)
 ```
 
-- **GondolIA no publica ningún puerto.** Se llega solo a través de ese Caddy, que lo alcanza por la
-  red Docker compartida `proxy` y resuelve el nombre `gondolia-web` por DNS interno.
-- **El certificado HTTPS es real** (Let's Encrypt, lo saca Caddy solo). Por eso la cámara del celular
-  funciona sin avisos de seguridad, a diferencia del certificado local que usa `./start.sh`.
-- La VM es **ARM (Ampere)**: las imágenes se construyen ahí mismo, igual que en los otros proyectos.
+- **GondolIA no publica ningún puerto.** Se llega solo a través de ese Caddy, que la alcanza por la
+  red Docker compartida `proxy` y resuelve `gondolia-web` por DNS interno.
+- **La ruta en Caddy es un archivo propio.** `deploy/deploy.sh` escribe `gondolia.caddy` en la
+  carpeta de sitios de la VM (`/home/ubuntu/caddy/conf/sites`), comprueba que Caddy la lee, la valida
+  y recarga Caddy. El Caddyfile de BioTrust importa esa carpeta, así que un deploy de BioTrust ya no
+  puede dejar a GondolIA sin URL.
+- **El certificado HTTPS es real** (Let's Encrypt, con ZeroSSL de respaldo) y lo renueva Caddy solo.
+  Por eso la cámara del celular funciona sin avisos, a diferencia del certificado local de `./start.sh`.
+- La VM es **ARM (Ampere)**: las imágenes se construyen ahí mismo.
 
 ## Despliegue automático (GitHub Actions)
 
-Cada **push a `main`** dispara `.github/workflows/deploy.yml`, que primero corre las pruebas de los
-tres servicios y de la configuración de nginx (`.github/workflows/ci.yml`) y, solo si pasan, copia el
-código por rsync a `/home/ubuntu/Gondol_IA` y ejecuta `deploy/deploy.sh` en la VM. Al final comprueba
-que el sitio responda y que el login acepte el `Origin` del dominio público.
+Cada **push a `main`** dispara `.github/workflows/deploy.yml`:
 
-Para volver a desplegar sin cambiar código (por ejemplo, para borrar la base con `DEV_WIPE_DB=true`)
-no hace falta un commit: *Actions → Deploy a Oracle Cloud → Run workflow* sobre `main`.
+1. Corre las pruebas de los tres servicios y de nginx (`.github/workflows/ci.yml`). Si fallan, no se
+   despliega.
+2. Copia el código por rsync a la VM y ejecuta `deploy/deploy.sh`.
+3. Comprueba que el sitio responda, que `/api/auth/me` sin token dé 401 y que el login acepte el
+   `Origin` del dominio público.
 
-El inventario completo de secrets, variables y pisos de cobertura está en
-[`docs/ci-y-variables.md`](../docs/ci-y-variables.md).
+**A mano:** *Actions → Deploy a Oracle Cloud → Run workflow* sobre `main`. Con el campo `ref` (un
+commit, tag o rama) despliega una versión anterior: es el **rollback**.
 
-### Lo que hay que configurar una sola vez en GitHub
+- En un rollback no se corren las pruebas, porque probarían `main` y no esa versión.
+- El próximo push vuelve a desplegar lo último.
+- Vuelve el código, no la base: las migraciones de Flyway que ya se aplicaron quedan.
 
-**Secreto** (repo → Settings → Secrets and variables → Actions → *New repository secret*):
+## Configuración en GitHub
 
-| Nombre | Contenido |
-|---|---|
-| `VM_SSH_KEY` | La clave **privada** SSH de la VM (el archivo `.key` completo, incluidas las líneas `BEGIN`/`END`) |
+Repo → **Settings → Secrets and variables → Actions**. El detalle está en
+[`docs/ci-y-variables.md`](../docs/ci-y-variables.md) §1.
 
-Desde tu PC, sin que la clave pase por ningún lado:
+| Tipo | Nombre | Para qué |
+|---|---|---|
+| Secret | `VM_SSH_KEY` | Clave privada SSH con la que se entra a la VM |
+| Variable | `VM_HOST` | IP pública de la VM |
+| Variable | `VM_USER` | Usuario SSH (`ubuntu`) |
+| Variable | `DEPLOY_PATH` | Carpeta del proyecto en la VM (`/home/ubuntu/Gondol_IA`) |
+| Variable | `APP_DOMAIN` | Dominio público (`gondolia.144-22-138-149.sslip.io`) |
+| Variable | `CADDY_CONTAINER` | Contenedor del Caddy compartido (`biotrust-caddy`) |
+| Variable | `CADDY_SITES_DIR` | Carpeta de sitios de Caddy (`/home/ubuntu/caddy/conf/sites`) |
+| Variable | `DEV_WIPE_DB` | ⚠ `true` = **cada deploy borra la base** y vuelve a sembrar (desarrollo). `false` = la conserva |
+| Variable | `SEED_DEMO_DATA` | `true` = siembra el mundo demo en una base vacía · `false` = base vacía, solo el dueño |
+
+Por consola (la clave se lee del archivo y no pasa por ningún otro lado):
 
 ```bash
-gh secret set VM_SSH_KEY --repo NikolasBerntsen/Gondol_IA < /ruta/a/tu-clave.key
+tr -d '\r' < /ruta/a/tu-clave.key | gh secret set VM_SSH_KEY --repo NikolasBerntsen/Gondol_IA
+gh variable set DEV_WIPE_DB --body false --repo NikolasBerntsen/Gondol_IA
+gh variable list --repo NikolasBerntsen/Gondol_IA
 ```
 
-**Variables** (misma pantalla, pestaña *Variables*):
-
-| Variable | Efecto |
-|---|---|
-| `DEV_WIPE_DB` | `true` → **cada despliegue borra la base de datos** y vuelve a sembrar (desarrollo). `false` o sin definir → conserva los datos. |
-| `SEED_DEMO_DATA` | `true` → siembra el mundo demo (comercios, 180 días de historia, cuentas de prueba). `false` → base vacía, solo el usuario dueño. |
-
-```bash
-gh variable set DEV_WIPE_DB   --body true --repo NikolasBerntsen/Gondol_IA
-gh variable set SEED_DEMO_DATA --body true --repo NikolasBerntsen/Gondol_IA
-```
-
-> ⚠ **Antes de usarlo con datos reales de un cliente**: poné `DEV_WIPE_DB=false` y `SEED_DEMO_DATA=false`,
-> y cambiá `APP_BOOTSTRAP_OWNER_PASSWORD` en el `.env` de la VM. Mientras `SEED_DEMO_DATA=true`, las
-> cuentas de demostración (con contraseñas públicas en `docs/datos-demo.md`) existen en una URL pública.
+> ⚠ **Antes de usarlo con datos reales de un cliente:**
+> - `DEV_WIPE_DB=false` y `SEED_DEMO_DATA=false`.
+> - Cambiá la contraseña del dueño **desde la app**: `APP_BOOTSTRAP_OWNER_PASSWORD` se usa solo al
+>   crear el dueño la primera vez.
+> - Mientras `SEED_DEMO_DATA=true`, las cuentas de demostración (con contraseñas públicas en
+>   `docs/datos-demo.md`) existen en una URL pública.
 
 ## Despliegue a mano (dentro de la VM)
 
 ```bash
-ssh -i tu-clave.key ubuntu@144.22.138.149
+ssh -i tu-clave.key ubuntu@<IP de la VM>     # la IP está en la variable VM_HOST del repo
 cd ~/Gondol_IA
-bash deploy/deploy.sh update    # build + up conservando la base
-bash deploy/deploy.sh reset     # ⚠ borra la base y vuelve a sembrar la demo
-bash deploy/deploy.sh status    # estado y salud de los 4 servicios
-bash deploy/deploy.sh logs backend
+bash deploy/deploy.sh update            # build + up conservando la base
+bash deploy/deploy.sh status            # salud de los servicios, último deploy y URL
+bash deploy/deploy.sh logs backend      # logs en vivo
+bash deploy/deploy.sh reset             # ⚠ borra la base y vuelve a sembrar la demo
+bash deploy/deploy.sh set-env NOMBRE    # guarda un valor en el .env sin mostrarlo
 ```
 
 ## El `.env` de la VM
 
-Lo crea `deploy.sh` en el primer despliegue, vive **solo en la VM** (`/home/ubuntu/Gondol_IA/.env`),
-nunca se sube al repositorio y **rsync no lo pisa**. Contiene la contraseña de la base, el secreto
-JWT (ambos aleatorios), la zona horaria, `APP_CORS_ALLOWED_ORIGINS` (el origen público del sitio) y
-`APP_SEED_DEMO`. En cada despliegue `deploy.sh` agrega las claves nuevas que falten sin tocar las que
-ya están; el detalle de cada una está en [`docs/ci-y-variables.md`](../docs/ci-y-variables.md) §2.
+Vive **solo en la VM** (`/home/ubuntu/Gondol_IA/.env`), nunca se sube al repositorio y el rsync no lo
+pisa. `deploy.sh` lo crea en el primer despliegue:
 
-## Entrada por Caddy
+- contraseña de la base y secreto JWT, aleatorios;
+- zona horaria, dueño inicial, Open Food Facts.
 
-El bloque que publica GondolIA vive en el Caddyfile del proyecto BioTrust
-(`~/Biotrust-sistema-de-asistencas/deploy/Caddyfile`), igual que el de la tesis:
+En los siguientes despliegues agrega las claves nuevas que falten sin tocar las existentes, con dos
+excepciones que se reescriben en cada deploy:
 
-```caddy
-gondolia.144-22-138-149.sslip.io {
-	encode gzip
-	reverse_proxy gondolia-web:80
-}
-```
+- `APP_CORS_ALLOWED_ORIGINS`, que sale de `APP_DOMAIN` (así un cambio de dominio no deja el login en
+  403);
+- `APP_SEED_DEMO`, que sale de `SEED_DEMO_DATA`.
 
-`deploy/deploy.sh` lo agrega y recarga Caddy si falta, así que un despliegue de GondolIA siempre deja
-la URL funcionando. **Conviene además tener ese bloque commiteado en el repositorio de BioTrust**: si
-no, el próximo despliegue de BioTrust sobrescribe el Caddyfile y GondolIA queda sin salida hasta el
-siguiente despliegue propio.
+El detalle de cada clave está en [`docs/ci-y-variables.md`](../docs/ci-y-variables.md) §2.
 
 ## Si algo falla
 
 | Síntoma | Qué mirar |
 |---|---|
-| 502 en la URL | `bash deploy/deploy.sh status` y `logs`: el stack está caído o todavía arrancando (la primera vez tarda: compila Java y el frontend en ARM). |
-| El sitio no carga y los otros tampoco | El Caddy de BioTrust está caído: `docker logs biotrust-caddy`. |
-| El deploy falla en GitHub | Faltó el secreto `VM_SSH_KEY`, cambió la IP de la VM (`VM_HOST` en el workflow) o las pruebas quedaron en rojo (mirá el job que falló). |
-| La pantalla de login se ve pero "Ingresar" dice "No tenés permisos" | El `POST /api/auth/login` volvió 403 por CORS. Revisá `APP_CORS_ALLOWED_ORIGINS` en el `.env` de la VM y corré `bash frontend/nginx/test-config.sh` (docs/ci-y-variables.md §2.1). |
-| Login demo no anda | Revisá `SEED_DEMO_DATA`; con `false` solo existe `dueno@gondolia.app`. |
-| Se llenó el disco | `docker system prune -af` en la VM (ojo: borra imágenes de los tres proyectos). |
+| El workflow falla en "Verificar la configuración" | Falta el secret o alguna variable (el error dice cuál) |
+| Falla el job `pruebas` | Las pruebas quedaron en rojo: mirá el job que falló. No se despliega nada |
+| `Permission denied (publickey)` o timeout al conectar | `VM_SSH_KEY` incompleta, cambió la IP (`VM_HOST`) o el puerto 22 está cerrado en la Security List |
+| "Caddy no la publica" / "no lee …/gondolia.caddy" | El Caddy de BioTrust no importa la carpeta de sitios o no la monta: `docker exec biotrust-caddy ls /etc/caddy/sites` |
+| 502 en la URL | `bash deploy/deploy.sh status` y `logs`: el stack está caído o todavía arrancando (la primera vez tarda: compila Java y el frontend en ARM) |
+| El sitio no carga y los otros tampoco | El Caddy de BioTrust está caído: `docker logs biotrust-caddy` |
+| La pantalla de login se ve pero "Ingresar" dice "No tenés permisos" | El `POST /api/auth/login` volvió 403 por CORS. Revisá `APP_CORS_ALLOWED_ORIGINS` en el `.env` de la VM y corré `bash frontend/nginx/test-config.sh` (docs/ci-y-variables.md §2.1) |
+| Login demo no anda | Revisá `SEED_DEMO_DATA`; con `false` solo existe `dueno@gondolia.app` |
+| Se llenó el disco | `docker system df`; `docker builder prune -f`; `docker image prune -f`. Nunca `--volumes` ni `docker system prune -a`: la VM es compartida |

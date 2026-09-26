@@ -1,22 +1,23 @@
 name: Deploy a Oracle Cloud
 
-# Despliegue continuo a la VM de Oracle Cloud (144.22.138.149), igual que los otros dos
-# proyectos que comparten esa máquina (BioTrust Asistencias y el Comando Central de la tesis).
-# En cada push a main copia el código por rsync y reconstruye los contenedores allá.
+# Despliegue continuo a la VM de Oracle Cloud, que GondolIA comparte con otros proyectos detrás de
+# un mismo Caddy (el único dueño de los puertos 80 y 443).
+# En cada push a main corre primero .github/workflows/ci.yml (pruebas del backend, el frontend, el
+# servicio de IA y la configuración de nginx) y, solo si pasan, copia el código a la VM por rsync y
+# ejecuta deploy/deploy.sh allá.
+# También se lanza a mano (Actions → "Deploy a Oracle Cloud" → Run workflow). Con "ref" despliega una
+# versión anterior (rollback); en ese caso las pruebas no se corren, porque probarían lo último de main.
 #
-# Antes de desplegar corre .github/workflows/ci.yml (pruebas del backend, el frontend, el
-# servicio de IA y la configuración de nginx): si algo falla, el despliegue no se hace.
-#
-# Único secreto necesario:  VM_SSH_KEY  (clave privada SSH de acceso a la VM).
-#   repo → Settings → Secrets and variables → Actions → New repository secret
-#
-# Variables opcionales del repo (Settings → Variables):
-#   DEV_WIPE_DB=true     (solo desarrollo) BORRA la base de datos en cada deploy y vuelve a sembrar.
-#                        'false' o sin definir → despliegue incremental que conserva los datos.
-#   SEED_DEMO_DATA=true  siembra el mundo demo en una base vacía (lo que se muestra en la demo).
-#                        'false' → no siembra nada (lo que iría en una instalación real).
-#
-# La app queda en: https://gondolia.144-22-138-149.sslip.io
+# Configuración: repo → Settings → Secrets and variables → Actions (detalle en docs/ci-y-variables.md).
+#   Secret    VM_SSH_KEY       clave privada SSH con la que se entra a la VM
+#   Variable  VM_HOST          IP pública (o nombre) de la VM
+#   Variable  VM_USER          usuario SSH (por defecto: ubuntu)
+#   Variable  DEPLOY_PATH      carpeta del proyecto en la VM (por defecto: /home/<usuario>/<repo>)
+#   Variable  APP_DOMAIN       dominio(s) público(s), separados por coma (ej. gondolia.1-2-3-4.sslip.io)
+#   Variable  CADDY_CONTAINER  contenedor del Caddy compartido (por defecto: caddy)
+#   Variable  CADDY_SITES_DIR  carpeta de sitios de Caddy en la VM (por defecto: /home/<usuario>/caddy/conf/sites)
+#   Variable  DEV_WIPE_DB      ⚠ SOLO DESARROLLO: 'true' BORRA la base de datos en CADA deploy y vuelve a sembrar
+#   Variable  SEED_DEMO_DATA   'true' siembra el mundo demo en una base vacía; 'false' no siembra nada
 on:
   push:
     branches: [main]
@@ -24,76 +25,121 @@ on:
       - '**/*.md'
       - 'docs/**'
       - 'design/**'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Commit, tag o rama a desplegar (vacío = lo último de main). Sirve para rollback.'
+        required: false
+        default: ''
 
 permissions:
   contents: read
 
 concurrency:
-  group: deploy-oracle-gondolia
-  cancel-in-progress: false
+  group: deploy-${{ github.repository }}
+  cancel-in-progress: false   # nunca cortar un deploy a la mitad: el siguiente espera
 
 jobs:
-  # Las mismas pruebas que corren en cada pull request. El despliegue depende de este job,
-  # así que un merge a main con las pruebas en rojo no llega a la VM.
+  # Las mismas pruebas que corren en cada pull request: un merge a main con las pruebas en rojo no
+  # llega a la VM. En un rollback (ref elegido a mano) no se corren: el CI probaría main, no el ref.
   pruebas:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.ref == '' }}
     uses: ./.github/workflows/ci.yml
 
   deploy:
     needs: pruebas
+    if: ${{ !cancelled() && (needs.pruebas.result == 'success' || needs.pruebas.result == 'skipped') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     env:
-      VM_HOST: 144.22.138.149   # IP pública de la VM de Oracle (no es secreto; editá si cambia).
-      VM_USER: ubuntu
-      DEST: /home/ubuntu/Gondol_IA
-      PUBLIC_URL: https://gondolia.144-22-138-149.sslip.io
-      # ⚠⚠ SOLO DESARROLLO ⚠⚠  'true' hace que CADA deploy BORRE la base de datos.
-      # >>> ANTES DE USARLO CON DATOS REALES: poné DEV_WIPE_DB en 'false' o borrá la variable. <<<
+      VM_HOST: ${{ vars.VM_HOST }}
+      VM_USER: ${{ vars.VM_USER || 'ubuntu' }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || format('/home/{0}/{1}', vars.VM_USER || 'ubuntu', github.event.repository.name) }}
+      APP_DOMAIN: ${{ vars.APP_DOMAIN }}
+      CADDY_CONTAINER: ${{ vars.CADDY_CONTAINER || 'caddy' }}
+      CADDY_SITES_DIR: ${{ vars.CADDY_SITES_DIR || format('/home/{0}/caddy/conf/sites', vars.VM_USER || 'ubuntu') }}
       DEV_WIPE_DB: ${{ vars.DEV_WIPE_DB }}
-      # Datos de demostración (comercios, 180 días de historia, cuentas de prueba).
       SEED_DEMO_DATA: ${{ vars.SEED_DEMO_DATA }}
+      HEALTH_PATH: '/'
     steps:
-      - name: Traer el código (runner)
-        uses: actions/checkout@v4
-
-      - name: Verificar que el secret VM_SSH_KEY exista
+      - name: Verificar la configuración del repo
         env:
           VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
         run: |
-          if [ -z "$VM_SSH_KEY" ]; then
-            echo "::error::Falta el secret VM_SSH_KEY. Cargalo en: repo → Settings → Secrets and variables → Actions → New repository secret (clave privada SSH de la VM)."
+          falta=""
+          [ -n "$VM_SSH_KEY" ] || falta="$falta secret:VM_SSH_KEY"
+          [ -n "$VM_HOST" ]    || falta="$falta variable:VM_HOST"
+          [ -n "$APP_DOMAIN" ] || falta="$falta variable:APP_DOMAIN"
+          if [ -n "$falta" ]; then
+            echo "::error::Falta configurar:$falta (repo → Settings → Secrets and variables → Actions)."
             exit 1
           fi
+          # rsync --delete deja la carpeta destino IGUAL al repo: una ruta demasiado general
+          # (/, /home/ubuntu…) borraría los otros proyectos de la VM.
+          case "${DEPLOY_PATH%/}" in
+            /*/*/*) ;;
+            *) echo "::error::DEPLOY_PATH='$DEPLOY_PATH' es demasiado general: tiene que ser la carpeta propia del proyecto (ej. /home/ubuntu/Gondol_IA)."; exit 1 ;;
+          esac
+          if [ "$DEV_WIPE_DB" = "true" ]; then
+            echo "::warning::DEV_WIPE_DB=true: este deploy BORRA la base de datos en la VM (solo para desarrollo)."
+          fi
 
-      - name: Preparar la clave SSH
+      - name: Traer el código
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Preparar SSH
         env:
           VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
         run: |
-          mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_deploy
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" | tr -d '\r' > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
           ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          cat >> ~/.ssh/config <<EOF
+          Host vm
+            HostName $VM_HOST
+            User $VM_USER
+            IdentityFile ~/.ssh/id_deploy
+            IdentitiesOnly yes
+            StrictHostKeyChecking accept-new
+            ServerAliveInterval 30
+            ServerAliveCountMax 10
+          EOF
+          ssh vm 'echo "Conectado a $(hostname) ($(uname -m))"; command -v docker >/dev/null && command -v rsync >/dev/null' \
+            || { echo "::error::No pude entrar a la VM, o le falta Docker/rsync. Revisá VM_HOST, VM_USER, VM_SSH_KEY y el puerto 22 en la Security List."; exit 1; }
 
       - name: Copiar el código a la VM (rsync)
         run: |
-          # El .env de la VM tiene los secretos (JWT, base de datos): NO se transfiere ni se borra.
-          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new "$VM_USER@$VM_HOST" "mkdir -p '$DEST'"
+          DEPLOY_PATH="${DEPLOY_PATH%/}"
+          # Si la carpeta ya tiene un despliegue de OTRO repo, no se pisa.
+          ssh vm "mkdir -p '$DEPLOY_PATH' && { [ ! -f '$DEPLOY_PATH/.deploy-info' ] || grep -qx 'repo=$GITHUB_REPOSITORY' '$DEPLOY_PATH/.deploy-info'; }" \
+            || { echo "::error::$DEPLOY_PATH ya tiene el despliegue de otro repo (ver su .deploy-info). Revisá DEPLOY_PATH."; exit 1; }
+          # El .env de la VM (secretos) y .deploy-info NO se transfieren ni se borran. certs/ son los
+          # certificados de desarrollo de start.sh; design/ y .worktrees/ no hacen falta en la VM.
           rsync -az --delete \
-            --exclude='.git/' --exclude='.env' --exclude='certs/' \
-            --exclude='node_modules/' --exclude='target/' --exclude='dist/' \
+            --exclude='.git/' --exclude='.github/' --exclude='.env' --exclude='.deploy-info' --exclude='certs/' \
+            --exclude='node_modules/' --exclude='target/' --exclude='dist/' --exclude='.venv/' --exclude='__pycache__/' \
             --exclude='.worktrees/' --exclude='design/' \
-            -e "ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new" \
-            ./ "$VM_USER@$VM_HOST:$DEST/"
+            ./ "vm:$DEPLOY_PATH/"
 
-      - name: Desplegar en Docker (build + up)
+      - name: Desplegar en la VM (build + up)
+        env:
+          INPUT_REF: ${{ inputs.ref }}
+          DEPLOY_REF: ${{ inputs.ref || github.ref_name }}
+          DEPLOY_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new "$VM_USER@$VM_HOST" \
-              "DEV_WIPE_DB='${DEV_WIPE_DB:-false}' SEED_DEMO_DATA='${SEED_DEMO_DATA:-}' DEST='$DEST' bash -s" <<'REMOTE'
+          DEPLOY_COMMIT="$(git rev-parse --short HEAD)"
+          [ -n "$INPUT_REF" ] && echo "::notice::Despliegue manual de '$INPUT_REF' ($DEPLOY_COMMIT)."
+          remoto="$(printf 'DEPLOY_PATH=%q APP_DOMAIN=%q CADDY_CONTAINER=%q CADDY_SITES_DIR=%q SEED_DEMO_DATA=%q DEV_WIPE_DB=%q DEPLOY_REPO=%q DEPLOY_COMMIT=%q DEPLOY_REF=%q DEPLOY_RUN_URL=%q' \
+            "${DEPLOY_PATH%/}" "$APP_DOMAIN" "$CADDY_CONTAINER" "$CADDY_SITES_DIR" "$SEED_DEMO_DATA" "${DEV_WIPE_DB:-false}" \
+            "$GITHUB_REPOSITORY" "$DEPLOY_COMMIT" "$DEPLOY_REF" "$DEPLOY_RUN_URL")"
+          ssh vm "$remoto bash -s" <<'REMOTE'
           set -euo pipefail
-          cd "$DEST"
-          export SEED_DEMO_DATA   # deploy.sh lo guarda en el .env que lee docker compose
-          if [ "${DEV_WIPE_DB:-false}" = "true" ]; then
-            echo "⚠ DEV_WIPE_DB=true → despliegue LIMPIO (se BORRA la base de datos)."
+          cd "$DEPLOY_PATH"
+          if [ "$DEV_WIPE_DB" = "true" ]; then
+            echo "⚠ DEV_WIPE_DB=true → despliegue LIMPIO: se borra la base de datos y se vuelve a sembrar."
             bash deploy/deploy.sh reset
           else
             echo "→ Despliegue incremental (conserva la base de datos)."
@@ -103,30 +149,39 @@ jobs:
 
       - name: Comprobar que el sitio responde
         run: |
+          host="$(printf '%s' "$APP_DOMAIN" | tr ',;' '  ' | awk '{print $1}')"
+          url="https://$host$HEALTH_PATH"
+          ok=0
           for i in $(seq 1 20); do
-            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$PUBLIC_URL/" || true)"
-            if [ "$code" = "200" ]; then
-              echo "✓ $PUBLIC_URL responde 200"
-              api="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$PUBLIC_URL/api/auth/me" || true)"
-              echo "  /api/auth/me sin token → $api (401 es lo correcto)"
-              echo "### ✅ Desplegado en [$PUBLIC_URL]($PUBLIC_URL)" >> "$GITHUB_STEP_SUMMARY"
-              exit 0
-            fi
-            echo "  intento $i: HTTP $code, reintento en 15 s…"
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$url" || true)"
+            case "$code" in 2??|3??) ok=1; break ;; esac
+            echo "  intento $i: HTTP $code; reintento en 15 s…"
             sleep 15
           done
-          echo "::error::El sitio no respondió 200 tras el despliegue. Revisá 'bash deploy/deploy.sh logs' en la VM."
-          exit 1
+          if [ "$ok" != 1 ]; then
+            echo "::error::$url no respondió bien después del despliegue. En la VM: bash deploy/deploy.sh status (y logs)."
+            exit 1
+          fi
+          echo "✓ $url → HTTP $code"
+          # La SPA responde aunque el backend esté caído: /api/auth/me sin token tiene que dar 401.
+          api="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "https://$host/api/auth/me" || true)"
+          if [ "$api" != "401" ]; then
+            echo "::error::/api/auth/me sin token respondió $api (se esperaba 401): el backend no está respondiendo bien."
+            exit 1
+          fi
+          echo "✓ /api/auth/me sin token → 401"
+          echo "### ✅ Desplegado en https://$host" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Comprobar que el login acepta el origen del sitio
         run: |
           # El navegador manda "Origin: https://<host>" en el POST del login. Con 401 (credenciales
           # inventadas) el circuito está sano; un 403 significa que el backend lo tomó por CORS
           # ("Invalid CORS request") y nadie puede iniciar sesión aunque la pantalla se vea bien.
+          host="$(printf '%s' "$APP_DOMAIN" | tr ',;' '  ' | awk '{print $1}')"
           code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 \
-            -X POST "$PUBLIC_URL/api/auth/login" \
+            -X POST "https://$host/api/auth/login" \
             -H 'Content-Type: application/json' \
-            -H "Origin: $PUBLIC_URL" \
+            -H "Origin: https://$host" \
             -d '{"email":"chequeo-ci@gondolia.app","password":"credencial-invalida"}' || true)"
           if [ "$code" = "403" ]; then
             echo "::error::POST /api/auth/login con Origin devolvió 403 (CORS): revisá que nginx borre el header Origin del mismo origen (frontend/nginx/templates/gondolia.conf.template) y APP_CORS_ALLOWED_ORIGINS en el .env de la VM."
@@ -137,4 +192,4 @@ jobs:
             exit 1
           fi
           echo "✓ El login responde 401 con el Origin del sitio (sin bloqueo por CORS)"
-          echo "### ✅ Login comprobado con Origin ($PUBLIC_URL)" >> "$GITHUB_STEP_SUMMARY"
+          echo "### ✅ Login comprobado con Origin (https://$host)" >> "$GITHUB_STEP_SUMMARY"
