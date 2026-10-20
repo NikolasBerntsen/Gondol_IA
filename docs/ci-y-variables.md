@@ -37,7 +37,7 @@ valores por defecto.
 | `APP_DOMAIN` | `gondolia.144-22-138-149.sslip.io` (**obligatoria**) | Dominio(s) públicos, separados por coma. `deploy.sh` lo usa para la ruta de Caddy y para `APP_CORS_ALLOWED_ORIGINS`. |
 | `VM_USER` | `ubuntu` | Usuario SSH. |
 | `DEPLOY_PATH` | `/home/ubuntu/Gondol_IA` | Carpeta del proyecto en la VM. **No cambiarla**: ahí está el `.env` con la contraseña de la base. |
-| `CADDY_CONTAINER` | `biotrust-caddy` (`caddy`) | El Caddy compartido de la VM. |
+| `CADDY_CONTAINER` | `caddy` | El Caddy general de la VM (vive en `~/caddy`, fuera de todos los repos). |
 | `CADDY_SITES_DIR` | `/home/ubuntu/caddy/conf/sites` | Carpeta de sitios que importa ese Caddy; `deploy.sh` escribe ahí `gondolia.caddy`. |
 | `DEV_WIPE_DB` | `false` *(sin definir = `false`)* | `true` hace que **cada** despliegue **borre la base de datos** y vuelva a sembrar (`deploy.sh reset`). Sirve mientras el modelo de datos cambia todos los días. ⚠ Antes de tener datos reales hay que ponerla en `false` o borrarla. |
 | `SEED_DEMO_DATA` | `true` *(sin definir = deja el `.env` como está)* | `true` siembra el mundo demo (comercios, 180 días de ventas, cuentas de prueba) en una base vacía; `false` no siembra nada, que es lo que correspondería en una instalación real. Se escribe en `APP_SEED_DEMO` del `.env` de la VM. |
