@@ -17,7 +17,7 @@ Central de la tesis) y se publica en:
 push a main ──> GitHub Actions: pruebas (ci.yml) ──> rsync + ssh ──> VM (/home/ubuntu/Gondol_IA)
                                                                       └─ bash deploy/deploy.sh update
 
-Internet ──HTTPS──> Caddy (del proyecto BioTrust: el único dueño de los puertos 80 y 443)
+Internet ──HTTPS──> Caddy general de la VM (~/caddy: el único dueño de 80/tcp, 443/tcp y 443/udp)
                       ├── panel.…      → BioTrust
                       ├── tesis.…      → Comando Central
                       └── gondolia.…   → gondolia-web (nginx) ─┬─> backend (Spring) ─┬─> db (PostgreSQL)
@@ -29,8 +29,8 @@ Internet ──HTTPS──> Caddy (del proyecto BioTrust: el único dueño de lo
   red Docker compartida `proxy` y resuelve `gondolia-web` por DNS interno.
 - **La ruta en Caddy es un archivo propio.** `deploy/deploy.sh` escribe `gondolia.caddy` en la
   carpeta de sitios de la VM (`/home/ubuntu/caddy/conf/sites`), comprueba que Caddy la lee, la valida
-  y recarga Caddy. El Caddyfile de BioTrust importa esa carpeta, así que un deploy de BioTrust ya no
-  puede dejar a GondolIA sin URL.
+  y recarga Caddy. El Caddy general vive fuera de todos los repos e importa esa carpeta, así que el
+  deploy de otro proyecto no puede dejar a GondolIA sin URL.
 - **El certificado HTTPS es real** (Let's Encrypt, con ZeroSSL de respaldo) y lo renueva Caddy solo.
   Por eso la cámara del celular funciona sin avisos, a diferencia del certificado local de `./start.sh`.
 - La VM es **ARM (Ampere)**: las imágenes se construyen ahí mismo.
@@ -64,7 +64,7 @@ Repo → **Settings → Secrets and variables → Actions**. El detalle está en
 | Variable | `VM_USER` | Usuario SSH (`ubuntu`) |
 | Variable | `DEPLOY_PATH` | Carpeta del proyecto en la VM (`/home/ubuntu/Gondol_IA`) |
 | Variable | `APP_DOMAIN` | Dominio público (`gondolia.144-22-138-149.sslip.io`) |
-| Variable | `CADDY_CONTAINER` | Contenedor del Caddy compartido (`biotrust-caddy`) |
+| Variable | `CADDY_CONTAINER` | Contenedor del Caddy general de la VM (`caddy`) |
 | Variable | `CADDY_SITES_DIR` | Carpeta de sitios de Caddy (`/home/ubuntu/caddy/conf/sites`) |
 | Variable | `DEV_WIPE_DB` | ⚠ `true` = **cada deploy borra la base** y vuelve a sembrar (desarrollo). `false` = la conserva |
 | Variable | `SEED_DEMO_DATA` | `true` = siembra el mundo demo en una base vacía · `false` = base vacía, solo el dueño |
@@ -120,9 +120,10 @@ El detalle de cada clave está en [`docs/ci-y-variables.md`](../docs/ci-y-variab
 | El workflow falla en "Verificar la configuración" | Falta el secret o alguna variable (el error dice cuál) |
 | Falla el job `pruebas` | Las pruebas quedaron en rojo: mirá el job que falló. No se despliega nada |
 | `Permission denied (publickey)` o timeout al conectar | `VM_SSH_KEY` incompleta, cambió la IP (`VM_HOST`) o el puerto 22 está cerrado en la Security List |
-| "Caddy no la publica" / "no lee …/gondolia.caddy" | El Caddy de BioTrust no importa la carpeta de sitios o no la monta: `docker exec biotrust-caddy ls /etc/caddy/sites` |
+| "Caddy no la publica" / "no lee …/gondolia.caddy" | El Caddy general no importa la carpeta de sitios o no la monta: `docker exec caddy ls /etc/caddy/sites` |
 | 502 en la URL | `bash deploy/deploy.sh status` y `logs`: el stack está caído o todavía arrancando (la primera vez tarda: compila Java y el frontend en ARM) |
-| El sitio no carga y los otros tampoco | El Caddy de BioTrust está caído: `docker logs biotrust-caddy` |
+| El sitio no carga y los otros tampoco | El Caddy general está caído: `docker ps`, `docker logs caddy` (se levanta con `cd ~/caddy && docker compose up -d`) |
+| Safari (iPhone/Mac) dice que no puede conectarse al servidor, y Chrome anda | HTTP/3: Caddy lo anuncia (`alt-svc: h3=…`) y el UDP 443 tiene que llegar a la VM. Mirar que siga la regla **UDP 443** en la Security List de Oracle; si no se puede abrir, apagar HTTP/3 en `~/caddy/conf/Caddyfile` con `servers { protocols h1 h2 }` y recargar Caddy |
 | La pantalla de login se ve pero "Ingresar" dice "No tenés permisos" | El `POST /api/auth/login` volvió 403 por CORS. Revisá `APP_CORS_ALLOWED_ORIGINS` en el `.env` de la VM y corré `bash frontend/nginx/test-config.sh` (docs/ci-y-variables.md §2.1) |
 | Login demo no anda | Revisá `SEED_DEMO_DATA`; con `false` solo existe `dueno@gondolia.app` |
 | Se llenó el disco | `docker system df`; `docker builder prune -f`; `docker image prune -f`. Nunca `--volumes` ni `docker system prune -a`: la VM es compartida |
