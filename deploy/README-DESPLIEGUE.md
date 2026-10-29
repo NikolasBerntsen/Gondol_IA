@@ -3,13 +3,13 @@
 GondolIA vive en la **misma VM de Oracle** que otros proyectos (BioTrust Asistencias y el Comando
 Central de la tesis) y se publica en:
 
-**https://gondolia.144-22-138-149.sslip.io**
+**https://gondolia.nikolasberntsen.com.ar**
 
 | Proyecto | URL |
 |---|---|
-| BioTrust Asistencias | https://panel.144-22-138-149.sslip.io |
-| Comando Central (tesis) | https://tesis.144-22-138-149.sslip.io |
-| **GondolIA** | **https://gondolia.144-22-138-149.sslip.io** |
+| BioTrust Asistencias | https://panel.nikolasberntsen.com.ar |
+| Comando Central (tesis) | https://tesis.nikolasberntsen.com.ar |
+| **GondolIA** | **https://gondolia.nikolasberntsen.com.ar** |
 
 ## Cómo está armado
 
@@ -63,7 +63,7 @@ Repo → **Settings → Secrets and variables → Actions**. El detalle está en
 | Variable | `VM_HOST` | IP pública de la VM |
 | Variable | `VM_USER` | Usuario SSH (`ubuntu`) |
 | Variable | `DEPLOY_PATH` | Carpeta del proyecto en la VM (`/home/ubuntu/Gondol_IA`) |
-| Variable | `APP_DOMAIN` | Dominio público (`gondolia.144-22-138-149.sslip.io`) |
+| Variable | `APP_DOMAIN` | Dominio público (`gondolia.nikolasberntsen.com.ar`) |
 | Variable | `CADDY_CONTAINER` | Contenedor del Caddy compartido (`biotrust-caddy`) |
 | Variable | `CADDY_SITES_DIR` | Carpeta de sitios de Caddy (`/home/ubuntu/caddy/conf/sites`) |
 | Variable | `DEV_WIPE_DB` | ⚠ `true` = **cada deploy borra la base** y vuelve a sembrar (desarrollo). `false` = la conserva |

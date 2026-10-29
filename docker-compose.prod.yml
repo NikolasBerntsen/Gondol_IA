@@ -2,7 +2,7 @@
 # GondolIA · Despliegue de producción en la VM de Oracle Cloud (144.22.138.149)
 #
 #   Internet ──HTTPS──> Caddy (del proyecto BioTrust, único dueño de 80/443)
-#                         └── gondolia.144-22-138-149.sslip.io ──> web (nginx) ──> backend ──> db
+#                         └── gondolia.nikolasberntsen.com.ar ──> web (nginx) ──> backend ──> db
 #                                                                                        └──> ai
 #
 # Igual que el "comando central" de la tesis: este stack NO publica ningún puerto.
@@ -106,7 +106,7 @@ services:
       # Origen público del sitio. nginx ya borra el header Origin de los pedidos del propio frontend
       # (mismo origen = no son CORS), pero si alguna vez llega igual, el backend tiene que reconocerlo
       # como propio: si no, responde 403 "Invalid CORS request" y no se puede iniciar sesión.
-      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-https://gondolia.144-22-138-149.sslip.io}
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-https://gondolia.nikolasberntsen.com.ar}
       JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=40.0 -XX:+ExitOnOutOfMemoryError}
     expose:
       - "8080"
