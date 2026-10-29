@@ -34,7 +34,7 @@ valores por defecto.
 | Variable | Valor en GondolIA (por defecto) | Para qué sirve |
 | --- | --- | --- |
 | `VM_HOST` | IP pública de la VM (**obligatoria**) | A qué máquina se conecta el deploy. Si la VM cambia de IP, se cambia acá y listo. |
-| `APP_DOMAIN` | `gondolia.144-22-138-149.sslip.io` (**obligatoria**) | Dominio(s) públicos, separados por coma. `deploy.sh` lo usa para la ruta de Caddy y para `APP_CORS_ALLOWED_ORIGINS`. |
+| `APP_DOMAIN` | `gondolia.nikolasberntsen.com.ar` (**obligatoria**) | Dominio(s) públicos, separados por coma. `deploy.sh` lo usa para la ruta de Caddy y para `APP_CORS_ALLOWED_ORIGINS`. |
 | `VM_USER` | `ubuntu` | Usuario SSH. |
 | `DEPLOY_PATH` | `/home/ubuntu/Gondol_IA` | Carpeta del proyecto en la VM. **No cambiarla**: ahí está el `.env` con la contraseña de la base. |
 | `CADDY_CONTAINER` | `biotrust-caddy` (`caddy`) | El Caddy compartido de la VM. |
@@ -86,7 +86,7 @@ bash deploy/deploy.sh update        # aplicar los cambios
 
 ### 2.1 Por qué existe `APP_CORS_ALLOWED_ORIGINS`
 
-El navegador manda `Origin: https://gondolia.144-22-138-149.sslip.io` en cada `POST`. Como el
+El navegador manda `Origin: https://gondolia.nikolasberntsen.com.ar` en cada `POST`. Como el
 frontend y la API se sirven del mismo origen, esas requests **no son CORS** y nginx les borra el
 header antes de pasárselas al backend. Si por algún cambio en el proxy el header llegara igual, el
 backend tiene que reconocer ese origen como propio; si no, Spring Security corta la request con
