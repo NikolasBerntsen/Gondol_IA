@@ -39,7 +39,7 @@ describe('isLocalhost', () => {
 
   it('una IP de la red no es local', () => {
     expect(isLocalhost('192.168.0.15')).toBe(false);
-    expect(isLocalhost('gondolia.144-22-138-149.sslip.io')).toBe(false);
+    expect(isLocalhost('gondolia.nikolasberntsen.com.ar')).toBe(false);
   });
 
   it('sin argumento mira el host de la página', () => {
