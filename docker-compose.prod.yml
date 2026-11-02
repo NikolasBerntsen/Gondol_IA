@@ -136,7 +136,7 @@ services:
       # El TLS lo termina Caddy: acá nginx sirve HTTP y NO redirige (si no, hace un bucle).
       BEHIND_PROXY: "1"
     # Sin 'ports': entra solo por Caddy. 'gondolia' primero para hablar con el backend;
-    # 'proxy' es la red compartida de la VM por donde lo alcanza el Caddy de BioTrust.
+    # 'proxy' es la red compartida de la VM por donde lo alcanza el Caddy general.
     networks: [gondolia, proxy]
     healthcheck:
       test: ["CMD-SHELL", "wget -q -T 4 -O /dev/null http://127.0.0.1/nginx-health || exit 1"]
@@ -150,7 +150,7 @@ networks:
   gondolia:
     driver: bridge
   # Red compartida de la VM (la crea deploy.sh con `docker network create proxy` si falta).
-  # Por acá el Caddy de BioTrust alcanza a 'gondolia-web'.
+  # Por acá el Caddy general de la VM alcanza a 'gondolia-web'.
   proxy:
     external: true
 
