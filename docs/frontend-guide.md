@@ -412,6 +412,22 @@ tokens (`ThemedToaster` en `App.tsx`).
 **Impresión:** `@media print` vuelve a poner los tokens claros aunque la pantalla esté en oscuro, así el ticket sale en
 papel claro con tinta oscura (§9.1). No hace falta nada en la página.
 
+### 7.2 Vista previa al compartir el enlace
+
+Cuando alguien pega la URL en WhatsApp, Slack, Telegram, LinkedIn, X o Discord, la tarjeta sale de las
+etiquetas Open Graph del `<head>` de `index.html`, no del React: el robot que la arma **no ejecuta
+JavaScript**, solo lee el HTML que devuelve nginx.
+
+| Pieza | Qué hace |
+|---|---|
+| `og:*` y `twitter:*` en `index.html` | Título, descripción, URL e imagen de la tarjeta. Las direcciones van **absolutas** (`https://…`): los robots no resuelven rutas relativas. Si cambia el dominio público, hay que cambiarlas acá. |
+| `public/og-gondolia.png` (1200×630) | La imagen de la tarjeta. PNG a propósito: varias apps no muestran SVG. Queda en la raíz del sitio, que nginx sirve con `try_files $uri` antes del *fallback* de la SPA. |
+| `frontend/scripts/generar-og-image.py` | La dibuja con Pillow a partir del isotipo de `Logo.tsx` y los colores de `index.css`. Si cambia la marca: `python frontend/scripts/generar-og-image.py` y commiteá el PNG. |
+
+El contenido de la imagen se mantiene dentro del cuadrado central porque varias apps recortan la vista
+previa chica a 1:1. Después de cambiarla, las cachés de los robots tardan: se fuerza con el
+[depurador de Facebook](https://developers.facebook.com/tools/debug/) o pegando el enlace con un `?v=2`.
+
 ---
 
 ## 8. Componentes
